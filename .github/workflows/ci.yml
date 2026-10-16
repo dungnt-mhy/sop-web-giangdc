@@ -49,6 +49,20 @@ jobs:
           test -f dist/app.js || (echo "Thiếu dist/app.js (chưa build?)" && exit 1)
           node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); console.log('manifest: JSON hợp lệ')"
           node --check sw.js && echo "sw.js: cú pháp hợp lệ"
+          # Mọi import tương đối trong dist/*.js phải có đuôi .js và trỏ tới file thật,
+          # nếu không trình duyệt từ chối module vì MIME text/html (lỗi từng gặp 2026-10-17).
+          node -e "
+            const fs=require('fs'),path=require('path');
+            let bad=0;
+            const walk=d=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(d,e.name)):[path.join(d,e.name)]);
+            for(const f of walk('dist').filter(f=>f.endsWith('.js'))){
+              const dir=path.dirname(f);
+              for(const m of fs.readFileSync(f,'utf8').matchAll(/from\s+\"(\.[^\"]+)\"/g)){
+                if(!m[1].endsWith('.js')||!fs.existsSync(path.join(dir,m[1]))){console.error('IMPORT HONG:',f,'->',m[1]);bad=1;}
+              }
+            }
+            if(bad)process.exit(1); console.log('imports: mọi module đều phân giải được');
+          "
 
       - name: Build Worker (dry-run, không deploy thật)
         working-directory: backend

@@ -1,8 +1,8 @@
 // views/home.ts — trang chủ theo vai trò (ONB-005, SPEC §10.3).
 // Empty state hướng dẫn hành động tiếp theo; KHÔNG dựng số liệu giả.
 
-import type { SessionInfo } from "../api";
-import { esc, roleLabel } from "../ui";
+import type { SessionInfo } from "../api.js";
+import { esc, roleLabel } from "../ui.js";
 
 interface HomeCtx {
   session: SessionInfo;

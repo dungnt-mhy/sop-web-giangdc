@@ -1,7 +1,7 @@
 // views/users.ts — quản trị người dùng (quyền users.manage, SPEC ADM-001).
 
-import { api, type PublicUser } from "../api";
-import { esc, roleLabel, setLoading, toast } from "../ui";
+import { api, type PublicUser } from "../api.js";
+import { esc, roleLabel, setLoading, toast } from "../ui.js";
 
 const ALL_ROLES = [
   "admin",
