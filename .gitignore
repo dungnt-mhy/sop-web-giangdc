@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+backend/dist/
+
+# Biến môi trường và secret local — TUYỆT ĐỐI không commit
+.env
+.env.*
+!.env.example
+backend/.dev.vars
+
+# Trạng thái local của wrangler
+.wrangler/
+
+# Log
+*.log
+npm-debug.log*
+
+# Hệ điều hành / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
