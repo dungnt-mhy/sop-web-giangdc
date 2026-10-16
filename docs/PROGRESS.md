@@ -16,7 +16,7 @@
 
 | # | Module | Trạng thái | Ghi chú |
 |---|--------|------------|---------|
-| 1.1 | Khởi tạo repo, kiến trúc, CI, deploy demo Cloudflare | in_progress | Scaffold local xong `workspace/sop/repo/` 2026-10-16 ~22:30 (đã kiểm chứng local, xem nhật ký); còn: tạo repo GitHub + D1/R2 + secrets + push nhánh `demo` để deploy thật |
+| 1.1 | Khởi tạo repo, kiến trúc, CI, deploy demo Cloudflare | verified | 2026-10-17 — repo dungnt-mhy/sop-web-giangdc (public, 25 file); CI xanh 26s; demo https://sop-web-giangdc.pages.dev (200); API https://sop-api.dungnt-storage.workers.dev/health (200, D1+R2 đã gắn); secrets+vars Actions đã cấu hình cho deploy tự động |
 | 1.2 | Xác thực + quản lý người dùng, phân quyền | pending | AC-11, AC-12 |
 | 1.3 | Trang giới thiệu + đăng nhập + trang chủ theo vai trò | pending | AC-11 |
 | 1.4 | Quản lý danh mục quy trình (CRUD + phiên bản + phê duyệt) | pending | — |
@@ -28,5 +28,6 @@
 
 ## Nhật ký
 
+- 2026-10-17: Task 1.1 VERIFIED. Chi tiết xem HANDOFF.md ngày 2026-10-17.
 - 2026-10-16: Khởi tạo bảng tiến độ. Đặc tả v1.4 đã chốt, sẵn sàng giao việc code.
 - 2026-10-16 (~22:30): Task 01 scaffold local hoàn tất tại `workspace/sop/repo/` (frontend tĩnh + Worker `/health` + CI + wrangler.toml/D1/R2 + README hướng dẫn 9 bước thủ công). Đã kiểm chứng: `tsc --noEmit` OK, `wrangler deploy --dry-run` OK, `/health` local trả 200, frontend phục vụ HTTP 200, YAML/SQL hợp lệ, không secret hardcode. Còn lại: tạo repo GitHub, tạo D1/R2, thêm secrets, điền `database_id` thật, push nhánh `demo` để deploy thật → khi đó mới chuyển 1.1 sang `verified`.
