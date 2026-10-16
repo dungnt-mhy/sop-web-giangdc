@@ -341,6 +341,70 @@ export async function handleUnlockUser(ctx: Ctx, id: string): Promise<Response> 
   return ok(await loadFullUser(db, id));
 }
 
+// DELETE /api/v1/users/{id} — xoá cứng tài khoản (chỉ khi chưa từng hoạt động).
+// SPEC ADM-001: "không xóa nếu đã có lịch sử" — tài khoản đã đăng nhập hoặc đã thao tác
+// thì không được xoá cứng (dùng Khoá thay vì Xoá). Không được tự xoá mình,
+// không được xoá quản trị viên cuối cùng.
+export async function handleDeleteUser(ctx: Ctx, id: string): Promise<Response> {
+  const s = requirePermission(ctx, "users.manage");
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+
+  if (id === me.user.id) {
+    return apiError("VALIDATION_ERROR", "Không thể tự xoá chính mình.", ctx.requestId);
+  }
+  const u = await getUserById(db, id);
+  if (!u) return apiError("NOT_FOUND", "Không tìm thấy tài khoản.", ctx.requestId);
+
+  // Không xoá quản trị viên cuối cùng.
+  const roles = await getUserRoles(db, id);
+  if (roles.includes("admin")) {
+    const adminCount = await db
+      .prepare(`SELECT COUNT(DISTINCT user_id) AS c FROM user_roles WHERE role = 'admin'`)
+      .first<{ c: number }>();
+    if ((adminCount?.c ?? 0) <= 1) {
+      return apiError("VALIDATION_ERROR", "Không thể xoá quản trị viên cuối cùng.", ctx.requestId);
+    }
+  }
+
+  // Đã có lịch sử hoạt động? (đã đăng nhập / đã thao tác / đã bị khoá-mở/đổi MK...)
+  // Bỏ qua sự kiện USER_CREATED (việc tạo tài khoản không phải hoạt động của chính user đó).
+  const history = await db
+    .prepare(
+      `SELECT 1 FROM audit_events
+       WHERE actor_id = ?
+          OR (object_type = 'user' AND object_id = ? AND event_type != 'USER_CREATED')
+       LIMIT 1`
+    )
+    .bind(id, id)
+    .first();
+  if (history) {
+    return apiError(
+      "VALIDATION_ERROR",
+      "Không thể xoá: tài khoản đã có lịch sử hoạt động. Hãy dùng Khoá thay vì Xoá.",
+      ctx.requestId
+    );
+  }
+
+  const username = u.username;
+  await db.batch([
+    db.prepare(`DELETE FROM user_roles WHERE user_id = ?`).bind(id),
+    db.prepare(`DELETE FROM local_credentials WHERE user_id = ?`).bind(id),
+    db.prepare(`DELETE FROM user_sessions WHERE user_id = ?`).bind(id),
+    db.prepare(`DELETE FROM users WHERE id = ?`).bind(id),
+  ]);
+  await audit(db, {
+    event_type: "USER_DELETED",
+    actor_id: me.user.id,
+    object_type: "user",
+    object_id: id,
+    request_id: ctx.requestId,
+    diff: { username },
+  });
+  return ok({ deleted: true, id });
+}
+
 // POST /api/v1/users/{id}:force-password-change — bắt đổi MK lần tới + thu hồi mọi phiên.
 export async function handleForcePasswordChange(ctx: Ctx, id: string): Promise<Response> {
   const s = requirePermission(ctx, "users.manage");

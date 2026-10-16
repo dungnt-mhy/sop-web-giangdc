@@ -25,6 +25,7 @@ import {
 } from "./routes/auth";
 import {
   handleCreateUser,
+  handleDeleteUser,
   handleForcePasswordChange,
   handleGetUser,
   handleListUsers,
@@ -143,6 +144,7 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     if (!action) {
       if (method === "GET") return handleGetUser(ctx, id);
       if (method === "PATCH") return handlePatchUser(ctx, id);
+      if (method === "DELETE") return handleDeleteUser(ctx, id);
     } else if (method === "POST") {
       if (action === "lock") return handleLockUser(ctx, id);
       if (action === "unlock") return handleUnlockUser(ctx, id);

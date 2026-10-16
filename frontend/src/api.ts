@@ -133,6 +133,9 @@ export const api = {
   forcePasswordChange(id: string): Promise<PublicUser> {
     return req("POST", `/users/${encodeURIComponent(id)}:force-password-change`);
   },
+  deleteUser(id: string): Promise<{ deleted: boolean; id: string }> {
+    return req("DELETE", "/users/" + encodeURIComponent(id));
+  },
 };
 
 /** true nếu ApiError là lỗi chưa đăng nhập. */

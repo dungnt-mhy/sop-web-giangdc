@@ -32,17 +32,20 @@ export async function renderUsers(root: HTMLElement, selfId: string): Promise<vo
 
   const tbody = root.querySelector<HTMLTableSectionElement>("#users-table tbody")!;
   const dialogRoot = root.querySelector<HTMLElement>("#user-dialog-root")!;
+  // Giữ danh sách đã tải để mở dialog Sửa mà không phải gọi API lại (nhanh hơn).
+  let cachedItems: PublicUser[] = [];
 
   async function reload(): Promise<void> {
     tbody.innerHTML = `<tr><td colspan="5" class="empty">Đang tải…</td></tr>`;
     try {
       const { items } = await api.listUsers();
+      cachedItems = items;
       if (items.length === 0) {
         tbody.innerHTML = `<tr><td colspan="5" class="empty">Chưa có tài khoản nào.</td></tr>`;
         return;
       }
       tbody.innerHTML = items.map((u) => rowHtml(u, selfId)).join("");
-      wireRows(tbody, dialogRoot, selfId, reload);
+      wireRows(tbody, dialogRoot, selfId, reload, cachedItems);
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="5" class="empty">Không tải được danh sách: ${esc(msg(e))}</td></tr>`;
     }
@@ -82,6 +85,7 @@ function rowHtml(u: PublicUser, selfId: string): string {
         ? `<button class="link" data-act="unlock">Mở khoá</button>`
         : isSelf ? "" : `<button class="link danger" data-act="lock">Khoá</button>`}
       <button class="link" data-act="force">Bắt đổi MK</button>
+      ${isSelf ? "" : `<button class="link danger" data-act="delete">Xoá</button>`}
     </td>
   </tr>`;
 }
@@ -90,7 +94,8 @@ function wireRows(
   tbody: HTMLTableSectionElement,
   dialogRoot: HTMLElement,
   selfId: string,
-  reload: () => Promise<void>
+  reload: () => Promise<void>,
+  items: PublicUser[]
 ): void {
   tbody.querySelectorAll<HTMLButtonElement>("button[data-act]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -98,12 +103,24 @@ function wireRows(
       const id = tr.dataset.id!;
       const act = btn.dataset.act!;
       if (act === "edit") {
+        // Dùng dữ liệu đã có, không gọi API lại.
+        const u = items.find((x) => x.id === id);
+        if (u) openUserDialog(dialogRoot, u, reload);
+        else toast("Không tìm thấy tài khoản.", "err");
+        return;
+      }
+      if (act === "delete") {
+        const u = items.find((x) => x.id === id);
+        const name = u ? u.username : "tài khoản này";
+        if (!window.confirm(`XOÁ VĨNH VIỄN "${name}"?\n\nChỉ xoá được tài khoản chưa từng đăng nhập/hoạt động. Hành động này không thể hoàn tác.`)) return;
+        const restore = setLoading(btn, true, "Đang xoá…");
         try {
-          const users = await api.listUsers();
-          const u = users.items.find((x) => x.id === id);
-          if (u) openUserDialog(dialogRoot, u, reload);
+          await api.deleteUser(id);
+          toast("Đã xoá tài khoản.", "ok");
+          await reload();
         } catch (e) {
           toast(msg(e), "err");
+          restore();
         }
         return;
       }
@@ -169,17 +186,22 @@ function openUserDialog(
 
   const close = () => {
     dialogRoot.innerHTML = "";
+    document.removeEventListener("keydown", escHandler);
   };
-  dialogRoot.querySelector("#dlg-cancel")!.addEventListener("click", close);
+  function escHandler(e: KeyboardEvent) {
+    if (e.key === "Escape") close();
+  }
+  const cancelBtn = dialogRoot.querySelector<HTMLButtonElement>("#dlg-cancel")!;
+  // Dùng cả click và touchend để chắc chắn hoạt động trên mobile.
+  cancelBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    close();
+  });
   dialogRoot.querySelector("#dlg-backdrop")!.addEventListener("click", (e) => {
     if ((e.target as HTMLElement).id === "dlg-backdrop") close();
   });
-  document.addEventListener("keydown", function esc2(e) {
-    if (e.key === "Escape") {
-      close();
-      document.removeEventListener("keydown", esc2);
-    }
-  });
+  document.addEventListener("keydown", escHandler);
 
   const form = dialogRoot.querySelector<HTMLFormElement>("#user-form")!;
   const errBox = dialogRoot.querySelector<HTMLElement>("#user-form-error")!;
