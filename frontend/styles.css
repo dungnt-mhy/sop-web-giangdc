@@ -39,6 +39,9 @@ p { margin: 0 0 1em; }
 
 .muted { color: var(--muted); }
 .small { font-size: 12.5px; }
+/* Thuộc tính hidden luôn thắng mọi quy tắc display khác (tránh bug #landing không ẩn được). */
+[hidden] { display: none !important; }
+
 .hint { display: block; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 
 :focus-visible {

@@ -166,6 +166,7 @@ function renderForceChange(): void {
     try {
       await api.changePassword(cur, next);
       if (session) session.must_change_password = false;
+      restore(); // Tắt trạng thái loading trước khi chuyển màn hình.
       toast("Đổi mật khẩu thành công.", "ok");
       showApp();
     } catch (err) {
@@ -205,6 +206,7 @@ function wireLogin(): void {
     const restore = setLoading(btn, true, "Đang đăng nhập…");
     try {
       session = await api.login(username, password);
+      restore(); // Tắt trạng thái loading trước khi chuyển màn hình (tránh nút kẹt).
       showApp();
     } catch (err) {
       // Lỗi luôn chung chung từ server (ONB-003) — hiển thị nguyên văn.
