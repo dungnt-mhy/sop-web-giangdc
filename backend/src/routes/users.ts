@@ -434,8 +434,8 @@ export async function handleResetPassword(ctx: Ctx, id: string): Promise<Respons
   const now = nowIso();
   await db.batch([
     db.prepare(
-      `UPDATE local_credentials SET password_hash = ?, password_salt = ?, hash_algorithm = ?, hash_params = ?, must_change_password = 1, updated_at = ?, updated_by = ? WHERE user_id = ?`
-    ).bind(h.hashB64, h.saltB64, h.algorithm, h.params, now, me.user.id, id),
+      `UPDATE local_credentials SET password_hash = ?, password_salt = ?, hash_algorithm = ?, hash_params = ?, must_change_password = 1, rotated_at = ? WHERE user_id = ?`
+    ).bind(h.hashB64, h.saltB64, h.algorithm, h.params, now, id),
     db.prepare(`UPDATE users SET failed_login_count = 0, locked_until = NULL, updated_at = ?, updated_by = ? WHERE id = ?`)
       .bind(now, me.user.id, id),
     db.prepare(`UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
