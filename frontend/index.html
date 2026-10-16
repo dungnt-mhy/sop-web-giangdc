@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Hệ thống quản lý trình tự công việc — Đang xây dựng</title>
+  <meta name="description" content="Nền tảng số hoá quy trình công việc (SOP): khai báo quy trình, thực hiện theo checklist, ghi nhận bằng chứng." />
+  <meta name="theme-color" content="#0f2a4a" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+  <link rel="apple-touch-icon" href="icons/icon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <div class="card">
+      <div class="badge">SOP · Phiên bản demo</div>
+      <img class="logo" src="icons/icon.svg" alt="Logo hệ thống" width="72" height="72" />
+      <h1>Hệ thống quản lý<br />trình tự công việc</h1>
+      <p class="subtitle">Nền tảng số hoá quy trình (SOP): khai báo quy trình, thực hiện theo từng bước, ghi nhận bằng chứng bằng hình ảnh.</p>
+      <div class="status">
+        <span class="dot" aria-hidden="true"></span>
+        <span>Đang xây dựng — trang giữ chỗ (Task 01)</span>
+      </div>
+      <ul class="roadmap">
+        <li><span class="tick">✓</span> Nền móng: CI, Cloudflare Pages + Workers + D1 + R2</li>
+        <li><span class="tick todo">○</span> Đăng nhập nội bộ &amp; phân quyền theo vai trò</li>
+        <li><span class="tick todo">○</span> Danh mục quy trình nhiều phiên bản</li>
+        <li><span class="tick todo">○</span> Thực hiện checklist + chụp ảnh bằng chứng</li>
+        <li><span class="tick todo">○</span> Báo cáo, lịch sử và xuất dữ liệu</li>
+      </ul>
+      <p class="hint">Trang này sẽ được thay bằng màn hình giới thiệu và đăng nhập ở các task tiếp theo.</p>
+    </div>
+    <footer>
+      <span>Dự án SOP · MVP web/PWA</span>
+    </footer>
+  </main>
+  <script src="app.js" defer></script>
+</body>
+</html>
