@@ -1,0 +1,25 @@
+# wrangler.toml — cấu hình deploy demo Cloudflare (Task 01).
+# Quy ước theo SPEC §13.6: file này CHỈ chứa tên binding và cấu hình không bí mật.
+# ID tài nguyên (database_id) và secret được cấp qua Cloudflare/GitHub environment — xem README.md.
+
+name = "sop-api"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+ENV_NAME = "demo"
+
+[[d1_databases]]
+binding = "sop_demo_db"
+database_name = "sop_demo_db"
+# ⚠️ ĐIỀN ID THẬT sau khi tạo D1 trên Cloudflare (xem README.md bước 3).
+# Giá trị placeholder bên dưới chỉ để CI build dry-run được trước khi có D1 thật;
+# deploy thật với ID này sẽ báo lỗi rõ ràng.
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[r2_buckets]]
+binding = "sop_demo_files"
+bucket_name = "sop-demo-files"
+
+# Migrations D1 nằm ở ./migrations (forward-only, không sửa file đã áp dụng).
+# Áp dụng: wrangler d1 migrations apply sop_demo_db --remote
