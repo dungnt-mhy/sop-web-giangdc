@@ -240,10 +240,10 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
     viaCookie: true,
   };
   // Trả token thô trong body để SPA giữ trong bộ nhớ và gửi qua header Authorization.
-  // (Cookie cross-site workers.dev ↔ pages.dev có thể bị trình duyệt mobile chặn;
-  //  backend đã hỗ trợ Bearer — xem getRequestToken.) Không log token (ADM-003).
+  // KHÔNG set cookie nữa: cookie cross-site (workers.dev ↔ pages.dev) gây kẹt request
+  // trên một số trình duyệt/mạng (đã ghi nhận), trong khi Bearer token đã đủ cho SPA.
+  // Không log token (ADM-003).
   const res = ok({ ...sessionPayload(info), token });
-  setSessionCookie(res, token, ctx.isHttps);
   console.log(`[diag] login success rid=${ctx.requestId} user=${user.username} ms=${Date.now() - t0}`);
   return res;
 }
