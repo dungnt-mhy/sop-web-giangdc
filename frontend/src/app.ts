@@ -16,13 +16,20 @@ function can(perm: string): boolean {
   return !!session && (session.permissions.includes("*") || session.permissions.includes(perm));
 }
 
+function hideBootLoading(): void {
+  const el = document.getElementById("boot-loading");
+  if (el) el.hidden = true;
+}
+
 function showLanding(): void {
+  hideBootLoading();
   $("#landing").hidden = false;
   $("#app").hidden = true;
   $("#force-change").hidden = true;
 }
 
 function showApp(): void {
+  hideBootLoading();
   $("#landing").hidden = true;
   $("#app").hidden = true;
   $("#force-change").hidden = true;

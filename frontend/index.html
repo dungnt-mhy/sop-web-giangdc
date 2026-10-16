@@ -12,8 +12,13 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <!-- Màn hình chờ khi đang kiểm tra phiên đăng nhập (tránh nháy trang đăng nhập). -->
+  <div id="boot-loading" aria-hidden="true">
+    <div class="boot-spinner"></div>
+    <p>Đang tải…</p>
+  </div>
   <!-- ============ TRANG GIỚI THIỆU (công khai) — ONB-001/002/009 ============ -->
-  <div id="landing">
+  <div id="landing" hidden>
     <header class="landing-top">
       <div class="brand">
         <img src="icons/icon.svg" alt="Logo" width="36" height="36" />
