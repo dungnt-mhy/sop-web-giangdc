@@ -131,12 +131,14 @@ export function sessionPayload(s: SessionInfo) {
 
 // POST /api/v1/auth/login
 export async function handleLogin(ctx: Ctx): Promise<Response> {
+  const t0 = Date.now();
   const body = (await readJson(ctx.request)) as {
     username?: unknown;
     password?: unknown;
   } | null;
   const username = typeof body?.username === "string" ? body.username : "";
   const password = typeof body?.password === "string" ? body.password : "";
+  console.log(`[diag] login start rid=${ctx.requestId} user=${username.trim().slice(0, 32)}`);
   if (!username.trim() || !password) {
     return apiError("VALIDATION_ERROR", "Vui lòng nhập tên đăng nhập và mật khẩu.", ctx.requestId);
   }
@@ -242,6 +244,7 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
   //  backend đã hỗ trợ Bearer — xem getRequestToken.) Không log token (ADM-003).
   const res = ok({ ...sessionPayload(info), token });
   setSessionCookie(res, token, ctx.isHttps);
+  console.log(`[diag] login success rid=${ctx.requestId} user=${user.username} ms=${Date.now() - t0}`);
   return res;
 }
 
