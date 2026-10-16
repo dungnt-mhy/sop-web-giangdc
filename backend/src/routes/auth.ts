@@ -237,7 +237,10 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
     expiresAt,
     viaCookie: true,
   };
-  const res = ok(sessionPayload(info));
+  // Trả token thô trong body để SPA giữ trong bộ nhớ và gửi qua header Authorization.
+  // (Cookie cross-site workers.dev ↔ pages.dev có thể bị trình duyệt mobile chặn;
+  //  backend đã hỗ trợ Bearer — xem getRequestToken.) Không log token (ADM-003).
+  const res = ok({ ...sessionPayload(info), token });
   setSessionCookie(res, token, ctx.isHttps);
   return res;
 }

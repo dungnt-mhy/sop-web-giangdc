@@ -55,10 +55,15 @@ export class ApiError extends Error {
 }
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  // Token giữ trong bộ nhớ (không lưu localStorage — ONB-006). Gửi qua header
+  // Authorization để không phụ thuộc cookie (cookie cross-site có thể bị chặn
+  // trên mobile). Khi không có token (tải lại trang), trình duyệt tự gửi cookie.
+  if (authToken) headers["authorization"] = "Bearer " + authToken;
   const res = await fetch(apiBase() + "/api/v1" + path, {
     method,
     credentials: "include",
-    headers: { "content-type": "application/json" },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
@@ -79,12 +84,24 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return data as T;
 }
 
+/** Token phiên giữ trong bộ nhớ — xóa khi đăng xuất (ONB-006). */
+let authToken: string | null = null;
+
 export const api = {
-  login(username: string, password: string): Promise<SessionInfo> {
-    return req("POST", "/auth/login", { username, password });
+  async login(username: string, password: string): Promise<SessionInfo> {
+    const s = await req<SessionInfo & { token?: string }>("POST", "/auth/login", {
+      username,
+      password,
+    });
+    if (s.token) authToken = s.token;
+    return s;
   },
-  logout(): Promise<{ ok: boolean }> {
-    return req("POST", "/auth/logout");
+  async logout(): Promise<{ ok: boolean }> {
+    try {
+      return await req("POST", "/auth/logout");
+    } finally {
+      authToken = null;
+    }
   },
   session(): Promise<SessionInfo> {
     return req("GET", "/auth/session");
