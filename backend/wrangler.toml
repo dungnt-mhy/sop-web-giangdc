@@ -12,10 +12,8 @@ ENV_NAME = "demo"
 [[d1_databases]]
 binding = "sop_demo_db"
 database_name = "sop_demo_db"
-# ⚠️ ĐIỀN ID THẬT sau khi tạo D1 trên Cloudflare (xem README.md bước 3).
-# Giá trị placeholder bên dưới chỉ để CI build dry-run được trước khi có D1 thật;
-# deploy thật với ID này sẽ báo lỗi rõ ràng.
-database_id = "00000000-0000-0000-0000-000000000000"
+# ID thật của D1 demo (tạo ngày 2026-10-17). ID này không phải secret.
+database_id = "72dce788-ddc5-47f1-a670-f4ed752956ec"
 
 [[r2_buckets]]
 binding = "sop_demo_files"
