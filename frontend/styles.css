@@ -104,6 +104,8 @@ input:disabled { background: #f0f3f7; color: var(--muted); }
   min-width: 52px;
 }
 .pw-toggle:hover { background: #e0e8f2; }
+.pw-toggle.icon { min-width: 40px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; }
+.pw-toggle.icon svg { display: block; }
 
 .form-error {
   background: #fdecea; border: 1px solid #f5c6c0; color: #8f2b20;

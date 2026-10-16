@@ -3,7 +3,7 @@
 // Route guard: chưa đăng nhập → về trang giới thiệu, không tải dữ liệu nghiệp vụ.
 
 import { api, isUnauthenticated, type SessionInfo } from "./api.js";
-import { esc, setLoading, toast } from "./ui.js";
+import { EYE_OFF_SVG, EYE_OPEN_SVG, esc, setLoading, toast } from "./ui.js";
 import { renderHome } from "./views/home.js";
 import { renderUsers } from "./views/users.js";
 
@@ -186,7 +186,7 @@ function wireLogin(): void {
   toggle.addEventListener("click", () => {
     const show = pwInput.type === "password";
     pwInput.type = show ? "text" : "password";
-    toggle.textContent = show ? "Ẩn" : "Hiện";
+    toggle.innerHTML = show ? EYE_OFF_SVG : EYE_OPEN_SVG;
     toggle.setAttribute("aria-label", show ? "Ẩn mật khẩu" : "Hiện mật khẩu");
   });
 
