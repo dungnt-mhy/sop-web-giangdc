@@ -1,7 +1,10 @@
 // Service worker (Task 1.2): cache-first cho tài nguyên tĩnh của app shell.
+// - __BUILD_ID__ được thay bằng mã commit khi deploy (xem deploy-demo.yml) để mỗi
+//   bản deploy có cache mới — trình duyệt tự cập nhật service worker vì file sw.js đổi.
 // - config.js KHÔNG precache: luôn lấy bản mới nhất từ mạng (chứa địa chỉ API theo môi trường).
+// - Trang index.html: ưu tiên mạng (network-first) để luôn nhận bản mới nhất.
 // - Không can thiệp request API (/api/...) hay request khác GET.
-var CACHE_NAME = "sop-static-v2";
+var CACHE_NAME = "sop-static-__BUILD_ID__";
 var ASSETS = [
   "./",
   "./index.html",
@@ -41,6 +44,19 @@ self.addEventListener("fetch", function (event) {
   var url = new URL(event.request.url);
   if (event.request.method !== "GET") return;
   if (url.pathname.indexOf("/api/") === 0) return; // không cache API
+  // Trang chính: network-first để luôn nhận bản mới nhất sau mỗi deploy.
+  if (url.pathname === "/" || url.pathname === "/index.html") {
+    event.respondWith(
+      fetch(event.request).then(function (res) {
+        var copy = res.clone();
+        caches.open(CACHE_NAME).then(function (cache) { cache.put(event.request, copy); });
+        return res;
+      }).catch(function () {
+        return caches.match(event.request);
+      })
+    );
+    return;
+  }
   if (url.pathname.endsWith("/config.js")) {
     // config.js: ưu tiên mạng, rớt mạng mới dùng cache.
     event.respondWith(

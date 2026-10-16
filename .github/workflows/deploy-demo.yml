@@ -44,6 +44,15 @@ jobs:
         working-directory: frontend
         run: npm ci && npm run build
 
+      - name: Đóng dấu bản build vào service worker (chống kẹt cache cũ)
+        working-directory: frontend
+        run: |
+          test -f sw.js || (echo "Thiếu sw.js" && exit 1)
+          grep -q "__BUILD_ID__" sw.js || (echo "sw.js thiếu placeholder __BUILD_ID__" && exit 1)
+          sed -i "s/__BUILD_ID__/${GITHUB_SHA::7}/" sw.js
+          grep -q "__BUILD_ID__" sw.js && (echo "Chưa thay được BUILD_ID" && exit 1)
+          echo "sw.js đã đóng dấu bản ${GITHUB_SHA::7}"
+
       - name: Sinh config.js cho demo (địa chỉ API)
         working-directory: frontend
         env:
