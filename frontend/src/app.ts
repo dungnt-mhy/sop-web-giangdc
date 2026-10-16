@@ -2,10 +2,10 @@
 // Luồng: trang giới thiệu (công khai) → đăng nhập → trang chủ theo vai trò.
 // Route guard: chưa đăng nhập → về trang giới thiệu, không tải dữ liệu nghiệp vụ.
 
-import { api, isUnauthenticated, type SessionInfo } from "./api";
-import { esc, setLoading, toast } from "./ui";
-import { renderHome } from "./views/home";
-import { renderUsers } from "./views/users";
+import { api, isUnauthenticated, type SessionInfo } from "./api.js";
+import { esc, setLoading, toast } from "./ui.js";
+import { renderHome } from "./views/home.js";
+import { renderUsers } from "./views/users.js";
 
 let session: SessionInfo | null = null;
 
