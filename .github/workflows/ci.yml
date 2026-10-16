@@ -1,0 +1,42 @@
+# CI — chạy trên mọi push và pull request vào main (và demo).
+# Chỉ kiểm tra build, KHÔNG deploy (deploy demo nằm ở deploy-demo.yml, cần secrets).
+name: CI
+
+on:
+  push:
+    branches: [main, demo]
+  pull_request:
+    branches: [main, demo]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cài Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Cài dependencies backend
+        working-directory: backend
+        run: npm ci
+
+      - name: Typecheck backend (TypeScript)
+        working-directory: backend
+        run: npx tsc --noEmit
+
+      - name: Kiểm tra frontend tĩnh
+        working-directory: frontend
+        run: |
+          test -f index.html || (echo "Thiếu index.html" && exit 1)
+          test -f manifest.webmanifest || (echo "Thiếu manifest.webmanifest" && exit 1)
+          node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); console.log('manifest: JSON hợp lệ')"
+          node --check app.js && node --check sw.js && echo "app.js + sw.js: cú pháp hợp lệ"
+
+      - name: Build Worker (dry-run, không deploy thật)
+        working-directory: backend
+        run: npx wrangler deploy --dry-run --outdir dist
