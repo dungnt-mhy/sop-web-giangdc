@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Hệ thống quản lý trình tự công việc — Đang xây dựng</title>
-  <meta name="description" content="Nền tảng số hoá quy trình công việc (SOP): khai báo quy trình, thực hiện theo checklist, ghi nhận bằng chứng." />
+  <title>SOP — Hệ thống quản lý trình tự công việc</title>
+  <meta name="description" content="Số hoá quy trình làm việc: khai báo nhiều quy trình, kiểm soát phiên bản, thực hiện theo checklist trên mobile, lưu bằng chứng đầy đủ." />
   <meta name="theme-color" content="#0f2a4a" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
@@ -12,29 +12,145 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="wrap">
-    <div class="card">
-      <div class="badge">SOP · Phiên bản demo</div>
-      <img class="logo" src="icons/icon.svg" alt="Logo hệ thống" width="72" height="72" />
-      <h1>Hệ thống quản lý<br />trình tự công việc</h1>
-      <p class="subtitle">Nền tảng số hoá quy trình (SOP): khai báo quy trình, thực hiện theo từng bước, ghi nhận bằng chứng bằng hình ảnh.</p>
-      <div class="status">
-        <span class="dot" aria-hidden="true"></span>
-        <span>Đang xây dựng — trang giữ chỗ (Task 01)</span>
+  <!-- ============ TRANG GIỚI THIỆU (công khai) — ONB-001/002/009 ============ -->
+  <div id="landing">
+    <header class="landing-top">
+      <div class="brand">
+        <img src="icons/icon.svg" alt="Logo" width="36" height="36" />
+        <span class="brand-name">SOP Flow</span>
       </div>
-      <ul class="roadmap">
-        <li><span class="tick">✓</span> Nền móng: CI, Cloudflare Pages + Workers + D1 + R2</li>
-        <li><span class="tick todo">○</span> Đăng nhập nội bộ &amp; phân quyền theo vai trò</li>
-        <li><span class="tick todo">○</span> Danh mục quy trình nhiều phiên bản</li>
-        <li><span class="tick todo">○</span> Thực hiện checklist + chụp ảnh bằng chứng</li>
-        <li><span class="tick todo">○</span> Báo cáo, lịch sử và xuất dữ liệu</li>
-      </ul>
-      <p class="hint">Trang này sẽ được thay bằng màn hình giới thiệu và đăng nhập ở các task tiếp theo.</p>
-    </div>
-    <footer>
-      <span>Dự án SOP · MVP web/PWA</span>
+      <span class="badge">Bản demo</span>
+    </header>
+
+    <main class="landing-main">
+      <!-- Vùng giới thiệu -->
+      <section class="intro" aria-label="Giới thiệu hệ thống">
+        <h1>Số hoá mọi quy trình làm việc,<br />đúng từng bước, đủ bằng chứng.</h1>
+        <p class="lede">Khai báo quy trình một lần — cả đội thực hiện thống nhất trên điện thoại,
+        mọi bước đều có người chịu trách nhiệm và bằng chứng lưu trữ đầy đủ.</p>
+
+        <ul class="caps">
+          <li>
+            <span class="cap-ic" aria-hidden="true">🗂</span>
+            <div><strong>Nhiều quy trình, một nơi quản lý</strong>
+            <span>Mỗi quy trình độc lập, có chủ sở hữu và phạm vi riêng.</span></div>
+          </li>
+          <li>
+            <span class="cap-ic" aria-hidden="true">🔖</span>
+            <div><strong>Kiểm soát phiên bản chặt chẽ</strong>
+            <span>Thay đổi qua phê duyệt; lượt đang chạy giữ nguyên bản cũ.</span></div>
+          </li>
+          <li>
+            <span class="cap-ic" aria-hidden="true">📱</span>
+            <div><strong>Thực hiện trên mobile</strong>
+            <span>Checklist từng bước, chụp ảnh bằng chứng ngay tại hiện trường.</span></div>
+          </li>
+          <li>
+            <span class="cap-ic" aria-hidden="true">📊</span>
+            <div><strong>Báo cáo &amp; truy vết</strong>
+            <span>Ai làm gì, khi nào — tra cứu đầy đủ theo từng lượt.</span></div>
+          </li>
+        </ul>
+
+        <!-- Minh hoạ tự vẽ bằng SVG: quy trình 3 bước → hoàn thành, có bằng chứng -->
+        <svg class="illo" viewBox="0 0 560 190" role="img" aria-label="Minh hoạ quy trình 3 bước">
+          <defs>
+            <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#1d4e80"/><stop offset="1" stop-color="#0f2a4a"/>
+            </linearGradient>
+          </defs>
+          <g font-family="inherit" font-size="13">
+            <rect x="8" y="55" width="140" height="80" rx="14" fill="url(#g1)"/>
+            <circle cx="38" cy="95" r="14" fill="#2f9e6e"/>
+            <path d="M32 95l4 4 8-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <text x="60" y="90" fill="#fff" font-weight="700">Bước 1</text>
+            <text x="60" y="110" fill="#bcd2e8">Chuẩn bị</text>
+
+            <rect x="178" y="55" width="140" height="80" rx="14" fill="url(#g1)"/>
+            <circle cx="208" cy="95" r="14" fill="#2f9e6e"/>
+            <path d="M202 95l4 4 8-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <text x="230" y="90" fill="#fff" font-weight="700">Bước 2</text>
+            <text x="230" y="110" fill="#bcd2e8">Thực hiện</text>
+
+            <rect x="348" y="55" width="140" height="80" rx="14" fill="#eef4fa" stroke="#1d4e80" stroke-width="2"/>
+            <circle cx="378" cy="95" r="14" fill="none" stroke="#1d4e80" stroke-width="3" stroke-dasharray="5 4"/>
+            <text x="400" y="90" fill="#0f2a4a" font-weight="700">Bước 3</text>
+            <text x="400" y="110" fill="#5b6b7d">Bằng chứng</text>
+
+            <path d="M148 95h30M318 95h30" stroke="#2f9e6e" stroke-width="3" stroke-linecap="round"/>
+            <path d="M170 88l10 7-10 7M340 88l10 7-10 7" fill="#2f9e6e"/>
+
+            <g transform="translate(508,70)">
+              <rect x="-18" y="-28" width="36" height="46" rx="5" fill="#fff" stroke="#1d4e80" stroke-width="2"/>
+              <path d="M-8-14h16M-8-4h16M-8 6h10" stroke="#1d4e80" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="12" cy="12" r="11" fill="#2f9e6e"/>
+              <path d="M7 12l3.5 3.5L17 9" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+            </g>
+            <text x="490" y="150" fill="#bcd2e8" text-anchor="middle">Hoàn thành ✓</text>
+          </g>
+        </svg>
+      </section>
+
+      <!-- Khối đăng nhập -->
+      <section class="login-col" aria-label="Đăng nhập">
+        <div class="login-card">
+          <h2>Đăng nhập</h2>
+          <p class="muted">Tài khoản nội bộ do quản trị viên cấp.</p>
+          <form id="login-form" novalidate>
+            <label>Tên đăng nhập
+              <input id="login-username" name="username" type="text" required autocomplete="username"
+                     autocapitalize="none" spellcheck="false" placeholder="vd: admin" />
+            </label>
+            <label>Mật khẩu
+              <span class="pw-wrap">
+                <input id="login-password" name="password" type="password" required
+                       autocomplete="current-password" placeholder="••••••••" />
+                <button type="button" id="toggle-password" class="pw-toggle" aria-label="Hiện mật khẩu">Hiện</button>
+              </span>
+            </label>
+            <p class="form-error" id="login-error" role="alert" hidden></p>
+            <button type="submit" class="btn primary block" id="login-submit">Đăng nhập</button>
+          </form>
+          <p class="login-note">Gặp sự cố đăng nhập? Liên hệ quản trị viên của đơn vị bạn.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="landing-foot">
+      <span>SOP Flow · MVP web/PWA — Số hoá trình tự công việc</span>
     </footer>
-  </main>
-  <script src="app.js" defer></script>
+  </div>
+
+  <!-- ============ KHUNG ỨNG DỤNG (sau đăng nhập) ============ -->
+  <div id="app" hidden>
+    <div class="app-layout">
+      <div id="sidebar-scrim" aria-hidden="true"></div>
+      <aside id="sidebar" aria-label="Điều hướng chính">
+        <div class="brand">
+          <img src="icons/icon.svg" alt="Logo" width="32" height="32" />
+          <span class="brand-name">SOP Flow</span>
+        </div>
+        <nav id="sidebar-nav"></nav>
+        <div class="sidebar-foot"><span class="badge">Bản demo</span></div>
+      </aside>
+      <div class="app-main">
+        <header id="topbar">
+          <button id="btn-menu" class="icon-btn" aria-label="Mở menu">☰</button>
+          <div class="topbar-right">
+            <button id="btn-notif" class="icon-btn" aria-label="Thông báo" title="Thông báo">🔔</button>
+            <div id="user-chip" class="user-chip"></div>
+            <button id="btn-logout" class="btn secondary sm">Đăng xuất</button>
+          </div>
+        </header>
+        <main id="page" tabindex="-1"></main>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ BẮT BUỘC ĐỔI MẬT KHẨU ============ -->
+  <div id="force-change" hidden></div>
+
+  <script src="config.js"></script>
+  <script type="module" src="dist/app.js"></script>
 </body>
 </html>

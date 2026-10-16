@@ -29,13 +29,26 @@ jobs:
         working-directory: backend
         run: npx tsc --noEmit
 
-      - name: Kiểm tra frontend tĩnh
+      - name: Cài dependencies frontend
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck frontend (TypeScript)
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Kiểm tra file tĩnh frontend
         working-directory: frontend
         run: |
           test -f index.html || (echo "Thiếu index.html" && exit 1)
           test -f manifest.webmanifest || (echo "Thiếu manifest.webmanifest" && exit 1)
+          test -f dist/app.js || (echo "Thiếu dist/app.js (chưa build?)" && exit 1)
           node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); console.log('manifest: JSON hợp lệ')"
-          node --check app.js && node --check sw.js && echo "app.js + sw.js: cú pháp hợp lệ"
+          node --check sw.js && echo "sw.js: cú pháp hợp lệ"
 
       - name: Build Worker (dry-run, không deploy thật)
         working-directory: backend

@@ -40,6 +40,19 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy
 
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Sinh config.js cho demo (địa chỉ API)
+        working-directory: frontend
+        env:
+          WORKER_URL: ${{ vars.WORKER_URL }}
+        run: |
+          test -n "$WORKER_URL" || (echo "Chưa cấu hình vars.WORKER_URL — xem README." && exit 1)
+          printf 'window.SOP_CONFIG = { apiBase: "%s" };' "$WORKER_URL" > config.js
+          echo "config.js đã sinh cho $WORKER_URL"
+
       - name: Deploy frontend lên Cloudflare Pages
         working-directory: frontend
         env:
@@ -48,7 +61,7 @@ jobs:
         # PAGES_PROJECT_NAME: điền tên project Pages sau khi tạo lần đầu (xem README).
         run: npx wrangler pages deploy . --project-name=${{ vars.PAGES_PROJECT_NAME }}
 
-      - name: Smoke test /health
+      - name: Smoke test /health + auth
         env:
           WORKER_URL: ${{ vars.WORKER_URL }}
         run: |
@@ -56,3 +69,7 @@ jobs:
           curl -sf "$WORKER_URL/health" | grep -q '"status":"ok"' \
             && echo "Smoke test /health: ĐẠT" \
             || (echo "Smoke test /health: THẤT BẠI" && exit 1)
+          # Auth route phải trả 401 (chưa đăng nhập) — chứng tỏ đã deploy đúng bản có auth.
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$WORKER_URL/api/v1/auth/session")" = "401" \
+            && echo "Smoke test /api/v1/auth/session (401 khi chưa login): ĐẠT" \
+            || (echo "Smoke test auth: THẤT BẠI" && exit 1)

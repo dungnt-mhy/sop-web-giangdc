@@ -1,0 +1,1 @@
+{"description":"Frontend vanilla TypeScript cho dự án SOP (không dùng framework).","devDependencies":{"typescript":"^5.6.3"},"name":"sop-web","private":true,"scripts":{"build":"tsc","typecheck":"tsc --noEmit"},"type":"module","version":"0.2.0"}

@@ -8,6 +8,9 @@ compatibility_date = "2026-10-01"
 
 [vars]
 ENV_NAME = "demo"
+# Origin của frontend demo (Pages) — cần cho CORS vì API (Workers) khác origin.
+# Không phải secret. Dev local dùng backend/.dev.vars (gitignore).
+ALLOWED_ORIGINS = "https://sop-web-giangdc.pages.dev"
 
 [[d1_databases]]
 binding = "sop_demo_db"

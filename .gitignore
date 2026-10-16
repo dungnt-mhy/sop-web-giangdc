@@ -1,12 +1,14 @@
 # Dependencies
 node_modules/
 backend/dist/
+frontend/dist/
 
 # Biến môi trường và secret local — TUYỆT ĐỐI không commit
 .env
 .env.*
 !.env.example
 backend/.dev.vars
+frontend/config.js
 
 # Trạng thái local của wrangler
 .wrangler/

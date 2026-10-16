@@ -8,4 +8,11 @@ export interface Env {
   sop_demo_files: R2Bucket;
   /** Tên môi trường: "demo" | "local" (không chứa bí mật). */
   ENV_NAME: string;
+  /**
+   * Danh sách origin frontend được phép gọi API cross-origin, cách nhau bằng dấu phẩy.
+   * Ví dụ local: "http://localhost:8000"; demo: "https://sop-web-giangdc.pages.dev".
+   * Dùng cho CORS (Access-Control-Allow-Origin) và kiểm tra CSRF với cookie.
+   * Có thể để trống khi frontend và API cùng origin.
+   */
+  ALLOWED_ORIGINS?: string;
 }
