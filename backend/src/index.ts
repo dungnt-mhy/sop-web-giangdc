@@ -72,9 +72,11 @@ export default {
       });
     }
 
-    // Chỉ phục vụ /api/v1 từ đây.
+    // Mọi request không phải /health và không phải /api/v1/* → phục vụ file tĩnh
+    // frontend (Static Assets) cùng origin. Nhờ đó SPA và API chung một tên miền,
+    // không còn CORS/preflight/cookie cross-site.
     if (!url.pathname.startsWith("/api/v1/")) {
-      return apiError("NOT_FOUND", "Not found", requestId);
+      return env.ASSETS.fetch(request);
     }
 
     // Preflight CORS.

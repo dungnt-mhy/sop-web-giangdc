@@ -1,6 +1,10 @@
 # Deploy demo — chạy khi push vào nhánh `demo` SAU KHI CI đạt.
+# Kiến trúc demo (từ 2026-10-17): Worker phục vụ CẢ frontend (Static Assets)
+# lẫn API trên cùng một origin — không còn CORS/preflight/cookie cross-site.
 # Cần secrets (xem README.md bước thủ công):
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+# Cần vars:
+#   WORKER_URL — địa chỉ Worker demo, ví dụ https://sop-api.dungnt-storage.workers.dev
 # Theo SPEC §13.8: workflow DỪNG ngay nếu migration hoặc smoke test thất bại.
 name: Deploy demo
 
@@ -22,24 +26,6 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
-      - name: Cài dependencies backend
-        working-directory: backend
-        run: npm ci
-
-      - name: Áp dụng migration D1 (remote)
-        working-directory: backend
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler d1 migrations apply sop_demo_db --remote
-
-      - name: Deploy Worker
-        working-directory: backend
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy
-
       - name: Build frontend
         working-directory: frontend
         run: npm ci && npm run build
@@ -53,24 +39,31 @@ jobs:
           grep -q "__BUILD_ID__" sw.js && (echo "Chưa thay được BUILD_ID" && exit 1)
           echo "sw.js đã đóng dấu bản ${GITHUB_SHA::7}"
 
-      - name: Sinh config.js cho demo (địa chỉ API)
+      - name: Sinh config.js (cùng origin — apiBase rỗng)
         working-directory: frontend
-        env:
-          WORKER_URL: ${{ vars.WORKER_URL }}
         run: |
-          test -n "$WORKER_URL" || (echo "Chưa cấu hình vars.WORKER_URL — xem README." && exit 1)
-          printf 'window.SOP_CONFIG = { apiBase: "%s" };' "$WORKER_URL" > config.js
-          echo "config.js đã sinh cho $WORKER_URL"
+          printf 'window.SOP_CONFIG = { apiBase: "" };' > config.js
+          echo "config.js: apiBase rỗng (frontend và API cùng origin)"
 
-      - name: Deploy frontend lên Cloudflare Pages
-        working-directory: frontend
+      - name: Cài dependencies backend
+        working-directory: backend
+        run: npm ci
+
+      - name: Áp dụng migration D1 (remote)
+        working-directory: backend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        # PAGES_PROJECT_NAME: điền tên project Pages sau khi tạo lần đầu (xem README).
-        run: npx wrangler pages deploy . --project-name=${{ vars.PAGES_PROJECT_NAME }}
+        run: npx wrangler d1 migrations apply sop_demo_db --remote
 
-      - name: Smoke test /health + auth
+      - name: Deploy Worker (kèm frontend Static Assets)
+        working-directory: backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      - name: Smoke test /health + auth + frontend
         env:
           WORKER_URL: ${{ vars.WORKER_URL }}
         run: |
@@ -82,3 +75,7 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' "$WORKER_URL/api/v1/auth/session")" = "401" \
             && echo "Smoke test /api/v1/auth/session (401 khi chưa login): ĐẠT" \
             || (echo "Smoke test auth: THẤT BẠI" && exit 1)
+          # Trang chủ frontend phải được phục vụ cùng origin.
+          curl -sf "$WORKER_URL/" | grep -q "SOP" \
+            && echo "Smoke test / (frontend cùng origin): ĐẠT" \
+            || (echo "Smoke test frontend: THẤT BẠI" && exit 1)

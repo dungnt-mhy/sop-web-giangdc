@@ -12,6 +12,13 @@ ENV_NAME = "demo"
 # Không phải secret. Dev local dùng backend/.dev.vars (gitignore).
 ALLOWED_ORIGINS = "https://sop-web-giangdc.pages.dev"
 
+# Static Assets: phục vụ frontend (SPA) cùng origin với API.
+# Nhờ đó web và API chung một tên miền — không còn CORS/preflight/cookie cross-site.
+# Thư mục frontend được build trước khi deploy Worker (xem .github/workflows/deploy-demo.yml).
+[assets]
+directory = "../frontend"
+not_found_handling = "single-page-application"
+
 [[d1_databases]]
 binding = "sop_demo_db"
 database_name = "sop_demo_db"

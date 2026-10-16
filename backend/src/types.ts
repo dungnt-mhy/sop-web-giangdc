@@ -15,4 +15,6 @@ export interface Env {
    * Có thể để trống khi frontend và API cùng origin.
    */
   ALLOWED_ORIGINS?: string;
+  /** Binding Static Assets: phục vụ file frontend cùng origin với API. */
+  ASSETS: Fetcher;
 }
