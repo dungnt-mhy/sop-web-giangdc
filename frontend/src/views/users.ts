@@ -1,7 +1,17 @@
 // views/users.ts — quản trị người dùng (quyền users.manage, SPEC ADM-001).
 
 import { api, type PublicUser } from "../api.js";
-import { esc, roleLabel, setLoading, toast } from "../ui.js";
+import {
+  esc,
+  ICON_EDIT,
+  ICON_KEY,
+  ICON_LOCK,
+  ICON_TRASH,
+  ICON_UNLOCK,
+  roleLabel,
+  setLoading,
+  toast,
+} from "../ui.js";
 
 const ALL_ROLES = [
   "admin",
@@ -80,12 +90,13 @@ function rowHtml(u: PublicUser, selfId: string): string {
     <td>${u.roles.map((r) => `<span class="role-badge sm">${esc(roleLabel(r))}</span>`).join(" ")}</td>
     <td>${statusLabel(u)}</td>
     <td class="actions">
-      <button class="link" data-act="edit">Sửa</button>
+      <button class="link" data-act="edit" title="Sửa">${ICON_EDIT}<span>Sửa</span></button>
       ${locked
-        ? `<button class="link" data-act="unlock">Mở khoá</button>`
-        : isSelf ? "" : `<button class="link danger" data-act="lock">Khoá</button>`}
-      <button class="link" data-act="force">Bắt đổi MK</button>
-      ${isSelf ? "" : `<button class="link danger" data-act="delete">Xoá</button>`}
+        ? `<button class="link" data-act="unlock" title="Mở khoá">${ICON_UNLOCK}<span>Mở khoá</span></button>`
+        : isSelf ? "" : `<button class="link danger" data-act="lock" title="Khoá">${ICON_LOCK}<span>Khoá</span></button>`}
+      <button class="link" data-act="force" title="Bắt đổi mật khẩu">${ICON_KEY}<span>Bắt đổi MK</span></button>
+      ${isSelf ? "" : `<button class="link" data-act="resetpw" title="Đặt lại mật khẩu">${ICON_KEY}<span>Đặt lại MK</span></button>`}
+      ${isSelf ? "" : `<button class="link danger" data-act="delete" title="Xoá vĩnh viễn">${ICON_TRASH}<span>Xoá</span></button>`}
     </td>
   </tr>`;
 }
@@ -122,6 +133,12 @@ function wireRows(
           toast(msg(e), "err");
           restore();
         }
+        return;
+      }
+      if (act === "resetpw") {
+        const u = items.find((x) => x.id === id);
+        if (u) openResetPasswordDialog(dialogRoot, u, reload);
+        else toast("Không tìm thấy tài khoản.", "err");
         return;
       }
       const confirmMsg =
@@ -246,5 +263,83 @@ function openUserDialog(
   });
 
   const first = dialogRoot.querySelector<HTMLInputElement>("input[name=username], input[name=display_name]");
+  first?.focus();
+}
+
+/** Dialog đặt lại mật khẩu cho user (admin). */
+function openResetPasswordDialog(
+  dialogRoot: HTMLElement,
+  user: PublicUser,
+  reload: () => Promise<void>
+): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" id="dlg-backdrop">
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Đặt lại mật khẩu">
+        <h3>Đặt lại mật khẩu</h3>
+        <p class="muted">Tài khoản: <strong>${esc(user.username)}</strong> (${esc(user.display_name)})</p>
+        <form id="resetpw-form" novalidate>
+          <label>Mật khẩu mới <input name="password" type="password" required minlength="8" autocomplete="new-password" />
+            <span class="hint">Ít nhất 8 ký tự. Người dùng sẽ bị đăng xuất và bắt buộc đổi ở lần đăng nhập tới.</span></label>
+          <label>Nhập lại mật khẩu mới <input name="password2" type="password" required minlength="8" autocomplete="new-password" /></label>
+          <p class="form-error" id="resetpw-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" class="btn secondary" id="dlg-cancel">Huỷ</button>
+            <button type="submit" class="btn primary" id="dlg-submit">Đặt lại mật khẩu</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+
+  const close = () => {
+    dialogRoot.innerHTML = "";
+    document.removeEventListener("keydown", escHandler);
+  };
+  function escHandler(e: KeyboardEvent) {
+    if (e.key === "Escape") close();
+  }
+  const cancelBtn = dialogRoot.querySelector<HTMLButtonElement>("#dlg-cancel")!;
+  cancelBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    close();
+  });
+  dialogRoot.querySelector("#dlg-backdrop")!.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).id === "dlg-backdrop") close();
+  });
+  document.addEventListener("keydown", escHandler);
+
+  const form = dialogRoot.querySelector<HTMLFormElement>("#resetpw-form")!;
+  const errBox = dialogRoot.querySelector<HTMLElement>("#resetpw-error")!;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errBox.hidden = true;
+    const fd = new FormData(form);
+    const pw1 = String(fd.get("password") ?? "");
+    const pw2 = String(fd.get("password2") ?? "");
+    if (pw1.length < 8) {
+      errBox.textContent = "Mật khẩu mới phải có ít nhất 8 ký tự.";
+      errBox.hidden = false;
+      return;
+    }
+    if (pw1 !== pw2) {
+      errBox.textContent = "Mật khẩu nhập lại chưa khớp.";
+      errBox.hidden = false;
+      return;
+    }
+    const submit = dialogRoot.querySelector<HTMLButtonElement>("#dlg-submit")!;
+    const restore = setLoading(submit, true, "Đang đặt lại…");
+    try {
+      await api.resetPassword(user.id, pw1);
+      toast(`Đã đặt lại mật khẩu cho ${user.username}.`, "ok");
+      close();
+      await reload();
+    } catch (err) {
+      errBox.textContent = msg(err);
+      errBox.hidden = false;
+      restore();
+    }
+  });
+
+  const first = dialogRoot.querySelector<HTMLInputElement>("input[name=password]");
   first?.focus();
 }

@@ -31,6 +31,7 @@ import {
   handleListUsers,
   handleLockUser,
   handlePatchUser,
+  handleResetPassword,
   handleUnlockUser,
 } from "./routes/users";
 
@@ -134,7 +135,7 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     if (method === "GET") return handleListUsers(ctx);
     if (method === "POST") return handleCreateUser(ctx);
   }
-  const m = /^\/users\/([^/:]+)((?::(lock|unlock|force-password-change))?)$/.exec(path);
+  const m = /^\/users\/([^/:]+)((?::(lock|unlock|force-password-change|reset-password))?)$/.exec(path);
   if (m) {
     const id = decodeURIComponent(m[1]);
     const action = m[3];
@@ -149,6 +150,7 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
       if (action === "lock") return handleLockUser(ctx, id);
       if (action === "unlock") return handleUnlockUser(ctx, id);
       if (action === "force-password-change") return handleForcePasswordChange(ctx, id);
+      if (action === "reset-password") return handleResetPassword(ctx, id);
     }
   }
 

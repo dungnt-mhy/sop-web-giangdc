@@ -77,9 +77,11 @@ p { margin: 0 0 1em; }
   background: none; border: none; color: var(--navy-3); cursor: pointer;
   font-size: 13.5px; font-weight: 600; padding: 6px 8px; border-radius: 6px;
   text-decoration: underline; text-underline-offset: 3px;
+  display: inline-flex; align-items: center; gap: 5px;
 }
 .link:hover { background: #eef4fa; }
 .link.danger { color: var(--danger); }
+.link svg { flex-shrink: 0; }
 
 .spinner {
   display: inline-block; width: 16px; height: 16px; border-radius: 50%;

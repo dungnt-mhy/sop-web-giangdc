@@ -405,6 +405,52 @@ export async function handleDeleteUser(ctx: Ctx, id: string): Promise<Response> 
   return ok({ deleted: true, id });
 }
 
+// POST /api/v1/users/{id}:reset-password — admin đặt mật khẩu mới cho user.
+// Mật khẩu mới phải ≥8 ký tự; user bị đăng xuất mọi phiên và bắt buộc đổi MK ở lần đăng nhập tới.
+// Không cho tự đặt lại mật khẩu của chính mình (dùng chức năng Đổi mật khẩu).
+export async function handleResetPassword(ctx: Ctx, id: string): Promise<Response> {
+  const s = requirePermission(ctx, "users.manage");
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+
+  if (id === me.user.id) {
+    return apiError(
+      "VALIDATION_ERROR",
+      "Không thể tự đặt lại mật khẩu của chính mình. Hãy dùng chức năng Đổi mật khẩu.",
+      ctx.requestId
+    );
+  }
+  const u = await getUserById(db, id);
+  if (!u) return apiError("NOT_FOUND", "Không tìm thấy tài khoản.", ctx.requestId);
+
+  const body = (await readJson(ctx.request)) as { password?: unknown } | null;
+  const password = typeof body?.password === "string" ? body.password : "";
+  if (password.length < 8 || password.length > 128) {
+    return apiError("VALIDATION_ERROR", "Mật khẩu mới phải có ít nhất 8 ký tự.", ctx.requestId);
+  }
+
+  const h = await hashPassword(password);
+  const now = nowIso();
+  await db.batch([
+    db.prepare(
+      `UPDATE local_credentials SET password_hash = ?, password_salt = ?, hash_algorithm = ?, hash_params = ?, must_change_password = <redacted> updated_at = ?, updated_by = ? WHERE user_id = ?`
+    ).bind(h.hashB64, h.saltB64, h.algorithm, h.params, now, me.user.id, id),
+    db.prepare(`UPDATE users SET failed_login_count = 0, locked_until = NULL, updated_at = ?, updated_by = ? WHERE id = ?`)
+      .bind(now, me.user.id, id),
+    db.prepare(`UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
+      .bind(now, id),
+  ]);
+  await audit(db, {
+    event_type: "USER_PASSWORD_RESET",
+    actor_id: me.user.id,
+    object_type: "user",
+    object_id: id,
+    request_id: ctx.requestId,
+  });
+  return ok(await loadFullUser(db, id));
+}
+
 // POST /api/v1/users/{id}:force-password-change — bắt đổi MK lần tới + thu hồi mọi phiên.
 export async function handleForcePasswordChange(ctx: Ctx, id: string): Promise<Response> {
   const s = requirePermission(ctx, "users.manage");

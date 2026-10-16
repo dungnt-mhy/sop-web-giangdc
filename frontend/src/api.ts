@@ -136,6 +136,9 @@ export const api = {
   deleteUser(id: string): Promise<{ deleted: boolean; id: string }> {
     return req("DELETE", "/users/" + encodeURIComponent(id));
   },
+  resetPassword(id: string, password: string): Promise<PublicUser> {
+    return req("POST", `/users/${encodeURIComponent(id)}:reset-password`, { password });
+  },
 };
 
 /** true nếu ApiError là lỗi chưa đăng nhập. */
