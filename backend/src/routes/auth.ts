@@ -131,14 +131,12 @@ export function sessionPayload(s: SessionInfo) {
 
 // POST /api/v1/auth/login
 export async function handleLogin(ctx: Ctx): Promise<Response> {
-  const t0 = Date.now();
   const body = (await readJson(ctx.request)) as {
     username?: unknown;
     password?: unknown;
   } | null;
   const username = typeof body?.username === "string" ? body.username : "";
   const password = typeof body?.password === "string" ? body.password : "";
-  console.log(`[diag] login start rid=${ctx.requestId} user=${username.trim().slice(0, 32)}`);
   if (!username.trim() || !password) {
     return apiError("VALIDATION_ERROR", "Vui lòng nhập tên đăng nhập và mật khẩu.", ctx.requestId);
   }
@@ -239,12 +237,11 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
     expiresAt,
     viaCookie: true,
   };
-  // Trả token thô trong body để SPA giữ trong bộ nhớ và gửi qua header Authorization.
-  // KHÔNG set cookie nữa: cookie cross-site (workers.dev ↔ pages.dev) gây kẹt request
-  // trên một số trình duyệt/mạng (đã ghi nhận), trong khi Bearer token đã đủ cho SPA.
+  // Trả token trong body cho SPA (dự phòng) + set cookie HttpOnly để phiên
+  // tồn tại khi tải lại trang. Cùng origin nên không còn vấn đề cookie cross-site.
   // Không log token (ADM-003).
   const res = ok({ ...sessionPayload(info), token });
-  console.log(`[diag] login success rid=${ctx.requestId} user=${user.username} ms=${Date.now() - t0}`);
+  setSessionCookie(res, token, ctx.isHttps);
   return res;
 }
 
