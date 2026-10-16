@@ -64,6 +64,8 @@ p { margin: 0 0 1em; }
 .btn.primary:disabled { background: #8fa3b8; cursor: wait; }
 .btn.secondary { background: #fff; color: var(--navy); border-color: var(--line); }
 .btn.secondary:hover { background: #f0f4f9; }
+.btn.danger { background: var(--danger); color: #fff; }
+.btn.danger:hover { filter: brightness(0.92); }
 .btn.block { width: 100%; }
 .btn.sm { padding: 8px 14px; font-size: 13.5px; min-height: 38px; }
 

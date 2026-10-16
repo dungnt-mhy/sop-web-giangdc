@@ -122,17 +122,8 @@ function wireRows(
       }
       if (act === "delete") {
         const u = items.find((x) => x.id === id);
-        const name = u ? u.username : "tài khoản này";
-        if (!window.confirm(`XOÁ VĨNH VIỄN "${name}"?\n\nChỉ xoá được tài khoản chưa từng đăng nhập/hoạt động. Hành động này không thể hoàn tác.`)) return;
-        const restore = setLoading(btn, true, "Đang xoá…");
-        try {
-          await api.deleteUser(id);
-          toast("Đã xoá tài khoản.", "ok");
-          await reload();
-        } catch (e) {
-          toast(msg(e), "err");
-          restore();
-        }
+        if (u) openDeleteConfirmDialog(dialogRoot, u, reload);
+        else toast("Không tìm thấy tài khoản.", "err");
         return;
       }
       if (act === "resetpw") {
@@ -342,4 +333,58 @@ function openResetPasswordDialog(
 
   const first = dialogRoot.querySelector<HTMLInputElement>("input[name=password]");
   first?.focus();
+}
+
+/** Dialog xác nhận xoá cứng tài khoản. */
+function openDeleteConfirmDialog(
+  dialogRoot: HTMLElement,
+  user: PublicUser,
+  reload: () => Promise<void>
+): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" id="dlg-backdrop">
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Xác nhận xoá">
+        <h3>Xoá tài khoản?</h3>
+        <p>XOÁ VĨNH VIỄN tài khoản <strong>${esc(user.username)}</strong> (${esc(user.display_name)})?</p>
+        <p class="muted small">Chỉ xoá được tài khoản chưa từng đăng nhập/hoạt động. Hành động này không thể hoàn tác.</p>
+        <p class="form-error" id="delete-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn secondary" id="dlg-cancel">Huỷ</button>
+          <button type="button" class="btn danger" id="dlg-confirm-delete">Xoá vĩnh viễn</button>
+        </div>
+      </div>
+    </div>`;
+
+  const close = () => {
+    dialogRoot.innerHTML = "";
+    document.removeEventListener("keydown", escHandler);
+  };
+  function escHandler(e: KeyboardEvent) {
+    if (e.key === "Escape") close();
+  }
+  dialogRoot.querySelector<HTMLButtonElement>("#dlg-cancel")!.addEventListener("click", (e) => {
+    e.preventDefault();
+    close();
+  });
+  dialogRoot.querySelector("#dlg-backdrop")!.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).id === "dlg-backdrop") close();
+  });
+  document.addEventListener("keydown", escHandler);
+
+  const confirmBtn = dialogRoot.querySelector<HTMLButtonElement>("#dlg-confirm-delete")!;
+  const errBox = dialogRoot.querySelector<HTMLElement>("#delete-error")!;
+  confirmBtn.addEventListener("click", async () => {
+    errBox.hidden = true;
+    const restore = setLoading(confirmBtn, true, "Đang xoá…");
+    try {
+      await api.deleteUser(user.id);
+      toast("Đã xoá tài khoản.", "ok");
+      close();
+      await reload();
+    } catch (err) {
+      errBox.textContent = msg(err);
+      errBox.hidden = false;
+      restore();
+    }
+  });
 }
