@@ -1,0 +1,5 @@
+# Mẫu biến môi trường cho `wrangler dev` (local).
+# Copy thành `.dev.vars` (đã có trong .gitignore) và điền giá trị khi cần.
+# LƯU Ý: không commit file `.dev.vars` thật vào repo.
+
+# ENV_NAME=local
