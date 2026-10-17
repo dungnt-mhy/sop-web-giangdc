@@ -484,6 +484,10 @@ export const api = {
     const q = new URLSearchParams(params).toString();
     return req("GET", `/dashboard/summary${q ? "?" + q : ""}`);
   },
+  dashboardOverview(params: Record<string, string>): Promise<any> {
+    const q = new URLSearchParams(params).toString();
+    return req("GET", `/dashboard/overview${q ? "?" + q : ""}`);
+  },
   dashboardExecutions(params: Record<string, string>): Promise<{ items: any[]; total: number }> {
     const q = new URLSearchParams(params).toString();
     return req("GET", `/dashboard/executions${q ? "?" + q : ""}`);

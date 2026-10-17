@@ -136,6 +136,98 @@ export async function handleDashboardSummary(ctx: Ctx) {
   });
 }
 
+/** GET /dashboard/overview — tổng quan cho dashboard chuyên nghiệp.
+ *  Bao gồm: ngoại lệ, bằng chứng, lượt theo ngày, top quy trình, workload người dùng. */
+export async function handleDashboardOverview(ctx: Ctx) {
+  const me = await requirePermission(ctx, "reports.view");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+
+  const url = new URL(ctx.request.url);
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  const processId = url.searchParams.get("process_id");
+
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
+  if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
+  if (processId) { conds.push(`e.process_id = ?`); params.push(processId); }
+  const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
+  const whereAnd = conds.length > 0 ? `${where} AND` : "WHERE";
+
+  // 1. Ngoại lệ theo trạng thái và mức độ.
+  const excByStatus = await db.prepare(
+    `SELECT status, COUNT(*) as cnt FROM exceptions GROUP BY status`
+  ).all<{ status: string; cnt: number }>();
+  const excBySeverity = await db.prepare(
+    `SELECT severity, COUNT(*) as cnt FROM exceptions WHERE status NOT IN ('RESOLVED','CLOSED') GROUP BY severity`
+  ).all<{ severity: string; cnt: number }>();
+  const openExc = await db.prepare(
+    `SELECT COUNT(*) as cnt FROM exceptions WHERE status NOT IN ('RESOLVED','CLOSED')`
+  ).first<{ cnt: number }>();
+
+  // 2. Bằng chứng: tổng số, theo loại.
+  const evStats = await db.prepare(
+    `SELECT kind, COUNT(*) as cnt FROM evidence GROUP BY kind`
+  ).all<{ kind: string; cnt: number }>();
+  const evTotal = await db.prepare(`SELECT COUNT(*) as cnt FROM evidence`).first<{ cnt: number }>();
+
+  // 3. Lượt công việc theo ngày (14 ngày gần nhất).
+  const byDate = await db.prepare(
+    `SELECT date(e.created_at) as d, e.status, COUNT(*) as cnt
+     FROM executions e ${where}
+     GROUP BY d, e.status ORDER BY d DESC LIMIT 60`
+  ).bind(...params).all<{ d: string; status: string; cnt: number }>();
+
+  // 4. Top 5 quy trình theo số lượt.
+  const topProcesses = await db.prepare(
+    `SELECT p.name, p.code, COUNT(e.id) as cnt,
+            SUM(CASE WHEN e.status = 'COMPLETED' THEN 1 ELSE 0 END) as done_cnt
+     FROM executions e JOIN processes p ON p.id = e.process_id
+     ${where} GROUP BY p.id ORDER BY cnt DESC LIMIT 5`
+  ).bind(...params).all<{ name: string; code: string; cnt: number; done_cnt: number }>();
+
+  // 5. Workload: top người thực hiện.
+  const workload = await db.prepare(
+    `SELECT u.display_name, u.username, COUNT(e.id) as total,
+            SUM(CASE WHEN e.status = 'COMPLETED' THEN 1 ELSE 0 END) as done,
+            SUM(CASE WHEN e.status IN ('IN_PROGRESS','PAUSED') THEN 1 ELSE 0 END) as active
+     FROM executions e JOIN users u ON u.id = e.assignee_id
+     ${where} GROUP BY u.id ORDER BY total DESC LIMIT 8`
+  ).bind(...params).all<{ display_name: string; username: string; total: number; done: number; active: number }>();
+
+  // 6. Người dùng hoạt động.
+  const activeUsers = await db.prepare(
+    `SELECT COUNT(*) as cnt FROM users WHERE status = 'active'`
+  ).first<{ cnt: number }>();
+
+  // 7. Ngoại lệ đang mở (chi tiết 5 cái mới nhất).
+  const openExcList = await db.prepare(
+    `SELECT ex.id, ex.title, ex.severity, ex.status, ex.created_at, e.code as exec_code
+     FROM exceptions ex LEFT JOIN executions e ON e.id = ex.execution_id
+     WHERE ex.status NOT IN ('RESOLVED','CLOSED')
+     ORDER BY ex.created_at DESC LIMIT 5`
+  ).all();
+
+  return ok({
+    exceptions: {
+      open: openExc?.cnt ?? 0,
+      by_status: Object.fromEntries((excByStatus.results ?? []).map((r) => [r.status, r.cnt])),
+      by_severity: Object.fromEntries((excBySeverity.results ?? []).map((r) => [r.severity, r.cnt])),
+      recent_open: openExcList.results ?? [],
+    },
+    evidence: {
+      total: evTotal?.cnt ?? 0,
+      by_kind: Object.fromEntries((evStats.results ?? []).map((r) => [r.kind, r.cnt])),
+    },
+    executions_by_date: byDate.results ?? [],
+    top_processes: topProcesses.results ?? [],
+    workload: workload.results ?? [],
+    active_users: activeUsers?.cnt ?? 0,
+  });
+}
+
 /** GET /dashboard/executions — danh sách lượt cho báo cáo (có filter). */
 export async function handleDashboardExecutions(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
