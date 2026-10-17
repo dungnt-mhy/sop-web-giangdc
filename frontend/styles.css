@@ -311,6 +311,41 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .progress-bar { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.3s; }
 .btn.sm { font-size: 13px; padding: 6px 12px; }
 
+/* Sơ đồ tuyến tính (PRC-010). */
+.steps-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.view-toggle { display: inline-flex; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; }
+.toggle-btn { border: 0; background: #fff; padding: 8px 16px; font-size: 14px; cursor: pointer; color: var(--muted); }
+.toggle-btn.active { background: var(--navy); color: #fff; font-weight: 600; }
+.flow-diagram { display: flex; flex-direction: column; align-items: center; padding: 16px 8px; max-width: 480px; margin: 0 auto; }
+.flow-start, .flow-end {
+  padding: 8px 24px; border-radius: 999px; font-weight: 700; font-size: 14px;
+  background: var(--navy); color: #fff;
+}
+.flow-end { background: var(--accent-dark); }
+.flow-arrow { font-size: 24px; color: #94a3b8; line-height: 1.2; margin: 2px 0; }
+.flow-node {
+  width: 100%; background: #fff; border: 2px solid #cbd5e1; border-radius: 12px;
+  padding: 12px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.flow-node.optional { border-style: dashed; background: #f8fafc; }
+.flow-node-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.flow-num {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+}
+.flow-title { font-size: 15px; font-weight: 600; }
+.flow-meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+/* Sơ đồ lượt thực hiện — màu theo trạng thái bước. */
+.flow-node.exec.doing { border-color: #3b82f6; background: #eff6ff; }
+.flow-node.exec.done { border-color: #22c55e; background: #f0fdf4; }
+.flow-node.exec.done .flow-num { background: #22c55e; }
+.flow-node.exec.failed { border-color: #ef4444; background: #fef2f2; }
+.flow-node.exec.failed .flow-num { background: #ef4444; }
+.flow-node.exec.skipped { border-style: dashed; background: #f8fafc; }
+.flow-node.exec.skipped .flow-num { background: #94a3b8; }
+
 /* ---------- Bảng ---------- */
 .table-wrap {
   overflow-x: auto; background: #fff; border-radius: var(--radius);

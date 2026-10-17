@@ -205,6 +205,19 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         `${e.process_name ?? ""}${e.title ? " — " + e.title : ""}`;
       renderActions(actionsEl, dialogRoot, e, reload);
       body.innerHTML = detailHtml(e);
+      // Xử lý chuyển đổi Danh sách / Sơ đồ.
+      const toggleBtns = body.querySelectorAll<HTMLButtonElement>(".toggle-btn[data-eview]");
+      const listView = body.querySelector("[data-exec-list]") as HTMLElement | null;
+      const diagramView = body.querySelector("[data-exec-diagram]") as HTMLElement | null;
+      toggleBtns.forEach((tb) => {
+        tb.addEventListener("click", () => {
+          toggleBtns.forEach((x) => x.classList.remove("active"));
+          tb.classList.add("active");
+          const isDiagram = tb.dataset.eview === "diagram";
+          if (listView) listView.hidden = isDiagram;
+          if (diagramView) diagramView.hidden = !isDiagram;
+        });
+      });
     } catch (err) {
       body.innerHTML = `<p class="empty">Không tải được lượt: ${esc(msg(err))}</p>`;
     }
@@ -315,7 +328,14 @@ function detailHtml(e: ExecutionDetail): string {
       </dl>
     </section>
     <section class="card">
-      <h3>Các bước (${e.steps.length})</h3>
+      <div class="steps-toolbar">
+        <h3>Các bước (${e.steps.length})</h3>
+        <div class="view-toggle" role="tablist" aria-label="Chế độ xem">
+          <button class="toggle-btn active" data-eview="list">Danh sách</button>
+          <button class="toggle-btn" data-eview="diagram">Sơ đồ</button>
+        </div>
+      </div>
+      <div data-exec-list>
       <ol class="step-list">
         ${e.steps.map((st, idx) => {
           const canStart = active && st.status === "NOT_STARTED";
@@ -342,7 +362,42 @@ function detailHtml(e: ExecutionDetail): string {
           </li>`;
         }).join("")}
       </ol>
+      </div>
+      <div data-exec-diagram hidden>
+        ${renderExecDiagram(e.steps)}
+      </div>
     </section>`;
+}
+
+/** Sơ đồ tuyến tính cho lượt thực hiện — màu theo trạng thái bước. */
+function renderExecDiagram(steps: import("../api.js").ExecutionStep[]): string {
+  const cls: Record<string, string> = {
+    NOT_STARTED: "",
+    IN_PROGRESS: "doing",
+    PASSED: "done",
+    FAILED: "failed",
+    SKIPPED: "skipped",
+  };
+  const label: Record<string, string> = {
+    NOT_STARTED: "Chưa bắt đầu",
+    IN_PROGRESS: "Đang làm",
+    PASSED: "Đạt",
+    FAILED: "Không đạt",
+    SKIPPED: "Bỏ qua",
+  };
+  return `
+    <div class="flow-diagram" role="img" aria-label="Sơ đồ lượt thực hiện ${steps.length} bước">
+      ${steps.map((st, idx) => `
+        ${idx > 0 ? `<div class="flow-arrow" aria-hidden="true">↓</div>` : ""}
+        <div class="flow-node exec ${cls[st.status] ?? ""}">
+          <div class="flow-node-head">
+            <span class="flow-num">${idx + 1}</span>
+            <strong>${esc(st.code)}</strong>
+            <span class="pill ${st.status === "PASSED" ? "green" : st.status === "IN_PROGRESS" ? "blue" : "gray"}">${esc(label[st.status] ?? st.status)}</span>
+          </div>
+          <div class="flow-title">${esc(st.title)}</div>
+        </div>`).join("")}
+    </div>`;
 }
 
 export { EXEC_STATUS_LABELS };
