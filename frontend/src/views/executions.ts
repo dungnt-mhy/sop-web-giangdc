@@ -156,11 +156,14 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
   const sel = dialogRoot.querySelector<HTMLSelectElement>("#exec-process")!;
   const selAssignee = dialogRoot.querySelector<HTMLSelectElement>("#exec-assignee")!;
   // Tải danh sách người dùng cho ô chọn người thực hiện.
-  api.listUsers().then(({ items }) => {
+  api.listUsers().then((res) => {
+    const items = res?.items ?? [];
     const active = items.filter((u) => u.status === "ACTIVE");
-    selAssignee.innerHTML = `<option value="">Tôi (mặc định)</option>` + active.map((u) =>
-      `<option value="${esc(u.id)}">${esc(u.display_name ?? u.username)} (${esc(u.username)})</option>`
-    ).join("");
+    if (active.length > 0) {
+      selAssignee.innerHTML = `<option value="">Tôi (mặc định)</option>` + active.map((u) =>
+        `<option value="${esc(u.id)}">${esc(u.display_name ?? u.username)} (${esc(u.username)})</option>`
+      ).join("");
+    }
   }).catch(() => { /* giữ mặc định */ });
   api.listProcesses().then(({ items }) => {
     const available = items.filter((p) => p.active_version);
