@@ -477,28 +477,6 @@ function openVersionDialog(dialogRoot: HTMLElement, processId: string, onDone: (
   });
 }
 
-/** Vẽ sơ đồ tuyến tính chỉ đọc cho các bước (PRC-010). */
-function renderStepDiagram(items: import("../api.js").ProcessStep[]): string {
-  return `
-    <div class="flow-diagram" role="img" aria-label="Sơ đồ quy trình ${items.length} bước">
-      <div class="flow-start">Bắt đầu</div>
-      ${items.map((st, idx) => `
-        ${idx > 0 ? `<div class="flow-arrow" aria-hidden="true">↓</div>` : ""}
-        <div class="flow-node${st.is_required ? "" : " optional"}">
-          <div class="flow-node-head">
-            <span class="flow-num">${idx + 1}</span>
-            <strong>${esc(st.code)}</strong>
-            ${st.is_required ? "" : '<span class="pill gray">Tùy chọn</span>'}
-          </div>
-          <div class="flow-title">${esc(st.title)}</div>
-          ${st.role ? `<div class="flow-meta">Vai trò: ${esc(st.role)}</div>` : ""}
-          ${st.target_duration_min ? `<div class="flow-meta">~${st.target_duration_min} phút</div>` : ""}
-        </div>`).join("")}
-      <div class="flow-arrow" aria-hidden="true">↓</div>
-      <div class="flow-end">Kết thúc</div>
-    </div>`;
-}
-
 /** Bật/tắt hiển thị danh sách bước của một phiên bản. */
 async function toggleSteps(
   body: HTMLElement,
@@ -576,7 +554,7 @@ async function toggleSteps(
         </ol>
         </div>
         <div data-steps-diagram hidden>
-          ${renderStepDiagram(items)}
+          ${renderBeautifulDiagram(items, current?.name ?? "")}
         </div>`;
       // Xử lý chuyển đổi chế độ xem.
       const toggleBtns = container.querySelectorAll<HTMLButtonElement>(".toggle-btn");
@@ -598,6 +576,15 @@ async function toggleSteps(
       await toggleSteps(body, dialogRoot, versionId, current, canManage);
     };
     container.onclick = async (ev) => {
+      // Nút mở rộng chi tiết trong sơ đồ đẹp.
+      const expBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-expand]");
+      if (expBtn) {
+        const details = expBtn.parentElement!.querySelector(".beauty-details") as HTMLElement;
+        const open = details.hidden;
+        details.hidden = !open;
+        expBtn.innerHTML = open ? "Thu gọn ▴" : "Chi tiết ▾";
+        return;
+      }
       const b = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-step-act]");
       if (!b) return;
       const act = b.dataset.stepAct!;
