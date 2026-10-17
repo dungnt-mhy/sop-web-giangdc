@@ -393,7 +393,7 @@ function renderEvidenceGrid(
   });
 }
 
-/** Nén và tải lên các ảnh đã chọn. */
+/** Nén (nếu là ảnh) và tải lên các tệp đã chọn. */
 async function uploadEvidenceFiles(
   body: HTMLElement,
   execId: string,
@@ -407,14 +407,25 @@ async function uploadEvidenceFiles(
   let failed = 0;
   for (const f of files) {
     try {
-      toast(`Đang nén ${f.name}…`);
-      const { file: compressed, originalBytes, compressedBytes, wasCompressed } = await compressImage(f);
-      if (wasCompressed) {
-        toast(`Đã nén ${fmt(originalBytes)} → ${fmt(compressedBytes)}. Đang tải lên…`);
+      const isImage = f.type.startsWith("image/");
+      let toUpload = f;
+      if (isImage) {
+        toast(`Đang nén ${f.name}…`);
+        const { file: compressed, originalBytes, compressedBytes, wasCompressed } = await compressImage(f);
+        if (wasCompressed) {
+          toast(`Đã nén ${fmt(originalBytes)} → ${fmt(compressedBytes)}. Đang tải lên…`);
+        } else {
+          toast(`Đang tải lên ${f.name}…`);
+        }
+        toUpload = compressed;
       } else {
+        // Tệp tài liệu: kiểm tra dung lượng 25MB phía client.
+        if (f.size > 25 * 1024 * 1024) {
+          throw new Error("Tệp vượt quá 25MB.");
+        }
         toast(`Đang tải lên ${f.name}…`);
       }
-      await api.uploadEvidence(execId, sid, compressed);
+      await api.uploadEvidence(execId, sid, toUpload);
       done++;
     } catch (e) {
       failed++;
@@ -524,13 +535,19 @@ function detailHtml(e: ExecutionDetail): string {
             <div class="evidence-section" data-evidence-for="${esc(st.id)}">
               <div class="evidence-head">
                 <span class="evidence-title">📷 Bằng chứng <span class="evidence-count" data-ev-count></span></span>
-                ${canUpload ? `<label class="btn sm evidence-upload-btn">
-                  + Thêm ảnh
-                  <input type="file" accept="image/*" multiple hidden data-ev-input />
-                </label>` : ""}
+                ${canUpload ? `<span class="evidence-upload-group">
+                  <label class="btn sm evidence-upload-btn">
+                    + Ảnh
+                    <input type="file" accept="image/*" multiple hidden data-ev-input data-ev-kind="photo" />
+                  </label>
+                  <label class="btn sm evidence-upload-btn">
+                    + Tệp
+                    <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple hidden data-ev-input data-ev-kind="file" />
+                  </label>
+                </span>` : ""}
               </div>
               <div class="evidence-grid" data-ev-grid></div>
-              <p class="evidence-hint muted small">Ảnh được nén trước khi tải lên (tối đa 10 ảnh/bước).</p>
+              <p class="evidence-hint muted small">Ảnh được nén trước khi tải lên (tối đa 10 ảnh/bước). Tệp: PDF, Word, Excel, tối đa 25MB.</p>
             </div>
           </li>`;
         }).join("")}

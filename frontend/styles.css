@@ -547,3 +547,4 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 /* Dòng trong bảng có thể nhấn để mở xem. */
 .clickable-rows tbody tr { cursor: pointer; }
 .clickable-rows tbody tr:hover { background: #f8fafc; }
+.evidence-upload-group { display: flex; gap: 6px; }
