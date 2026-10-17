@@ -21,6 +21,7 @@ export async function renderExceptions(root: HTMLElement): Promise<void> {
       <p class="page-sub">Theo dõi và xử lý các sự cố phát sinh trong thực hiện công việc.</p></div>
     </div>
     <div class="filter-bar">
+      <input type="search" id="exc-flt-q" class="input" placeholder="Tìm theo từ khóa…" aria-label="Tìm kiếm" />
       <select id="exc-flt-status" class="input" aria-label="Trạng thái">
         <option value="">Tất cả trạng thái</option>
         <option value="OPEN">Mới</option>
@@ -40,6 +41,7 @@ export async function renderExceptions(root: HTMLElement): Promise<void> {
     <div id="exc-list"><p class="empty">Đang tải…</p></div>`;
 
   const listEl = root.querySelector<HTMLElement>("#exc-list")!;
+  const inpQ = root.querySelector<HTMLInputElement>("#exc-flt-q")!;
   const selStatus = root.querySelector<HTMLSelectElement>("#exc-flt-status")!;
   const selSev = root.querySelector<HTMLSelectElement>("#exc-flt-sev")!;
 
@@ -47,6 +49,7 @@ export async function renderExceptions(root: HTMLElement): Promise<void> {
     listEl.innerHTML = `<p class="empty">Đang tải…</p>`;
     try {
       const qs = new URLSearchParams();
+      if (inpQ.value.trim()) qs.set("q", inpQ.value.trim());
       if (selStatus.value) qs.set("status", selStatus.value);
       if (selSev.value) qs.set("severity", selSev.value);
       const { items } = await api.listAllExceptions(qs.toString());
@@ -114,6 +117,7 @@ export async function renderEvidence(root: HTMLElement): Promise<void> {
       <p class="page-sub">Tất cả ảnh và tệp bằng chứng đã tải lên.</p></div>
     </div>
     <div class="filter-bar">
+      <input type="search" id="ev-flt-q" class="input" placeholder="Tìm theo tên tệp…" aria-label="Tìm kiếm" />
       <select id="ev-flt-kind" class="input" aria-label="Loại">
         <option value="">Tất cả loại</option>
         <option value="PHOTO">Ảnh</option>
@@ -121,17 +125,33 @@ export async function renderEvidence(root: HTMLElement): Promise<void> {
       </select>
       <input type="date" id="ev-flt-date" class="input" aria-label="Từ ngày" />
       <button class="btn" id="ev-btn-filter">Lọc</button>
+      <div class="view-toggle" role="group" aria-label="Chế độ xem">
+        <button class="btn sm view-btn active" data-view="grid" title="Dạng lưới">▦</button>
+        <button class="btn sm view-btn" data-view="list" title="Dạng danh sách">☰</button>
+      </div>
     </div>
     <div id="ev-list"><p class="empty">Đang tải…</p></div>`;
 
   const listEl = root.querySelector<HTMLElement>("#ev-list")!;
+  const inpQ = root.querySelector<HTMLInputElement>("#ev-flt-q")!;
   const selKind = root.querySelector<HTMLSelectElement>("#ev-flt-kind")!;
   const inpDate = root.querySelector<HTMLInputElement>("#ev-flt-date")!;
+  let viewMode: "grid" | "list" = "grid";
+
+  root.querySelectorAll<HTMLButtonElement>(".view-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      root.querySelectorAll(".view-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      viewMode = btn.dataset.view as "grid" | "list";
+      void reload();
+    });
+  });
 
   async function reload(): Promise<void> {
     listEl.innerHTML = `<p class="empty">Đang tải…</p>`;
     try {
       const qs = new URLSearchParams();
+      if (inpQ.value.trim()) qs.set("q", inpQ.value.trim());
       if (selKind.value) qs.set("kind", selKind.value);
       if (inpDate.value) qs.set("from_date", inpDate.value);
       const { items } = await api.listAllEvidence(qs.toString());
@@ -139,23 +159,39 @@ export async function renderEvidence(root: HTMLElement): Promise<void> {
         listEl.innerHTML = `<p class="empty">Chưa có bằng chứng nào.</p>`;
         return;
       }
-      listEl.innerHTML = `<div class="evidence-manage-grid">` + items.map((ev: Record<string, unknown>) => {
-        const isPhoto = ev.kind === "PHOTO";
-        return `
-        <div class="evidence-manage-item">
-          ${isPhoto
-            ? `<img src="${esc(api.evidenceDownloadUrl(String(ev.id)))}" alt="${esc(String(ev.original_name))}" loading="lazy" />`
-            : `<div class="evidence-file-icon">📄</div>`}
-          <div class="evidence-manage-info">
-            <strong class="evidence-manage-name">${esc(String(ev.original_name))}</strong>
-            <div class="muted small">${isPhoto ? "Ảnh" : "Tệp"} · ${formatBytes(Number(ev.size_bytes))}</div>
-            <div class="muted small">Lượt: <a href="#/executions/${esc(String(ev.execution_id))}">${esc(String(ev.execution_code ?? "—"))}</a>
-              ${ev.step_code ? ` · ${esc(String(ev.step_code))}` : ""}</div>
-            <div class="muted small">${esc(String(ev.uploader_name ?? "—"))} · ${esc(String(ev.created_at).slice(0, 16).replace("T", " "))}</div>
-            <a class="link small" href="${esc(api.evidenceDownloadUrl(String(ev.id)))}" target="_blank" rel="noopener">Xem / Tải</a>
-          </div>
-        </div>`;
-      }).join("") + `</div>`;
+      if (viewMode === "grid") {
+        listEl.innerHTML = `<div class="evidence-manage-grid">` + items.map((ev: Record<string, unknown>) => {
+          const isPhoto = ev.kind === "PHOTO";
+          return `
+          <div class="evidence-manage-item">
+            ${isPhoto
+              ? `<img src="${esc(api.evidenceDownloadUrl(String(ev.id)))}" alt="${esc(String(ev.original_name))}" loading="lazy" />`
+              : `<div class="evidence-file-icon">📄</div>`}
+            <div class="evidence-manage-info">
+              <strong class="evidence-manage-name">${esc(String(ev.original_name))}</strong>
+              <div class="muted small">${isPhoto ? "Ảnh" : "Tệp"} · ${formatBytes(Number(ev.size_bytes))}</div>
+              <div class="muted small">Lượt: <a href="#/executions/${esc(String(ev.execution_id))}">${esc(String(ev.execution_code ?? "—"))}</a>
+                ${ev.step_code ? ` · ${esc(String(ev.step_code))}` : ""}</div>
+              <div class="muted small">${esc(String(ev.uploader_name ?? "—"))} · ${esc(String(ev.created_at).slice(0, 16).replace("T", " "))}</div>
+              <a class="link small" href="${esc(api.evidenceDownloadUrl(String(ev.id)))}" target="_blank" rel="noopener">Xem / Tải</a>
+            </div>
+          </div>`;
+        }).join("") + `</div>`;
+      } else {
+        listEl.innerHTML = `<div class="table-wrap"><table class="tbl">
+          <thead><tr><th>Tên tệp</th><th>Loại</th><th>Dung lượng</th><th>Lượt</th><th>Người tải</th><th>Thời gian</th><th></th></tr></thead>
+          <tbody>${items.map((ev: Record<string, unknown>) => `
+            <tr>
+              <td><strong>${esc(String(ev.original_name))}</strong></td>
+              <td>${ev.kind === "PHOTO" ? "Ảnh" : "Tệp"}</td>
+              <td>${formatBytes(Number(ev.size_bytes))}</td>
+              <td><a href="#/executions/${esc(String(ev.execution_id))}">${esc(String(ev.execution_code ?? "—"))}</a></td>
+              <td>${esc(String(ev.uploader_name ?? "—"))}</td>
+              <td class="muted small">${esc(String(ev.created_at).slice(0, 16).replace("T", " "))}</td>
+              <td><a class="link small" href="${esc(api.evidenceDownloadUrl(String(ev.id)))}" target="_blank" rel="noopener">Xem</a></td>
+            </tr>`).join("")}
+          </tbody></table></div>`;
+      }
     } catch (e) {
       listEl.innerHTML = `<p class="empty">Không tải được: ${esc(msg(e))}</p>`;
     }

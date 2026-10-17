@@ -21,6 +21,8 @@ type ExecutionRow = {
   assignee_id: string | null;
   due_at: string | null;
   execution_date: string | null;
+  execution_time: string | null;
+  shift: string | null;
   cancel_reason: string | null;
   created_at: string;
   updated_at: string | null;
@@ -57,6 +59,8 @@ function toPublicExec(e: ExecutionRow, processName?: string, progress?: { total:
     assignee_id: e.assignee_id,
     due_at: e.due_at,
     execution_date: e.execution_date,
+    execution_time: e.execution_time,
+    shift: e.shift,
     cancel_reason: e.cancel_reason,
     created_at: e.created_at,
     started_at: e.started_at,
@@ -120,17 +124,20 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
   const rows = await db
     .prepare(
-      `SELECT e.*, p.name AS process_name FROM executions e
+      `SELECT e.*, p.name AS process_name,
+              ua.display_name AS assignee_name, uc.display_name AS creator_name FROM executions e
        LEFT JOIN processes p ON p.id = e.process_id
+       LEFT JOIN users ua ON ua.id = e.assignee_id
+       LEFT JOIN users uc ON uc.id = e.created_by
        ${where} ORDER BY e.created_at DESC LIMIT 100`
     )
     .bind(...binds)
-    .all<ExecutionRow & { process_name: string }>();
+    .all<ExecutionRow & { process_name: string; assignee_name: string | null; creator_name: string | null }>();
 
   const items = [];
   for (const r of rows.results) {
     const progress = await getProgress(db, r.id);
-    items.push(toPublicExec(r, r.process_name, progress));
+    items.push({ ...toPublicExec(r, r.process_name, progress), assignee_name: r.assignee_name, creator_name: r.creator_name });
   }
   return ok({ items, total: items.length });
 }
@@ -192,12 +199,18 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   if (!executionDate || !/^\d{4}-\d{2}-\d{2}$/.test(executionDate)) {
     return apiError("VALIDATION_ERROR", "Thiếu ngày thực hiện (định dạng YYYY-MM-DD).", ctx.requestId);
   }
+  const executionTime = typeof body?.execution_time === "string" && /^\d{2}:\d{2}$/.test(body.execution_time.trim())
+    ? body.execution_time.trim()
+    : null;
+  const shift = typeof body?.shift === "string" && ["MORNING", "NOON", "AFTERNOON", "NIGHT"].includes(body.shift)
+    ? body.shift
+    : null;
 
   const stmts: D1PreparedStatement[] = [
     db.prepare(
-      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, due_at, execution_date, created_at, created_by)
-       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?)`
-    ).bind(execId, code, processId, version.id, title, assigneeId, dueAt, executionDate, now, me.user.id),
+      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, due_at, execution_date, execution_time, shift, created_at, created_by)
+       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(execId, code, processId, version.id, title, assigneeId, dueAt, executionDate, executionTime, shift, now, me.user.id),
   ];
   for (const [idx, st] of steps.results.entries()) {
     stmts.push(
@@ -233,6 +246,9 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     name: string;
     code: string;
   }>();
+  const users = await db.prepare(`SELECT id, display_name FROM users WHERE id IN (?, ?)`).bind(e.assignee_id, e.created_by).all<{ id: string; display_name: string }>();
+  const nameById: Record<string, string> = {};
+  for (const u of users.results ?? []) nameById[u.id] = u.display_name;
   const steps = await db
     .prepare(`SELECT * FROM execution_steps WHERE execution_id = ? ORDER BY sort_order ASC`)
     .bind(id)
@@ -241,6 +257,8 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   return ok({
     ...toPublicExec(e, pname?.name, progress),
     process_code: pname?.code ?? null,
+    assignee_name: e.assignee_id ? nameById[e.assignee_id] ?? null : null,
+    creator_name: e.created_by ? nameById[e.created_by] ?? null : null,
     steps: steps.results.map(toPublicStep),
   });
 }

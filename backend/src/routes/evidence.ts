@@ -224,6 +224,7 @@ export async function handleListAllEvidence(ctx: Ctx) {
   const url = new URL(ctx.request.url);
   const kind = url.searchParams.get("kind");
   const fromDate = url.searchParams.get("from_date");
+  const q = url.searchParams.get("q")?.trim();
 
   let sql = `
     SELECT ev.*, e.code as execution_code, es.code as step_code, es.title as step_title,
@@ -241,6 +242,11 @@ export async function handleListAllEvidence(ctx: Ctx) {
   if (fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)) {
     sql += ` AND substr(ev.created_at, 1, 10) >= ?`;
     params.push(fromDate);
+  }
+  if (q) {
+    sql += ` AND (ev.original_name LIKE ? OR ev.note LIKE ?)`;
+    const like = `%${q}%`;
+    params.push(like, like);
   }
   sql += ` ORDER BY ev.created_at DESC LIMIT 200`;
 

@@ -78,8 +78,12 @@ export interface Execution {
   title: string | null;
   status: string;
   assignee_id: string | null;
+  assignee_name?: string | null;
+  creator_name?: string | null;
   due_at: string | null;
   execution_date: string | null;
+  execution_time: string | null;
+  shift: string | null;
   cancel_reason: string | null;
   created_at: string;
   started_at: string | null;
@@ -352,7 +356,7 @@ export const api = {
     const suffix = qs.toString() ? "?" + qs.toString() : "";
     return req("GET", "/executions" + suffix);
   },
-  createExecution(input: { process_id: string; title?: string; assignee_id?: string; due_at?: string; execution_date: string }): Promise<Execution> {
+  createExecution(input: { process_id: string; title?: string; assignee_id?: string; due_at?: string; execution_date: string; execution_time?: string; shift?: string }): Promise<Execution> {
     return req("POST", "/executions", input);
   },
   getExecution(id: string): Promise<ExecutionDetail> {

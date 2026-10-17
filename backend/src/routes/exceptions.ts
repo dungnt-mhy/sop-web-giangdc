@@ -250,6 +250,7 @@ export async function handleListAllExceptions(ctx: Ctx) {
   const url = new URL(ctx.request.url);
   const status = url.searchParams.get("status");
   const severity = url.searchParams.get("severity");
+  const q = url.searchParams.get("q")?.trim();
 
   let sql = `
     SELECT ex.*, u.display_name as creator_name, es.code as step_code,
@@ -267,6 +268,11 @@ export async function handleListAllExceptions(ctx: Ctx) {
   if (severity && ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(severity)) {
     sql += ` AND ex.severity = ?`;
     params.push(severity);
+  }
+  if (q) {
+    sql += ` AND (ex.title LIKE ? OR ex.description LIKE ? OR ex.resolution LIKE ?)`;
+    const like = `%${q}%`;
+    params.push(like, like, like);
   }
   sql += ` ORDER BY ex.created_at DESC LIMIT 200`;
 
