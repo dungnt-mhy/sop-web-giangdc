@@ -182,18 +182,58 @@ export async function renderProcessDetail(
 
   const body = root.querySelector<HTMLElement>("#pd-body")!;
   const dialogRoot = root.querySelector<HTMLElement>("#proc-dialog-root")!;
+  // Giữ dữ liệu quy trình hiện tại để handler click dùng (tránh closure cũ).
+  let current: import("../api.js").SopProcessDetail | null = null;
 
   async function reload(): Promise<void> {
     try {
       const p = await api.getProcess(processId);
+      current = p;
       root.querySelector("#pd-name")!.textContent = p.name;
       root.querySelector("#pd-code")!.textContent = `Mã: ${p.code}`;
       body.innerHTML = detailHtml(p);
-      wireVersions(body, dialogRoot, p, canManage, canApprove, reload);
+      renderVersionButtons(body, canManage, canApprove);
     } catch (e) {
       body.innerHTML = `<p class="empty">Không tải được quy trình: ${esc(msg(e))}</p>`;
     }
   }
+
+  // Gắn listener MỘT LẦN duy nhất (tránh trùng lặp khi reload).
+  body.addEventListener("click", async (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-v]");
+    if (!btn || !current) return;
+    const tr = btn.closest("tr") as HTMLTableRowElement;
+    const vid = tr.dataset.vid!;
+    const act = btn.dataset.v!;
+    const v = current.versions.find((x) => x.id === vid);
+    const label = `v${v?.version_number ?? "?"}`;
+    const restore = setLoading(btn, true, "…");
+    try {
+      if (act === "submit") await api.submitVersion(vid);
+      else if (act === "approve") await api.approveVersion(vid);
+      else if (act === "return") await api.returnVersion(vid);
+      else if (act === "activate") await api.activateVersion(vid);
+      else if (act === "retire") {
+        if (!confirm(`Ngừng phiên bản ${label}? Phiên bản ngừng sẽ không dùng cho lượt mới.`)) {
+          restore();
+          return;
+        }
+        await api.retireVersion(vid);
+      }
+      const names: Record<string, string> = {
+        submit: "gửi duyệt",
+        approve: "duyệt",
+        return: "trả sửa",
+        activate: "kích hoạt",
+        retire: "ngừng",
+      };
+      toast(`Đã ${names[act]} phiên bản ${label}.`);
+      await reload();
+    } catch (e) {
+      toast(`Lỗi: ${msg(e)}`);
+      restore();
+    }
+  });
 
   root.querySelector("#btn-new-version")?.addEventListener("click", () => {
     openVersionDialog(dialogRoot, processId, reload);
@@ -241,18 +281,10 @@ function detailHtml(p: import("../api.js").SopProcessDetail): string {
     </section>`;
 }
 
-/** Gắn nút thao tác cho từng phiên bản theo trạng thái + quyền. */
-function wireVersions(
-  body: HTMLElement,
-  dialogRoot: HTMLElement,
-  p: import("../api.js").SopProcessDetail,
-  canManage: boolean,
-  canApprove: boolean,
-  reload: () => void
-): void {
+/** Vẽ nút thao tác cho từng phiên bản theo trạng thái + quyền (không gắn listener). */
+function renderVersionButtons(body: HTMLElement, canManage: boolean, canApprove: boolean): void {
   const rows = Array.from(body.querySelectorAll("tr[data-vid]")) as HTMLTableRowElement[];
   for (const tr of rows) {
-    const vid = tr.dataset.vid!;
     const status = tr.dataset.status!;
     const cell = tr.querySelector("[data-vact]") as HTMLElement;
     const btns: string[] = [];
@@ -271,42 +303,6 @@ function wireVersions(
     }
     cell.innerHTML = btns.join("") || '<span class="muted">—</span>';
   }
-
-  body.addEventListener("click", async (ev) => {
-    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-v]");
-    if (!btn) return;
-    const tr = btn.closest("tr")!;
-    const vid = tr.dataset.vid!;
-    const act = btn.dataset.v!;
-    const v = p.versions.find((x) => x.id === vid);
-    const label = `v${v?.version_number ?? "?"}`;
-    setLoading(btn, true, "…");
-    try {
-      if (act === "submit") await api.submitVersion(vid);
-      else if (act === "approve") await api.approveVersion(vid);
-      else if (act === "return") await api.returnVersion(vid);
-      else if (act === "activate") await api.activateVersion(vid);
-      else if (act === "retire") {
-        if (!confirm(`Ngừng phiên bản ${label}? Phiên bản ngừng sẽ không dùng cho lượt mới.`)) {
-          setLoading(btn, false, "");
-          return;
-        }
-        await api.retireVersion(vid);
-      }
-      const names: Record<string, string> = {
-        submit: "gửi duyệt",
-        approve: "duyệt",
-        return: "trả sửa",
-        activate: "kích hoạt",
-        retire: "ngừng",
-      };
-      toast(`Đã ${names[act]} phiên bản ${label}.`);
-      await reload();
-    } catch (e) {
-      toast(`Lỗi: ${msg(e)}`);
-      setLoading(btn, false, "");
-    }
-  });
 }
 
 /** Dialog tạo phiên bản mới từ bản mới nhất (PRC-003). */

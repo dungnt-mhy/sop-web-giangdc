@@ -51,13 +51,13 @@ export function renderHome(root: HTMLElement, ctx: HomeCtx): void {
       </section>`);
   }
 
-  // Quy trình — module ở Task 1.4, hiện chỉ gợi ý.
+  // Quy trình — Task 1.4 đã có danh mục, liên kết tới trang quản lý.
   if (can(session, "processes.manage")) {
     cards.push(`
       <section class="card">
         <h3>Quy trình</h3>
-        <p class="empty">Danh mục quy trình sẽ có ở giai đoạn tiếp theo.
-        Hiện bạn có thể chuẩn bị danh sách quy trình của đơn vị mình.</p>
+        <p class="empty">Quản lý danh mục quy trình, phiên bản và phê duyệt phát hành.</p>
+        <p><a href="#/processes" class="btn">Mở danh mục quy trình</a></p>
       </section>`);
   }
 
