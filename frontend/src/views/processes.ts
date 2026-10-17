@@ -103,22 +103,26 @@ export async function renderProcesses(root: HTMLElement, canManage: boolean): Pr
 /** Modal sơ đồ quy trình — mở ngay khi nhấn vào dòng quy trình ở danh mục. */
 async function openProcessDiagram(dialogRoot: HTMLElement, processId: string): Promise<void> {
   dialogRoot.innerHTML = `
-    <div class="dialog-scrim"></div>
-    <div class="dialog diagram-dialog" role="dialog" aria-modal="true" aria-label="Sơ đồ quy trình">
-      <div class="diagram-header">
-        <div><h3 id="dg-name">Đang tải…</h3><p class="muted small" id="dg-sub"></p></div>
-        <button class="btn icon-btn" id="dg-close" aria-label="Đóng">✕</button>
-      </div>
-      <div id="dg-body"><p class="empty">Đang tải sơ đồ…</p></div>
-      <div class="dialog-actions">
-        <button class="btn" id="dg-detail">Xem chi tiết</button>
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog diagram-dialog" role="dialog" aria-modal="true" aria-label="Sơ đồ quy trình">
+        <div class="diagram-header">
+          <div><h3 id="dg-name">Đang tải…</h3><p class="muted small" id="dg-sub"></p></div>
+          <button class="btn icon-btn" id="dg-close" aria-label="Đóng">✕</button>
+        </div>
+        <div id="dg-body"><p class="empty">Đang tải sơ đồ…</p></div>
+        <div class="dialog-actions">
+          <button class="btn" id="dg-detail">Xem chi tiết</button>
+        </div>
       </div>
     </div>`;
   const close = () => {
     dialogRoot.innerHTML = "";
   };
   dialogRoot.querySelector("#dg-close")!.addEventListener("click", close);
-  dialogRoot.querySelector(".dialog-scrim")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    // Chỉ đóng khi nhấn đúng vào nền (không phải nội dung dialog).
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
   dialogRoot.querySelector("#dg-detail")!.addEventListener("click", () => {
     close();
     location.hash = "#/processes/" + processId;
