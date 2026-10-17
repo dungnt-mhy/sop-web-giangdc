@@ -14,6 +14,8 @@ var ASSETS = [
   "./dist/ui.js",
   "./dist/views/home.js",
   "./dist/views/users.js",
+  "./dist/views/processes.js",
+  "./dist/views/executions.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
 ];
