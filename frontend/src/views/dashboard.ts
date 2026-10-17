@@ -92,12 +92,12 @@ function renderList(root: HTMLElement, items: any[]): void {
     return;
   }
   el.innerHTML = `
-    <div class="table-wrap"><table class="table">
+    <div class="table-wrap"><table class="table clickable-rows" id="db-table">
       <thead><tr><th>Mã lượt</th><th>Quy trình</th><th>Trạng thái</th><th>Người thực hiện</th><th>Tạo lúc</th><th>Hoàn thành</th></tr></thead>
       <tbody>
         ${items.map((e) => `
-          <tr>
-            <td><a href="#/executions/${esc(e.id)}">${esc(e.code)}</a></td>
+          <tr data-id="${esc(e.id)}">
+            <td><strong>${esc(e.code)}</strong></td>
             <td>${esc(e.process_name ?? "—")}</td>
             <td>${esc(STATUS_LABELS[e.status] ?? e.status)}</td>
             <td>${esc(e.assignee_name ?? "—")}</td>
@@ -106,4 +106,9 @@ function renderList(root: HTMLElement, items: any[]): void {
           </tr>`).join("")}
       </tbody>
     </table></div>`;
+  el.querySelector("#db-table tbody")!.addEventListener("click", (ev) => {
+    const tr = (ev.target as HTMLElement).closest("tr");
+    if (!tr?.dataset.id) return;
+    location.hash = "#/executions/" + tr.dataset.id;
+  });
 }

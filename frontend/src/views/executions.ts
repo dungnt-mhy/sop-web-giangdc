@@ -55,11 +55,11 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
       </select>
       <button class="btn" id="btn-filter">Lọc</button>
     </div>
-    <div class="table-wrap"><table class="tbl" id="exec-table">
+    <div class="table-wrap"><table class="tbl clickable-rows" id="exec-table">
       <thead><tr>
-        <th>Mã lượt</th><th>Quy trình</th><th>Tiến độ</th><th>Trạng thái</th><th>Thao tác</th>
+        <th>Mã lượt</th><th>Quy trình</th><th>Tiến độ</th><th>Trạng thái</th>
       </tr></thead>
-      <tbody><tr><td colspan="5" class="empty">Đang tải…</td></tr></tbody>
+      <tbody><tr><td colspan="4" class="empty">Đang tải…</td></tr></tbody>
     </table></div>
     <div id="exec-dialog-root"></div>`;
 
@@ -84,7 +84,6 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
           <td><div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
             <span class="muted small">${p?.done ?? 0}/${p?.total ?? 0}</span></td>
           <td>${execPill(e.status)}</td>
-          <td class="actions"><button class="link" data-act="view"><span>Mở</span></button></td>
         </tr>`;
       }).join("");
     } catch (e) {
@@ -93,9 +92,10 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
   }
 
   tbody.addEventListener("click", (ev) => {
-    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-act]");
-    if (!btn) return;
-    const id = btn.closest("tr")!.dataset.id!;
+    const tr = (ev.target as HTMLElement).closest("tr");
+    if (!tr?.dataset.id) return;
+    const id = tr.dataset.id;
+    // Nhấn vào dòng (không phải nút) → mở xem luôn.
     location.hash = "#/executions/" + id;
   });
 
@@ -248,8 +248,20 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         await api.startStep(execId, sid);
         toast("Đã bắt đầu bước.");
       } else if (act === "complete") {
-        await api.completeStep(execId, sid);
-        toast("Đã hoàn thành bước.");
+        // Cảnh báo: sau khi hoàn thành không sửa được nữa.
+        restore();
+        openCompleteConfirm(dialogRoot, step, async () => {
+          const rb = setLoading(btn, true, "…");
+          try {
+            await api.completeStep(execId, sid);
+            toast("Đã hoàn thành bước.");
+            await reload();
+          } catch (e) {
+            toast(`Lỗi: ${msg(e)}`);
+            rb();
+          }
+        });
+        return;
       } else if (act === "skip") {
         const reason = prompt(`Lý do bỏ qua bước "${step?.code}":`);
         if (!reason?.trim()) {
@@ -420,6 +432,37 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
+}
+
+/** Dialog xác nhận hoàn thành bước — cảnh báo không sửa được sau khi chốt. */
+function openCompleteConfirm(
+  dialogRoot: HTMLElement,
+  step: import("../api.js").ExecutionStep | undefined,
+  onConfirm: () => void
+): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Xác nhận hoàn thành">
+        <h3>Hoàn thành bước "${esc(step?.code ?? "")}"?</h3>
+        <p>⚠️ Sau khi hoàn thành, <strong>bạn sẽ không thể sửa đổi</strong> bước này nữa
+        (không thêm/xóa ảnh, không sửa trạng thái). Hãy kiểm tra kỹ bằng chứng và thông tin trước khi xác nhận.</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="cc-cancel">Kiểm tra lại</button>
+          <button type="button" class="btn primary" id="cc-ok">Xác nhận hoàn thành</button>
+        </div>
+      </div>
+    </div>`;
+  const close = () => {
+    dialogRoot.innerHTML = "";
+  };
+  dialogRoot.querySelector("#cc-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+  dialogRoot.querySelector("#cc-ok")!.addEventListener("click", () => {
+    close();
+    onConfirm();
+  });
 }
 
 function detailHtml(e: ExecutionDetail): string {
