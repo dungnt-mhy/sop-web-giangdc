@@ -5,6 +5,7 @@
 import { api, isUnauthenticated, type SessionInfo } from "./api.js";
 import { EYE_OFF_SVG, EYE_OPEN_SVG, esc, setLoading, toast } from "./ui.js";
 import { renderHome } from "./views/home.js";
+import { renderExecutionDetail, renderMyWork } from "./views/executions.js";
 import { renderProcessDetail, renderProcesses } from "./views/processes.js";
 import { renderUsers } from "./views/users.js";
 
@@ -57,6 +58,7 @@ function renderShell(): void {
   const name = session.user.display_name || session.user.username;
   const navItems: Array<{ hash: string; label: string; perm?: string }> = [
     { hash: "#/home", label: "Trang chủ" },
+    { hash: "#/my-work", label: "Việc của tôi", perm: "executions.perform" },
     { hash: "#/processes", label: "Quy trình" },
     { hash: "#/users", label: "Người dùng", perm: "users.manage" },
   ];
@@ -138,6 +140,20 @@ function route(): void {
   const pm = /^#\/processes\/([0-9a-f-]{36})$/.exec(hash);
   if (pm) {
     void renderProcessDetail(page, pm[1], session.permissions);
+    return;
+  }
+  if (hash === "#/my-work") {
+    if (!can("executions.perform")) {
+      page.innerHTML = `<div class="card"><h3>Không có quyền</h3>
+        <p class="empty">Tài khoản của bạn không có quyền thực hiện công việc.</p></div>`;
+      return;
+    }
+    void renderMyWork(page);
+    return;
+  }
+  const em = /^#\/executions\/([0-9a-f-]{36})$/.exec(hash);
+  if (em) {
+    void renderExecutionDetail(page, em[1]);
     return;
   }
   // Mặc định: trang chủ.

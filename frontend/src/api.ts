@@ -69,6 +69,45 @@ export interface SopProcessDetail extends SopProcess {
   versions: ProcessVersion[];
 }
 
+// --- Lượt thực hiện (Task 1.6) ---
+export interface Execution {
+  id: string;
+  code: string;
+  process_id: string;
+  version_id: string;
+  title: string | null;
+  status: string;
+  assignee_id: string | null;
+  due_at: string | null;
+  cancel_reason: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  process_name: string | null;
+  progress: { total: number; done: number } | null;
+}
+
+export interface ExecutionStep {
+  id: string;
+  execution_id: string;
+  sort_order: number;
+  code: string;
+  title: string;
+  instruction: string | null;
+  role: string | null;
+  is_required: boolean;
+  status: string;
+  completed_by: string | null;
+  completed_at: string | null;
+  note: string | null;
+  skip_reason: string | null;
+}
+
+export interface ExecutionDetail extends Execution {
+  process_code: string | null;
+  steps: ExecutionStep[];
+}
+
 // --- Bước công việc (Task 1.5) ---
 export interface ProcessStep {
   id: string;
@@ -255,6 +294,44 @@ export const api = {
   },
   validateVersion(versionId: string): Promise<{ valid: boolean; errors: Array<{ step_id: string | null; step_code: string | null; field: string; message: string }> }> {
     return req("GET", `/processes/x/versions/${encodeURIComponent(versionId)}:validate`);
+  },
+  // --- Lượt thực hiện (Task 1.6) ---
+  listExecutions(params?: { mine?: boolean; status?: string }): Promise<{ items: Execution[]; total: number }> {
+    const qs = new URLSearchParams();
+    if (params?.mine) qs.set("mine", "1");
+    if (params?.status) qs.set("status", params.status);
+    const suffix = qs.toString() ? "?" + qs.toString() : "";
+    return req("GET", "/executions" + suffix);
+  },
+  createExecution(input: { process_id: string; title?: string; assignee_id?: string; due_at?: string }): Promise<Execution> {
+    return req("POST", "/executions", input);
+  },
+  getExecution(id: string): Promise<ExecutionDetail> {
+    return req("GET", "/executions/" + encodeURIComponent(id));
+  },
+  startExecution(id: string): Promise<Execution> {
+    return req("POST", `/executions/${encodeURIComponent(id)}:start`);
+  },
+  pauseExecution(id: string): Promise<Execution> {
+    return req("POST", `/executions/${encodeURIComponent(id)}:pause`);
+  },
+  resumeExecution(id: string): Promise<Execution> {
+    return req("POST", `/executions/${encodeURIComponent(id)}:resume`);
+  },
+  cancelExecution(id: string, cancel_reason: string): Promise<Execution> {
+    return req("POST", `/executions/${encodeURIComponent(id)}:cancel`, { cancel_reason });
+  },
+  completeExecution(id: string): Promise<Execution> {
+    return req("POST", `/executions/${encodeURIComponent(id)}:complete`);
+  },
+  startStep(execId: string, stepId: string): Promise<ExecutionStep> {
+    return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:start`);
+  },
+  completeStep(execId: string, stepId: string, note?: string): Promise<ExecutionStep> {
+    return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:complete`, { note });
+  },
+  skipStep(execId: string, stepId: string, skip_reason: string): Promise<ExecutionStep> {
+    return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:skip`, { skip_reason });
   },
 };
 

@@ -55,6 +55,19 @@ import {
   handleReorderSteps,
   handleValidateVersion,
 } from "./routes/steps";
+import {
+  handleCancelExecution,
+  handleCompleteExecution,
+  handleCompleteStep,
+  handleCreateExecution,
+  handleGetExecution,
+  handleListExecutions,
+  handlePauseExecution,
+  handleResumeExecution,
+  handleSkipStep,
+  handleStartExecution,
+  handleStartStep,
+} from "./routes/executions";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -237,6 +250,42 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     } else if (sid && action === ":copy" && method === "POST") {
       return handleCopyStep(ctx, vid, sid);
     }
+  }
+
+  // --- Executions (Task 1.6: lượt thực hiện) ---
+  if (path === "/executions") {
+    if (method === "GET") return handleListExecutions(ctx);
+    if (method === "POST") return handleCreateExecution(ctx);
+  }
+  const em = /^\/executions\/([^/:]+)((?::(start|pause|resume|cancel|complete))?)$/.exec(path);
+  if (em) {
+    const eid = decodeURIComponent(em[1]);
+    const action = em[3];
+    if (!UUID_RE.test(eid)) {
+      return apiError("NOT_FOUND", "Không tìm thấy lượt thực hiện.", ctx.requestId);
+    }
+    if (!action) {
+      if (method === "GET") return handleGetExecution(ctx, eid);
+    } else if (method === "POST") {
+      if (action === "start") return handleStartExecution(ctx, eid);
+      if (action === "pause") return handlePauseExecution(ctx, eid);
+      if (action === "resume") return handleResumeExecution(ctx, eid);
+      if (action === "cancel") return handleCancelExecution(ctx, eid);
+      if (action === "complete") return handleCompleteExecution(ctx, eid);
+    }
+  }
+  const esm = /^\/executions\/[^/:]+\/steps\/([^/:]+)(?::(start|complete|skip))$/.exec(path);
+  if (esm && method === "POST") {
+    const eidM = /^\/executions\/([^/:]+)\/steps\//.exec(path);
+    const eid = eidM ? decodeURIComponent(eidM[1]) : "";
+    const sid = decodeURIComponent(esm[1]);
+    const action = esm[2];
+    if (!UUID_RE.test(eid) || !UUID_RE.test(sid)) {
+      return apiError("NOT_FOUND", "Không tìm thấy.", ctx.requestId);
+    }
+    if (action === "start") return handleStartStep(ctx, eid, sid);
+    if (action === "complete") return handleCompleteStep(ctx, eid, sid);
+    if (action === "skip") return handleSkipStep(ctx, eid, sid);
   }
 
   return apiError("NOT_FOUND", "Not found", ctx.requestId);
