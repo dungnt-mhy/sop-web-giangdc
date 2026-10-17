@@ -123,6 +123,15 @@ async function openProcessDiagram(dialogRoot: HTMLElement, processId: string): P
     // Chỉ đóng khi nhấn đúng vào nền (không phải nội dung dialog).
     if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
   });
+  // Mở rộng/thu gọn chi tiết từng bước trong sơ đồ.
+  dialogRoot.addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-expand]");
+    if (!btn) return;
+    const details = btn.parentElement!.querySelector(".beauty-details") as HTMLElement;
+    const open = details.hidden;
+    details.hidden = !open;
+    btn.innerHTML = open ? "Thu gọn ▴" : "Chi tiết ▾";
+  });
   dialogRoot.querySelector("#dg-detail")!.addEventListener("click", () => {
     close();
     location.hash = "#/processes/" + processId;
@@ -153,12 +162,16 @@ async function openProcessDiagram(dialogRoot: HTMLElement, processId: string): P
   }
 }
 
-/** Vẽ sơ đồ đẹp — gradient, bóng đổ, hiệu ứng. */
+/** Vẽ sơ đồ đẹp — gradient, bóng đổ, hiệu ứng. Mỗi bước có nút mở rộng xem đầy đủ chi tiết. */
 function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], processName: string): string {
+  const detailRow = (label: string, val: string | null): string =>
+    val ? `<div class="beauty-detail"><span class="beauty-dlabel">${label}:</span> ${esc(val)}</div>` : "";
   return `
     <div class="beauty-diagram" role="img" aria-label="Sơ đồ quy trình ${esc(processName)}">
       <div class="beauty-start"><span>▶</span> Bắt đầu</div>
-      ${items.map((st, idx) => `
+      ${items.map((st, idx) => {
+        const hasDetails = st.prerequisite || st.input_desc || st.instruction || st.expected_result || st.output_desc || st.note || st.warning;
+        return `
         <div class="beauty-connector" aria-hidden="true"><span class="beauty-line"></span><span class="beauty-dot"></span></div>
         <div class="beauty-node${st.is_required ? "" : " optional"}" style="--i:${idx}">
           <div class="beauty-num">${idx + 1}</div>
@@ -167,8 +180,19 @@ function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], proces
             <div class="beauty-title">${esc(st.title)}</div>
             ${st.role ? `<div class="beauty-role">👤 ${esc(st.role)}</div>` : ""}
             ${st.target_duration_min ? `<div class="beauty-time">⏱ ~${st.target_duration_min} phút</div>` : ""}
+            ${hasDetails ? `<button class="beauty-expand" data-expand>Chi tiết ▾</button>
+            <div class="beauty-details" hidden>
+              ${detailRow("Điều kiện", st.prerequisite)}
+              ${detailRow("Đầu vào", st.input_desc)}
+              ${detailRow("Hướng dẫn", st.instruction)}
+              ${detailRow("Kết quả mong đợi", st.expected_result)}
+              ${detailRow("Đầu ra", st.output_desc)}
+              ${detailRow("Lưu ý", st.warning ? "⚠️ " + st.warning : null)}
+              ${detailRow("Ghi chú", st.note)}
+            </div>` : ""}
           </div>
-        </div>`).join("")}
+        </div>`;
+      }).join("")}
       <div class="beauty-connector" aria-hidden="true"><span class="beauty-line"></span><span class="beauty-dot"></span></div>
       <div class="beauty-end"><span>■</span> Kết thúc</div>
     </div>`;

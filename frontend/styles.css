@@ -386,6 +386,17 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .beauty-code { font-size: 12.5px; font-weight: 700; color: var(--accent-dark); letter-spacing: 0.3px; margin-bottom: 2px; }
 .beauty-title { font-size: 15.5px; font-weight: 700; color: #1e293b; line-height: 1.35; }
 .beauty-role, .beauty-time { font-size: 13px; color: #64748b; margin-top: 4px; }
+.beauty-expand {
+  margin-top: 8px; border: 1px solid #cbd5e1; background: #fff; border-radius: 999px;
+  padding: 4px 14px; font-size: 12.5px; color: var(--accent-dark); cursor: pointer; font-weight: 600;
+}
+.beauty-expand:hover { background: #f1f5f9; }
+.beauty-details {
+  margin-top: 8px; padding: 10px 12px; background: #f8fafc; border-radius: 10px;
+  border: 1px dashed #cbd5e1; font-size: 13px; line-height: 1.5;
+}
+.beauty-detail { margin: 4px 0; color: #334155; }
+.beauty-dlabel { font-weight: 700; color: #475569; }
 @keyframes beauty-in {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
