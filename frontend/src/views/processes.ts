@@ -539,7 +539,11 @@ async function toggleSteps(
         </div>
         <div data-steps-list>
         <ol class="step-list">
-          ${items.map((st, idx) => `
+          ${items.map((st, idx) => {
+            const hasDetails = st.prerequisite || st.input_desc || st.expected_result || st.output_desc || st.note || st.warning;
+            const dRow = (label: string, val: string | null): string =>
+              val ? `<div class="step-detail-row"><span class="step-dlabel">${label}:</span> ${esc(val)}</div>` : "";
+            return `
             <li data-sid="${esc(st.id)}">
               <div class="step-head">
                 <span class="step-num">${idx + 1}</span>
@@ -557,7 +561,18 @@ async function toggleSteps(
                 </div>` : ""}
               </div>
               ${st.instruction ? `<p class="step-instr">${esc(st.instruction)}</p>` : ""}
-            </li>`).join("")}
+              ${hasDetails ? `
+                <button class="link sm step-expand" data-step-act="expand">Chi tiết ▾</button>
+                <div class="step-details" hidden>
+                  ${dRow("Điều kiện", st.prerequisite)}
+                  ${dRow("Đầu vào", st.input_desc)}
+                  ${dRow("Kết quả mong đợi", st.expected_result)}
+                  ${dRow("Đầu ra", st.output_desc)}
+                  ${dRow("Lưu ý", st.warning ? "⚠️ " + st.warning : null)}
+                  ${dRow("Ghi chú", st.note)}
+                </div>` : ""}
+            </li>`;
+          }).join("")}
         </ol>
         </div>
         <div data-steps-diagram hidden>
@@ -593,6 +608,13 @@ async function toggleSteps(
       const li = b.closest("li") as HTMLLIElement;
       const sid = li.dataset.sid!;
       const step = items.find((x) => x.id === sid);
+      if (act === "expand") {
+        const details = li.querySelector(".step-details") as HTMLElement;
+        const open = details.hidden;
+        details.hidden = !open;
+        b.innerHTML = open ? "Thu gọn ▴" : "Chi tiết ▾";
+        return;
+      }
       if (act === "edit") {
         openStepDialog(dialogRoot, versionId, step ?? null, refresh);
       } else if (act === "copy") {

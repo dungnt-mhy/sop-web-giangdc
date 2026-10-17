@@ -397,6 +397,15 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 }
 .beauty-detail { margin: 4px 0; color: #334155; }
 .beauty-dlabel { font-weight: 700; color: #475569; }
+
+/* Chi tiết bước trong danh sách (trang chi tiết quy trình). */
+.step-expand { margin: 6px 0 0 44px; }
+.step-details {
+  margin: 8px 0 4px 44px; padding: 10px 12px; background: #f8fafc;
+  border-radius: 10px; border: 1px dashed #cbd5e1; font-size: 13px; line-height: 1.5;
+}
+.step-detail-row { margin: 4px 0; color: #334155; }
+.step-dlabel { font-weight: 700; color: #475569; }
 @keyframes beauty-in {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
