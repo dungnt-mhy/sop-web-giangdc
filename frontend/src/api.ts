@@ -118,6 +118,18 @@ export interface Evidence {
   created_at: string;
 }
 
+export interface StepResource {
+  id: string;
+  step_id: string;
+  kind: string;
+  original_name: string;
+  mime: string;
+  size_bytes: number;
+  caption: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface ExecutionDetail extends Execution {
   process_code: string | null;
   steps: ExecutionStep[];
@@ -373,6 +385,45 @@ export const api = {
   },
   evidenceDownloadUrl(evidenceId: string): string {
     return `${apiBase()}/api/v1/evidence/${encodeURIComponent(evidenceId)}/download`;
+  },
+
+  // --- Tài nguyên hướng dẫn bước (EVD-011) ---
+  listStepResources(versionId: string, stepId: string): Promise<{ items: StepResource[]; total: number }> {
+    return req("GET", `/processes/x/versions/${encodeURIComponent(versionId)}/steps/${encodeURIComponent(stepId)}/resources`);
+  },
+  async uploadStepResource(versionId: string, stepId: string, file: File, caption?: string): Promise<StepResource> {
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    if (caption) fd.append("caption", caption);
+    const res = await fetch(`${apiBase()}/api/v1/processes/x/versions/${encodeURIComponent(versionId)}/steps/${encodeURIComponent(stepId)}/resources`, {
+      method: "POST",
+      body: fd,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, data?.error?.message ?? `Lỗi tải lên (${res.status})`, data?.error);
+    }
+    return res.json();
+  },
+  deleteStepResource(resourceId: string): Promise<{ deleted: boolean }> {
+    return req("DELETE", `/step-resources/${encodeURIComponent(resourceId)}`);
+  },
+  stepResourceDownloadUrl(resourceId: string): string {
+    return `${apiBase()}/api/v1/step-resources/${encodeURIComponent(resourceId)}/download`;
+  },
+
+  // --- Dashboard (Task 1.8: §9.6) ---
+  dashboardSummary(params: Record<string, string>): Promise<any> {
+    const q = new URLSearchParams(params).toString();
+    return req("GET", `/dashboard/summary${q ? "?" + q : ""}`);
+  },
+  dashboardExecutions(params: Record<string, string>): Promise<{ items: any[]; total: number }> {
+    const q = new URLSearchParams(params).toString();
+    return req("GET", `/dashboard/executions${q ? "?" + q : ""}`);
+  },
+  dashboardExportUrl(query: string): string {
+    return `${apiBase()}/api/v1/dashboard/export.csv${query ? "?" + query : ""}`;
   },
 };
 

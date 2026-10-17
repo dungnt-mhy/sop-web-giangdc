@@ -12,10 +12,12 @@ var ASSETS = [
   "./dist/app.js",
   "./dist/api.js",
   "./dist/ui.js",
+  "./dist/image.js",
   "./dist/views/home.js",
   "./dist/views/users.js",
   "./dist/views/processes.js",
   "./dist/views/executions.js",
+  "./dist/views/dashboard.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
 ];

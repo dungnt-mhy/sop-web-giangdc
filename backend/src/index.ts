@@ -74,6 +74,17 @@ import {
   handleListEvidence,
   handleUploadEvidence,
 } from "./routes/evidence";
+import {
+  handleDeleteStepResource,
+  handleDownloadStepResource,
+  handleListStepResources,
+  handleUploadStepResource,
+} from "./routes/step_resources";
+import {
+  handleDashboardExecutions,
+  handleDashboardExportCsv,
+  handleDashboardSummary,
+} from "./routes/dashboard";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -309,6 +320,33 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   const evDl = /^\/evidence\/([^/:]+)\/download$/.exec(path);
   if (evDl && method === "GET" && UUID_RE.test(evDl[1])) {
     return handleDownloadEvidence(ctx, decodeURIComponent(evDl[1]));
+  }
+  // --- Tài nguyên hướng dẫn bước (Task 1.7: EVD-011) ---
+  const srUp = /^\/processes\/x\/versions\/([^/:]+)\/steps\/([^/:]+)\/resources$/.exec(path);
+  if (srUp && UUID_RE.test(srUp[1]) && UUID_RE.test(srUp[2])) {
+    const vid = decodeURIComponent(srUp[1]);
+    const sid = decodeURIComponent(srUp[2]);
+    if (method === "POST") return handleUploadStepResource(ctx, vid, sid);
+    if (method === "GET") return handleListStepResources(ctx, vid, sid);
+  }
+  const srDel = /^\/step-resources\/([^/:]+)$/.exec(path);
+  if (srDel && UUID_RE.test(srDel[1])) {
+    const rid = decodeURIComponent(srDel[1]);
+    if (method === "DELETE") return handleDeleteStepResource(ctx, rid);
+  }
+  const srDl = /^\/step-resources\/([^/:]+)\/download$/.exec(path);
+  if (srDl && method === "GET" && UUID_RE.test(srDl[1])) {
+    return handleDownloadStepResource(ctx, decodeURIComponent(srDl[1]));
+  }
+  // --- Dashboard (Task 1.8: §9.6) ---
+  if (path === "/dashboard/summary" && method === "GET") {
+    return handleDashboardSummary(ctx);
+  }
+  if (path === "/dashboard/executions" && method === "GET") {
+    return handleDashboardExecutions(ctx);
+  }
+  if (path === "/dashboard/export.csv" && method === "GET") {
+    return handleDashboardExportCsv(ctx);
   }
 
   return apiError("NOT_FOUND", "Not found", ctx.requestId);

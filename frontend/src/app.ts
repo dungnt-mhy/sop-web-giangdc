@@ -8,6 +8,7 @@ import { renderHome } from "./views/home.js";
 import { renderExecutionDetail, renderMyWork } from "./views/executions.js";
 import { renderProcessDetail, renderProcesses } from "./views/processes.js";
 import { renderUsers } from "./views/users.js";
+import { renderDashboard } from "./views/dashboard.js";
 
 let session: SessionInfo | null = null;
 
@@ -60,6 +61,7 @@ function renderShell(): void {
     { hash: "#/home", label: "Trang chủ" },
     { hash: "#/my-work", label: "Việc của tôi", perm: "executions.perform" },
     { hash: "#/processes", label: "Quy trình" },
+    { hash: "#/dashboard", label: "Báo cáo", perm: "reports.view" },
     { hash: "#/users", label: "Người dùng", perm: "users.manage" },
   ];
   $("#sidebar-nav").innerHTML = navItems
@@ -149,6 +151,15 @@ function route(): void {
       return;
     }
     void renderMyWork(page);
+    return;
+  }
+  if (hash === "#/dashboard") {
+    if (!can("reports.view")) {
+      page.innerHTML = `<div class="card"><h3>Không có quyền</h3>
+        <p class="empty">Tài khoản của bạn không có quyền xem báo cáo.</p></div>`;
+      return;
+    }
+    void renderDashboard(page);
     return;
   }
   const em = /^#\/executions\/([0-9a-f-]{36})$/.exec(hash);
