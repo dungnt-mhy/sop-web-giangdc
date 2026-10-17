@@ -91,8 +91,10 @@ export async function handleListActiveUsers(ctx: Ctx): Promise<Response> {
   if (s instanceof Response) return s;
   const db = ctx.env.sop_demo_db;
   const rows = await db.prepare(`
-    SELECT id, username, display_name, position, position_id, p.name as position_name FROM users
-    LEFT JOIN positions p ON p.id = users.position_id
+    SELECT u.id, u.username, u.display_name, u.position,
+           u.position_id, p.name as position_name
+    FROM users u
+    LEFT JOIN positions p ON p.id = u.position_id
     WHERE status = 'active' ORDER BY display_name ASC LIMIT 100
   `).all<{ id: string; username: string; display_name: string; position: string | null }>();
   return ok({ items: rows.results ?? [] });
