@@ -95,10 +95,28 @@ export async function handleListSteps(ctx: Ctx, versionId: string): Promise<Resp
   const v = await db.prepare(`SELECT id FROM process_versions WHERE id = ?`).bind(versionId).first();
   if (!v) return apiError("NOT_FOUND", "Không tìm thấy phiên bản.", ctx.requestId);
   const rows = await db
-    .prepare(`SELECT ps.*, p.name as position_name FROM process_steps ps LEFT JOIN positions p ON p.id = ps.position_id WHERE version_id = ? ORDER BY sort_order ASC`)
+    .prepare(`SELECT * FROM process_steps WHERE version_id = ? ORDER BY sort_order ASC`)
     .bind(versionId)
     .all<StepRow>();
-  return ok({ items: rows.results.map(toPublicStep), total: rows.results.length });
+  // Lấy danh sách chức vụ cho từng bước.
+  const stepIds = (rows.results ?? []).map((s) => s.id);
+  const posMap = new Map<string, { id: string; name: string }[]>();
+  if (stepIds.length > 0) {
+    const placeholders = stepIds.map(() => "?").join(",");
+    const posRows = await db.prepare(
+      `SELECT psp.step_id, p.id, p.name FROM process_step_positions psp
+       JOIN positions p ON p.id = psp.position_id
+       WHERE psp.step_id IN (${placeholders}) ORDER BY p.name ASC`
+    ).bind(...stepIds).all<{ step_id: string; id: string; name: string }>();
+    for (const r of posRows.results ?? []) {
+      if (!posMap.has(r.step_id)) posMap.set(r.step_id, []);
+      posMap.get(r.step_id)!.push({ id: r.id, name: r.name });
+    }
+  }
+  return ok({
+    items: (rows.results ?? []).map((s) => ({ ...toPublicStep(s), positions: posMap.get(s.id) ?? [] })),
+    total: (rows.results ?? []).length,
+  });
 }
 
 // POST .../steps — thêm bước mới (PRC-004, PRC-005).
@@ -148,26 +166,38 @@ export async function handleCreateStep(ctx: Ctx, versionId: string): Promise<Res
   const now = nowIso();
   const id = newId();
   const order = nextSortOrderFn(await nextSortOrder(db, versionId), body);
-  const positionId = typeof body?.position_id === "string" && body.position_id.trim() ? body.position_id.trim() : null;
-  if (positionId) {
-    const p = await db.prepare(`SELECT id FROM positions WHERE id = ?`).bind(positionId).first();
-    if (!p) return apiError("VALIDATION_ERROR", "Chức vụ không tồn tại.", ctx.requestId);
+  // Vai trò người thực hiện: mảng nhiều chức vụ.
+  const positionIds = Array.isArray(body?.position_ids)
+    ? (body.position_ids as unknown[]).filter((x): x is string => typeof x === "string" && x.trim() !== "")
+    : (typeof body?.position_id === "string" && body.position_id.trim() ? [body.position_id.trim()] : []);
+  if (positionIds.length > 0) {
+    const placeholders = positionIds.map(() => "?").join(",");
+    const found = await db.prepare(`SELECT id FROM positions WHERE id IN (${placeholders})`).bind(...positionIds).all();
+    if ((found.results ?? []).length !== positionIds.length) {
+      return apiError("VALIDATION_ERROR", "Chức vụ không tồn tại.", ctx.requestId);
+    }
   }
-  await db.prepare(
-    `INSERT INTO process_steps (id, version_id, sort_order, code, title, prerequisite, input_desc, instruction,
-      expected_result, output_desc, note, role, position_id, is_required, target_duration_min, warning,
-      completion_req, skip_policy, failure_policy, created_at, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
-    id, versionId, order, code, title,
-    str("prerequisite"), str("input_desc"), str("instruction"),
-    str("expected_result"), str("output_desc"), str("note"), str("role"), positionId,
-    body?.is_required === false ? 0 : 1,
-    typeof body?.target_duration_min === "number" ? Math.max(0, Math.floor(body.target_duration_min)) : null,
-    str("warning"),
-    json("completion_req"), json("skip_policy"), json("failure_policy"),
-    now, me.user.id
-  ).run();
+  const stmts: D1PreparedStatement[] = [
+    db.prepare(
+      `INSERT INTO process_steps (id, version_id, sort_order, code, title, prerequisite, input_desc, instruction,
+        expected_result, output_desc, note, role, is_required, target_duration_min, warning,
+        completion_req, skip_policy, failure_policy, created_at, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id, versionId, order, code, title,
+      str("prerequisite"), str("input_desc"), str("instruction"),
+      str("expected_result"), str("output_desc"), str("note"), str("role"),
+      body?.is_required === false ? 0 : 1,
+      typeof body?.target_duration_min === "number" ? Math.max(0, Math.floor(body.target_duration_min)) : null,
+      str("warning"),
+      json("completion_req"), json("skip_policy"), json("failure_policy"),
+      now, me.user.id
+    ),
+  ];
+  for (const pid of positionIds) {
+    stmts.push(db.prepare(`INSERT INTO process_step_positions (step_id, position_id) VALUES (?, ?)`).bind(id, pid));
+  }
+  await db.batch(stmts);
   await audit(db, {
     event_type: "PROCESS_STEP_CREATED",
     actor_id: me.user.id,
@@ -243,15 +273,23 @@ export async function handlePatchStep(ctx: Ctx, versionId: string, stepId: strin
       diff[f] = str(body[f]);
     }
   }
-  if (body?.position_id !== undefined) {
-    const pid = typeof body.position_id === "string" && body.position_id.trim() ? body.position_id.trim() : null;
-    if (pid) {
-      const p = await db.prepare(`SELECT id FROM positions WHERE id = ?`).bind(pid).first();
-      if (!p) return apiError("VALIDATION_ERROR", "Chức vụ không tồn tại.", ctx.requestId);
+  // Cập nhật vai trò người thực hiện (mảng nhiều chức vụ).
+  let newPositionIds: string[] | null = null;
+  if (body?.position_ids !== undefined || body?.position_id !== undefined) {
+    if (Array.isArray(body?.position_ids)) {
+      newPositionIds = (body.position_ids as unknown[]).filter((x): x is string => typeof x === "string" && x.trim() !== "");
+    } else if (typeof body?.position_id === "string" && body.position_id.trim()) {
+      newPositionIds = [body.position_id.trim()];
+    } else {
+      newPositionIds = [];
     }
-    updates.push("position_id = ?");
-    binds.push(pid);
-    diff.position_id = pid;
+    if (newPositionIds.length > 0) {
+      const placeholders = newPositionIds.map(() => "?").join(",");
+      const found = await db.prepare(`SELECT id FROM positions WHERE id IN (${placeholders})`).bind(...newPositionIds).all();
+      if ((found.results ?? []).length !== newPositionIds.length) {
+        return apiError("VALIDATION_ERROR", "Chức vụ không tồn tại.", ctx.requestId);
+      }
+    }
   }
   if (body?.is_required !== undefined) {
     updates.push("is_required = ?");
@@ -272,12 +310,23 @@ export async function handlePatchStep(ctx: Ctx, versionId: string, stepId: strin
       diff[f] = val ?? null;
     }
   }
-  if (updates.length === 0) {
+  if (updates.length === 0 && newPositionIds === null) {
     return apiError("VALIDATION_ERROR", "Không có gì để cập nhật.", ctx.requestId);
   }
-  updates.push("updated_at = ?", "updated_by = ?");
-  binds.push(nowIso(), me.user.id, stepId);
-  await db.prepare(`UPDATE process_steps SET ${updates.join(", ")} WHERE id = ?`).bind(...binds).run();
+  const stmts: D1PreparedStatement[] = [];
+  if (updates.length > 0) {
+    updates.push("updated_at = ?", "updated_by = ?");
+    binds.push(nowIso(), me.user.id, stepId);
+    stmts.push(db.prepare(`UPDATE process_steps SET ${updates.join(", ")} WHERE id = ?`).bind(...binds));
+  }
+  if (newPositionIds !== null) {
+    stmts.push(db.prepare(`DELETE FROM process_step_positions WHERE step_id = ?`).bind(stepId));
+    for (const pid of newPositionIds) {
+      stmts.push(db.prepare(`INSERT INTO process_step_positions (step_id, position_id) VALUES (?, ?)`).bind(stepId, pid));
+    }
+    diff.position_ids = newPositionIds;
+  }
+  await db.batch(stmts);
   await audit(db, {
     event_type: "PROCESS_STEP_UPDATED",
     actor_id: me.user.id,

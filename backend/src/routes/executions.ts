@@ -194,6 +194,7 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
     .prepare(`SELECT * FROM process_steps WHERE version_id = ? ORDER BY sort_order ASC`)
     .bind(version.id)
     .all<{
+      id: string;
       code: string;
       title: string;
       instruction: string | null;
@@ -252,21 +253,42 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
        VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(execId, code, processId, version.id, title, assigneeId, supervisorId, creatorId, dueAt, executionDate, executionTime, shift, now, me.user.id),
   ];
+  // Lấy danh sách chức vụ của các bước để snapshot.
+  const stepIds = (steps.results ?? []).map((s) => s.id);
+  const stepPosMap = new Map<string, string[]>();
+  if (stepIds.length > 0) {
+    const placeholders = stepIds.map(() => "?").join(",");
+    const posRows = await db.prepare(
+      `SELECT step_id, position_id FROM process_step_positions WHERE step_id IN (${placeholders})`
+    ).bind(...stepIds).all<{ step_id: string; position_id: string }>();
+    for (const r of posRows.results ?? []) {
+      if (!stepPosMap.has(r.step_id)) stepPosMap.set(r.step_id, []);
+      stepPosMap.get(r.step_id)!.push(r.position_id);
+    }
+  }
   for (const [idx, st] of steps.results.entries()) {
     const s = st as unknown as Record<string, unknown>;
+    const execStepId = newId();
     stmts.push(
       db.prepare(
-        `INSERT INTO execution_steps (id, execution_id, sort_order, code, title, instruction, role, position_id,
+        `INSERT INTO execution_steps (id, execution_id, sort_order, code, title, instruction, role,
           prerequisite, input_desc, expected_result, output_desc, target_duration_min, warning,
           skip_policy, failure_policy,
           is_required, completion_req, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?)`
-      ).bind(newId(), execId, idx + 1, st.code, st.title, st.instruction, st.role, s.position_id ?? null,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?)`
+      ).bind(execStepId, execId, idx + 1, st.code, st.title, st.instruction, st.role,
         s.prerequisite ?? null, s.input_desc ?? null, s.expected_result ?? null, s.output_desc ?? null,
         s.target_duration_min ?? null, s.warning ?? null,
         s.skip_policy ?? null, s.failure_policy ?? null,
         st.is_required, st.completion_req, now)
     );
+    // Snapshot các chức vụ.
+    for (const pid of stepPosMap.get(st.id) ?? []) {
+      stmts.push(
+        db.prepare(`INSERT INTO execution_step_positions (execution_step_id, position_id) VALUES (?, ?)`)
+          .bind(execStepId, pid)
+      );
+    }
   }
   await db.batch(stmts);
   await audit(db, {
@@ -309,9 +331,24 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     creatorPositionName = pos?.name ?? null;
   }
   const steps = await db
-    .prepare(`SELECT es.*, p.name as position_name FROM execution_steps es LEFT JOIN positions p ON p.id = es.position_id WHERE execution_id = ? ORDER BY sort_order ASC`)
+    .prepare(`SELECT * FROM execution_steps WHERE execution_id = ? ORDER BY sort_order ASC`)
     .bind(id)
-    .all<ExecStepRow & { position_name: string | null }>();
+    .all<ExecStepRow>();
+  // Lấy danh sách chức vụ cho từng bước thực hiện.
+  const execStepIds = (steps.results ?? []).map((s) => s.id);
+  const execPosMap = new Map<string, { id: string; name: string }[]>();
+  if (execStepIds.length > 0) {
+    const placeholders = execStepIds.map(() => "?").join(",");
+    const posRows = await db.prepare(
+      `SELECT esp.execution_step_id, p.id, p.name FROM execution_step_positions esp
+       JOIN positions p ON p.id = esp.position_id
+       WHERE esp.execution_step_id IN (${placeholders}) ORDER BY p.name ASC`
+    ).bind(...execStepIds).all<{ execution_step_id: string; id: string; name: string }>();
+    for (const r of posRows.results ?? []) {
+      if (!execPosMap.has(r.execution_step_id)) execPosMap.set(r.execution_step_id, []);
+      execPosMap.get(r.execution_step_id)!.push({ id: r.id, name: r.name });
+    }
+  }
   const progress = await getProgress(db, id);
   return ok({
     ...toPublicExec(e, pname?.name, progress),
@@ -320,7 +357,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     creator_name: creatorId ? nameById[creatorId] ?? null : null,
     creator_position_name: creatorPositionName,
     supervisor_name: e.supervisor_id ? nameById[e.supervisor_id] ?? null : null,
-    steps: steps.results.map(toPublicStep),
+    steps: (steps.results ?? []).map((s) => ({ ...toPublicStep(s), positions: execPosMap.get(s.id) ?? [] })),
   });
 }
 

@@ -346,7 +346,8 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         toast("Đã bỏ qua bước.");
       } else if (act === "assign") {
         restore();
-        await openAssignDialog(dialogRoot, execId, sid, step?.code ?? "", (step as unknown as Record<string, unknown>)?.position_id as string | null ?? null, (step as unknown as Record<string, unknown>)?.position_name as string | null ?? null, async () => {
+        const stepPositions = ((step as unknown as Record<string, unknown>)?.positions as { id: string; name: string }[] ?? []);
+        await openAssignDialog(dialogRoot, execId, sid, step?.code ?? "", stepPositions, async () => {
           await loadAllAssignees(body, execId);
         });
         return;
@@ -746,8 +747,7 @@ async function openAssignDialog(
   execId: string,
   stepId: string,
   stepCode: string,
-  stepPositionId: string | null,
-  stepPositionName: string | null,
+  stepPositions: { id: string; name: string }[],
   onDone: () => void
 ): Promise<void> {
   const [{ items: current }, { items: users }] = await Promise.all([
@@ -756,21 +756,23 @@ async function openAssignDialog(
   ]);
   const currentIds = new Set(current.map((u) => u.id));
   const active = users ?? [];
-  // Ưu tiên người có đúng chức vụ của bước lên đầu.
+  const stepPosIds = new Set(stepPositions.map((p) => p.id));
+  // Ưu tiên người có chức vụ phù hợp với bước lên đầu.
   const sorted = [...active].sort((a, b) => {
-    const aMatch = stepPositionId && a.position_id === stepPositionId ? 0 : 1;
-    const bMatch = stepPositionId && b.position_id === stepPositionId ? 0 : 1;
+    const aMatch = a.position_id && stepPosIds.has(a.position_id) ? 0 : 1;
+    const bMatch = b.position_id && stepPosIds.has(b.position_id) ? 0 : 1;
     return aMatch - bMatch;
   });
+  const posNames = stepPositions.map((p) => p.name).join(", ");
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
       <div class="dialog" role="dialog" aria-modal="true" aria-label="Phân công bước">
         <h3>👥 Phân công bước "${esc(stepCode)}"</h3>
-        ${stepPositionName ? `<p class="muted small">Bước này cần chức vụ: <strong>${esc(stepPositionName)}</strong> — người phù hợp được hiện đầu danh sách.</p>` : `<p class="muted small">Chọn một hoặc nhiều người thực hiện bước này.</p>`}
+        ${posNames ? `<p class="muted small">Vai trò người thực hiện: <strong>${esc(posNames)}</strong> — người phù hợp được hiện đầu danh sách.</p>` : `<p class="muted small">Chọn một hoặc nhiều người thực hiện bước này.</p>`}
         <form id="assign-form">
           <div class="assign-list">
             ${sorted.map((u) => {
-              const isMatch = stepPositionId && u.position_id === stepPositionId;
+              const isMatch = u.position_id && stepPosIds.has(u.position_id);
               return `
               <label class="assign-item ${isMatch ? "assign-match" : ""}">
                 <input type="checkbox" name="user_ids" value="${esc(u.id)}" ${currentIds.has(u.id) ? "checked" : ""} />
@@ -870,7 +872,7 @@ function detailHtml(e: ExecutionDetail): string {
               <div class="step-assignees" data-assignees-for="${esc(st.id)}"><span class="muted small">Đang tải…</span></div>
             </div>
             ${st.instruction ? `<p class="step-instr">${esc(st.instruction)}</p>` : ""}
-            ${(st as unknown as Record<string, unknown>).prerequisite || (st as unknown as Record<string, unknown>).input_desc || st.instruction || (st as unknown as Record<string, unknown>).expected_result || (st as unknown as Record<string, unknown>).output_desc || (st as unknown as Record<string, unknown>).warning || (st as unknown as Record<string, unknown>).target_duration_min || (st as unknown as Record<string, unknown>).position_name || (st as unknown as Record<string, unknown>).skip_policy || (st as unknown as Record<string, unknown>).failure_policy ? `
+            ${(st as unknown as Record<string, unknown>).prerequisite || (st as unknown as Record<string, unknown>).input_desc || st.instruction || (st as unknown as Record<string, unknown>).expected_result || (st as unknown as Record<string, unknown>).output_desc || (st as unknown as Record<string, unknown>).warning || (st as unknown as Record<string, unknown>).target_duration_min || ((st as unknown as Record<string, unknown>).positions as unknown[] ?? []).length > 0 || (st as unknown as Record<string, unknown>).skip_policy || (st as unknown as Record<string, unknown>).failure_policy ? `
             <details class="step-details">
               <summary>📋 Chi tiết bước</summary>
               <dl class="detail-list">
@@ -880,7 +882,7 @@ function detailHtml(e: ExecutionDetail): string {
                 ${(st as unknown as Record<string, unknown>).expected_result ? `<div><dt>Kết quả mong đợi</dt><dd>${esc((st as unknown as Record<string, unknown>).expected_result as string)}</dd></div>` : ""}
                 ${(st as unknown as Record<string, unknown>).output_desc ? `<div><dt>Đầu ra / Bàn giao</dt><dd>${esc((st as unknown as Record<string, unknown>).output_desc as string)}</dd></div>` : ""}
                 ${(st as unknown as Record<string, unknown>).target_duration_min ? `<div><dt>Thời gian mục tiêu</dt><dd>${esc(String((st as unknown as Record<string, unknown>).target_duration_min))} phút</dd></div>` : ""}
-                ${(st as unknown as Record<string, unknown>).position_name ? `<div><dt>Chức vụ thực hiện</dt><dd>${esc((st as unknown as Record<string, unknown>).position_name as string)}</dd></div>` : ""}
+                ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div><dt>Vai trò người thực hiện</dt><dd>${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</dd></div>` : ""}
                 ${st.is_required ? "" : `<div><dt>Bắt buộc</dt><dd>Không (bước tùy chọn, được phép bỏ qua)</dd></div>`}
                 ${(st as unknown as Record<string, unknown>).skip_policy ? `<div><dt>Chính sách bỏ qua</dt><dd>${esc((st as unknown as Record<string, unknown>).skip_policy as string)}</dd></div>` : ""}
                 ${(st as unknown as Record<string, unknown>).failure_policy ? `<div><dt>Xử lý khi lỗi</dt><dd>${esc((st as unknown as Record<string, unknown>).failure_policy as string)}</dd></div>` : ""}

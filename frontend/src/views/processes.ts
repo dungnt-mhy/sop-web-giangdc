@@ -529,6 +529,7 @@ async function toggleSteps(
                   <strong>${esc(st.code)}</strong> — ${esc(st.title)}
                   ${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}
                   ${st.role ? `<div class="muted small">Vai trò: ${esc(st.role)}</div>` : ""}
+                  ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="muted small">Vai trò người thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
                 </div>
                 ${editable ? `<div class="step-actions">
                   <button class="link sm" data-step-act="up" title="Lên" ${idx === 0 ? "disabled" : ""}>↑</button>
@@ -686,11 +687,11 @@ function openStepDialog(
         <div class="form-grid">
           <label>Mã bước <span class="req">*</span>
             <input class="input" name="code" required maxlength="32" value="${val(step?.code)}" style="text-transform:uppercase" /></label>
-          <label>Chức vụ thực hiện
-            <select class="input" name="position_id" id="step-position">
-              <option value="">— Chưa chọn —</option>
-            </select>
-            <span class="hint">Chọn chức vụ để khi phân công sẽ gợi ý đúng người.</span></label>
+          <label>Vai trò người thực hiện
+            <div class="roles-grid" id="step-positions">
+              <span class="muted small">Đang tải…</span>
+            </div>
+            <span class="hint">Chọn một hoặc nhiều chức vụ. Khi phân công sẽ ưu tiên người có chức vụ phù hợp.</span></label>
         </div>
         <label>Tiêu đề hành động <span class="req">*</span>
           <input class="input" name="title" required maxlength="200" value="${val(step?.title)}"
@@ -737,13 +738,14 @@ function openStepDialog(
   const form = dialogRoot.querySelector<HTMLFormElement>("#step-form")!;
   const errEl = dialogRoot.querySelector<HTMLElement>("#step-error")!;
   const submitBtn = dialogRoot.querySelector<HTMLButtonElement>("#step-submit")!;
-  // Tải danh sách chức vụ.
-  const selPos = dialogRoot.querySelector<HTMLSelectElement>("#step-position")!;
+  // Tải danh sách chức vụ (checkbox nhiều chọn).
+  const posGrid = dialogRoot.querySelector<HTMLElement>("#step-positions")!;
+  const existingPosIds = new Set(((step as unknown as Record<string, unknown>)?.positions as { id: string }[] ?? []).map((p) => p.id));
   api.listPositions().then(({ items }) => {
-    selPos.innerHTML = `<option value="">— Chưa chọn —</option>` + items.map((p) =>
-      `<option value="${esc(p.id)}" ${(step as unknown as Record<string, unknown>)?.position_id === p.id ? "selected" : ""}>${esc(p.name)}</option>`
-    ).join("");
-  }).catch(() => {});
+    posGrid.innerHTML = items.map((p) => `
+      <label class="check"><input type="checkbox" name="position_ids" value="${esc(p.id)}"
+        ${existingPosIds.has(p.id) ? "checked" : ""} /> ${esc(p.name)}</label>`).join("") || `<span class="muted small">Chưa có chức vụ nào.</span>`;
+  }).catch(() => { posGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; });
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     errEl.hidden = true;
@@ -757,8 +759,8 @@ function openStepDialog(
       const s = String(fd.get(k) ?? "").trim();
       if (s) input[k] = s;
     }
-    const positionId = String(fd.get("position_id") ?? "").trim();
-    if (positionId) input.position_id = positionId;
+    const positionIds = fd.getAll("position_ids").map(String).filter((x) => x);
+    if (positionIds.length > 0) input.position_ids = positionIds;
     const dur = String(fd.get("target_duration_min") ?? "").trim();
     if (dur) input.target_duration_min = parseInt(dur, 10);
     const minPhotos = parseInt(String(fd.get("min_photos") ?? "").trim(), 10);
