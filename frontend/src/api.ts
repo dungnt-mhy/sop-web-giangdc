@@ -488,6 +488,14 @@ export const api = {
     const q = new URLSearchParams(params).toString();
     return req("GET", `/dashboard/overview${q ? "?" + q : ""}`);
   },
+  dashboardDaily(params: Record<string, string>): Promise<{
+    from: string; to: string;
+    days: { date: string; created: number; completed: number; exc_opened: number; exc_closed: number; evidence: number }[];
+    totals: { created: number; completed: number; exc_opened: number; exc_closed: number; evidence: number };
+  }> {
+    const q = new URLSearchParams(params).toString();
+    return req("GET", `/dashboard/daily${q ? "?" + q : ""}`);
+  },
   dashboardExecutions(params: Record<string, string>): Promise<{ items: any[]; total: number }> {
     const q = new URLSearchParams(params).toString();
     return req("GET", `/dashboard/executions${q ? "?" + q : ""}`);

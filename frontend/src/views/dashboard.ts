@@ -298,7 +298,21 @@ function renderFullDashboard(root: HTMLElement, s: any, o: any): void {
         <h3>Lượt công việc gần đây</h3>
         <div id="db-recent"><p class="empty">Đang tải…</p></div>
       </section>
-    </div>`;
+    </div>
+
+    <!-- THỐNG KÊ THEO NGÀY -->
+    <section class="card" id="db-daily-section">
+      <div class="page-head" style="margin-bottom:12px">
+        <div><h3>📅 Thống kê theo ngày</h3>
+        <p class="page-sub">Chi tiết từng ngày: lượt tạo mới, lượt hoàn thành, ngoại lệ, bằng chứng.</p></div>
+        <div class="dashboard-filters">
+          <input type="date" id="db-daily-from" class="input sm" />
+          <input type="date" id="db-daily-to" class="input sm" />
+          <button class="btn sm primary" id="db-daily-apply">Xem</button>
+        </div>
+      </div>
+      <div id="db-daily"><p class="empty">Đang tải…</p></div>
+    </section>`;
 
   // Tải danh sách lượt gần đây.
   api.dashboardExecutions({ limit: "8" }).then(({ items }) => {
@@ -315,4 +329,110 @@ function renderFullDashboard(root: HTMLElement, s: any, o: any): void {
         <span class="pill" style="background:${STATUS_COLORS[e.status] ?? "#94a3b8"}22">${esc(STATUS_LABELS[e.status] ?? e.status)}</span>
       </li>`).join("") + `</ul>`;
   }).catch(() => {});
+
+  // Thống kê theo ngày.
+  const dailyFrom = root.querySelector<HTMLInputElement>("#db-daily-from")!;
+  const dailyTo = root.querySelector<HTMLInputElement>("#db-daily-to")!;
+  // Mặc định 14 ngày gần nhất.
+  const today = new Date();
+  const twoWeeksAgo = new Date();
+  twoWeeksAgo.setDate(today.getDate() - 13);
+  dailyTo.value = today.toISOString().slice(0, 10);
+  dailyFrom.value = twoWeeksAgo.toISOString().slice(0, 10);
+
+  async function loadDaily(): Promise<void> {
+    const el = root.querySelector<HTMLElement>("#db-daily")!;
+    el.innerHTML = `<p class="empty">Đang tải…</p>`;
+    const params: Record<string, string> = {};
+    if (dailyFrom.value) params.from = dailyFrom.value;
+    if (dailyTo.value) params.to = dailyTo.value;
+    try {
+      const data = await api.dashboardDaily(params);
+      renderDaily(el, data);
+    } catch (e) {
+      el.innerHTML = `<p class="empty">Không tải được: ${esc(msg(e))}</p>`;
+    }
+  }
+
+  root.querySelector("#db-daily-apply")!.addEventListener("click", loadDaily);
+  loadDaily();
+}
+
+function renderDaily(el: HTMLElement, data: {
+  from: string; to: string;
+  days: { date: string; created: number; completed: number; exc_opened: number; exc_closed: number; evidence: number }[];
+  totals: { created: number; completed: number; exc_opened: number; exc_closed: number; evidence: number };
+}): void {
+  const t = data.totals;
+  // Biểu đồ cột kép: lượt tạo vs hoàn thành.
+  const dates = data.days.map((d) => d.date);
+  const createdVals = data.days.map((d) => d.created);
+  const completedVals = data.days.map((d) => d.completed);
+
+  el.innerHTML = `
+    <div class="daily-totals">
+      <div class="daily-total"><strong>${t.created}</strong><span>Lượt tạo mới</span></div>
+      <div class="daily-total"><strong>${t.completed}</strong><span>Lượt hoàn thành</span></div>
+      <div class="daily-total"><strong>${t.exc_opened}</strong><span>Ngoại lệ mới</span></div>
+      <div class="daily-total"><strong>${t.exc_closed}</strong><span>Ngoại lệ đã xử lý</span></div>
+      <div class="daily-total"><strong>${t.evidence}</strong><span>Bằng chứng</span></div>
+    </div>
+    <h4>Lượt công việc theo ngày (${esc(data.from)} → ${esc(data.to)})</h4>
+    ${dualBarChart(dates, createdVals, completedVals)}
+    <h4 style="margin-top:16px">Chi tiết từng ngày</h4>
+    <div class="table-wrap"><table class="tbl">
+      <thead><tr>
+        <th>Ngày</th><th>Lượt tạo mới</th><th>Lượt hoàn thành</th>
+        <th>Ngoại lệ mới</th><th>Ngoại lệ xử lý</th><th>Bằng chứng</th>
+      </tr></thead>
+      <tbody>
+        ${[...data.days].reverse().map((d) => `
+          <tr>
+            <td><strong>${esc(formatDateVn(d.date))}</strong> <span class="muted small">${esc(d.date.slice(5))}</span></td>
+            <td>${d.created > 0 ? `<span class="pill blue">${d.created}</span>` : `<span class="muted">—</span>`}</td>
+            <td>${d.completed > 0 ? `<span class="pill green">${d.completed}</span>` : `<span class="muted">—</span>`}</td>
+            <td>${d.exc_opened > 0 ? `<span class="pill orange">${d.exc_opened}</span>` : `<span class="muted">—</span>`}</td>
+            <td>${d.exc_closed > 0 ? `<span class="pill">${d.exc_closed}</span>` : `<span class="muted">—</span>`}</td>
+            <td>${d.evidence > 0 ? `<span class="pill">${d.evidence}</span>` : `<span class="muted">—</span>`}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table></div>`;
+}
+
+function formatDateVn(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+/** Biểu đồ cột kép: so sánh 2 chuỗi dữ liệu theo ngày. */
+function dualBarChart(dates: string[], vals1: number[], vals2: number[]): string {
+  if (dates.length === 0) return `<p class="empty">Chưa có dữ liệu.</p>`;
+  const max = Math.max(...vals1, ...vals2, 1);
+  const W = 640, H = 200, padL = 36, padB = 28, padT = 16;
+  const cw = (W - padL - 8) / dates.length;
+  const bw = Math.min(cw * 0.32, 18);
+
+  const bars = dates.map((d, i) => {
+    const h1 = ((H - padB - padT) * vals1[i]) / max;
+    const h2 = ((H - padB - padT) * vals2[i]) / max;
+    const x = padL + i * cw + (cw - bw * 2 - 2) / 2;
+    const y1 = H - padB - h1, y2 = H - padB - h2;
+    return `
+      <rect x="${x.toFixed(1)}" y="${y1.toFixed(1)}" width="${bw.toFixed(1)}" height="${h1.toFixed(1)}" fill="#3b82f6" rx="2" opacity="0.85"><title>${esc(d)} tạo mới: ${vals1[i]}</title></rect>
+      <rect x="${(x + bw + 2).toFixed(1)}" y="${y2.toFixed(1)}" width="${bw.toFixed(1)}" height="${h2.toFixed(1)}" fill="#22c55e" rx="2" opacity="0.85"><title>${esc(d)} hoàn thành: ${vals2[i]}</title></rect>
+      ${i % Math.ceil(dates.length / 10) === 0 ? `<text x="${(x + bw).toFixed(1)}" y="${H - 8}" text-anchor="middle" class="chart-axis">${esc(d.slice(5))}</text>` : ""}`;
+  }).join("");
+
+  const grid = [0, 0.5, 1].map((f) => {
+    const y = H - padB - f * (H - padB - padT);
+    return `<line x1="${padL}" y1="${y}" x2="${W - 8}" y2="${y}" stroke="#e5e7eb" stroke-dasharray="3"/>
+      <text x="${padL - 6}" y="${y + 4}" text-anchor="end" class="chart-axis">${Math.round(max * f)}</text>`;
+  }).join("");
+
+  return `
+    <div class="chart-legend" style="flex-direction:row;gap:16px;margin-bottom:8px">
+      <div class="chart-legend-item"><span class="legend-dot" style="background:#3b82f6"></span><span>Lượt tạo mới</span></div>
+      <div class="chart-legend-item"><span class="legend-dot" style="background:#22c55e"></span><span>Lượt hoàn thành</span></div>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" class="chart-svg">${grid}${bars}</svg>`;
 }

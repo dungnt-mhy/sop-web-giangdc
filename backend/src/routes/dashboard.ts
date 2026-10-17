@@ -228,7 +228,91 @@ export async function handleDashboardOverview(ctx: Ctx) {
   });
 }
 
-/** GET /dashboard/executions — danh sách lượt cho báo cáo (có filter). */
+/** GET /dashboard/daily — thống kê chi tiết theo từng ngày.
+ *  Query: ?from=YYYY-MM-DD&to=YYYY-MM-DD (mặc định 30 ngày gần nhất).
+ *  Mỗi ngày: lượt tạo mới, lượt hoàn thành, ngoại lệ mới, ngoại lệ đóng, bằng chứng tải lên. */
+export async function handleDashboardDaily(ctx: Ctx) {
+  const me = await requirePermission(ctx, "reports.view");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+
+  const url = new URL(ctx.request.url);
+  let from = url.searchParams.get("from");
+  let to = url.searchParams.get("to");
+  // Mặc định 30 ngày gần nhất.
+  if (!to) to = new Date().toISOString().slice(0, 10);
+  if (!from) {
+    const d = new Date(to);
+    d.setDate(d.getDate() - 29);
+    from = d.toISOString().slice(0, 10);
+  }
+
+  // Lượt tạo mới theo ngày.
+  const created = await db.prepare(
+    `SELECT date(created_at) as d, COUNT(*) as cnt FROM executions
+     WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
+  ).bind(from, to).all<{ d: string; cnt: number }>();
+
+  // Lượt hoàn thành theo ngày.
+  const completed = await db.prepare(
+    `SELECT date(completed_at) as d, COUNT(*) as cnt FROM executions
+     WHERE status = 'COMPLETED' AND date(completed_at) BETWEEN ? AND ?
+     GROUP BY d`
+  ).bind(from, to).all<{ d: string; cnt: number }>();
+
+  // Ngoại lệ mới theo ngày.
+  const excOpened = await db.prepare(
+    `SELECT date(created_at) as d, COUNT(*) as cnt FROM exceptions
+     WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
+  ).bind(from, to).all<{ d: string; cnt: number }>();
+
+  // Ngoại lệ đóng theo ngày (resolved_at hoặc updated_at khi status = CLOSED).
+  const excClosed = await db.prepare(
+    `SELECT date(updated_at) as d, COUNT(*) as cnt FROM exceptions
+     WHERE status IN ('RESOLVED','CLOSED') AND date(updated_at) BETWEEN ? AND ?
+     GROUP BY d`
+  ).bind(from, to).all<{ d: string; cnt: number }>();
+
+  // Bằng chứng tải lên theo ngày.
+  const evidence = await db.prepare(
+    `SELECT date(created_at) as d, COUNT(*) as cnt FROM evidence
+     WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
+  ).bind(from, to).all<{ d: string; cnt: number }>();
+
+  // Gộp theo ngày.
+  const dayMap = new Map<string, { created: number; completed: number; exc_opened: number; exc_closed: number; evidence: number }>();
+  const ensure = (d: string) => {
+    if (!dayMap.has(d)) dayMap.set(d, { created: 0, completed: 0, exc_opened: 0, exc_closed: 0, evidence: 0 });
+    return dayMap.get(d)!;
+  };
+  for (const r of created.results ?? []) ensure(r.d).created = r.cnt;
+  for (const r of completed.results ?? []) ensure(r.d).completed = r.cnt;
+  for (const r of excOpened.results ?? []) ensure(r.d).exc_opened = r.cnt;
+  for (const r of excClosed.results ?? []) ensure(r.d).exc_closed = r.cnt;
+  for (const r of evidence.results ?? []) ensure(r.d).evidence = r.cnt;
+
+  // Điền đủ các ngày trong khoảng (kể cả ngày không có dữ liệu).
+  const days: { date: string; created: number; completed: number; exc_opened: number; exc_closed: number; evidence: number }[] = [];
+  const cur = new Date(from + "T00:00:00");
+  const end = new Date(to + "T00:00:00");
+  while (cur <= end) {
+    const ds = cur.toISOString().slice(0, 10);
+    const v = dayMap.get(ds) ?? { created: 0, completed: 0, exc_opened: 0, exc_closed: 0, evidence: 0 };
+    days.push({ date: ds, ...v });
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  // Tổng cộng.
+  const totals = days.reduce((a, d) => ({
+    created: a.created + d.created,
+    completed: a.completed + d.completed,
+    exc_opened: a.exc_opened + d.exc_opened,
+    exc_closed: a.exc_closed + d.exc_closed,
+    evidence: a.evidence + d.evidence,
+  }), { created: 0, completed: 0, exc_opened: 0, exc_closed: 0, evidence: 0 });
+
+  return ok({ from, to, days, totals });
+}
 export async function handleDashboardExecutions(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
   if (me instanceof Response) return me;

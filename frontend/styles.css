@@ -612,3 +612,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .hbar-value { text-align: right; font-weight: 700; }
 .exc-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .exc-list li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px; background: #f9fafb; border-radius: 6px; }
+.daily-totals { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.daily-total { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 110px; }
+.daily-total strong { display: block; font-size: 22px; color: #111827; }
+.daily-total span { font-size: 12px; color: #6b7280; }

@@ -100,6 +100,7 @@ import {
 import {
   handleDashboardExecutions,
   handleDashboardExportCsv,
+  handleDashboardDaily,
   handleDashboardOverview,
   handleDashboardSummary,
 } from "./routes/dashboard";
@@ -405,6 +406,9 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   }
   if (path === "/dashboard/overview" && method === "GET") {
     return handleDashboardOverview(ctx);
+  }
+  if (path === "/dashboard/daily" && method === "GET") {
+    return handleDashboardDaily(ctx);
   }
   if (path === "/dashboard/executions" && method === "GET") {
     return handleDashboardExecutions(ctx);
