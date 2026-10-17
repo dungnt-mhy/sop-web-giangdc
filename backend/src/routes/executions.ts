@@ -226,9 +226,9 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   for (const [idx, st] of steps.results.entries()) {
     stmts.push(
       db.prepare(
-        `INSERT INTO execution_steps (id, execution_id, sort_order, code, title, instruction, role, is_required, completion_req, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?)`
-      ).bind(newId(), execId, idx + 1, st.code, st.title, st.instruction, st.role, st.is_required, st.completion_req, now)
+        `INSERT INTO execution_steps (id, execution_id, sort_order, code, title, instruction, role, position_id, is_required, completion_req, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?)`
+      ).bind(newId(), execId, idx + 1, st.code, st.title, st.instruction, st.role, (st as unknown as Record<string, unknown>).position_id ?? null, st.is_required, st.completion_req, now)
     );
   }
   await db.batch(stmts);
@@ -261,9 +261,9 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   const nameById: Record<string, string> = {};
   for (const u of users.results ?? []) nameById[u.id] = u.display_name;
   const steps = await db
-    .prepare(`SELECT * FROM execution_steps WHERE execution_id = ? ORDER BY sort_order ASC`)
+    .prepare(`SELECT es.*, p.name as position_name FROM execution_steps es LEFT JOIN positions p ON p.id = es.position_id WHERE execution_id = ? ORDER BY sort_order ASC`)
     .bind(id)
-    .all<ExecStepRow>();
+    .all<ExecStepRow & { position_name: string | null }>();
   const progress = await getProgress(db, id);
   return ok({
     ...toPublicExec(e, pname?.name, progress),

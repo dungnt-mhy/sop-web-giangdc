@@ -330,7 +330,7 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         toast("Đã bỏ qua bước.");
       } else if (act === "assign") {
         restore();
-        await openAssignDialog(dialogRoot, execId, sid, step?.code ?? "", async () => {
+        await openAssignDialog(dialogRoot, execId, sid, step?.code ?? "", (step as unknown as Record<string, unknown>)?.position_id as string | null ?? null, (step as unknown as Record<string, unknown>)?.position_name as string | null ?? null, async () => {
           await loadAllAssignees(body, execId);
         });
         return;
@@ -730,6 +730,8 @@ async function openAssignDialog(
   execId: string,
   stepId: string,
   stepCode: string,
+  stepPositionId: string | null,
+  stepPositionName: string | null,
   onDone: () => void
 ): Promise<void> {
   const [{ items: current }, { items: users }] = await Promise.all([
@@ -738,18 +740,27 @@ async function openAssignDialog(
   ]);
   const currentIds = new Set(current.map((u) => u.id));
   const active = users ?? [];
+  // Ưu tiên người có đúng chức vụ của bước lên đầu.
+  const sorted = [...active].sort((a, b) => {
+    const aMatch = stepPositionId && a.position_id === stepPositionId ? 0 : 1;
+    const bMatch = stepPositionId && b.position_id === stepPositionId ? 0 : 1;
+    return aMatch - bMatch;
+  });
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
       <div class="dialog" role="dialog" aria-modal="true" aria-label="Phân công bước">
         <h3>👥 Phân công bước "${esc(stepCode)}"</h3>
-        <p class="muted small">Chọn một hoặc nhiều người thực hiện bước này.</p>
+        ${stepPositionName ? `<p class="muted small">Bước này cần chức vụ: <strong>${esc(stepPositionName)}</strong> — người phù hợp được hiện đầu danh sách.</p>` : `<p class="muted small">Chọn một hoặc nhiều người thực hiện bước này.</p>`}
         <form id="assign-form">
           <div class="assign-list">
-            ${active.map((u) => `
-              <label class="assign-item">
+            ${sorted.map((u) => {
+              const isMatch = stepPositionId && u.position_id === stepPositionId;
+              return `
+              <label class="assign-item ${isMatch ? "assign-match" : ""}">
                 <input type="checkbox" name="user_ids" value="${esc(u.id)}" ${currentIds.has(u.id) ? "checked" : ""} />
-                <span>${esc(u.display_name)}${u.position ? ` <span class="muted small">— ${esc(u.position)}</span>` : ""}</span>
-              </label>`).join("")}
+                <span>${esc(u.display_name)}${u.position_name ? ` <span class="muted small">— ${esc(u.position_name)}</span>` : ""}${isMatch ? ` <span class="pill green">Phù hợp</span>` : ""}</span>
+              </label>`;
+            }).join("")}
           </div>
           <p class="form-error" id="assign-error" role="alert" hidden></p>
           <div class="dialog-actions">

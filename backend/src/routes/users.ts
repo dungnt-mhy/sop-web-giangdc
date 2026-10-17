@@ -45,6 +45,8 @@ function publicUser(
     email: u.email,
     status: u.status,
     position: u.position,
+    position_id: (u as unknown as Record<string, unknown>).position_id as string | null ?? null,
+    position_name: (u as unknown as Record<string, unknown>).position_name as string | null ?? null,
     roles,
     permissions: permissionsForRoles(roles),
     must_change_password: mustChangePassword,
@@ -82,7 +84,8 @@ export async function handleListActiveUsers(ctx: Ctx): Promise<Response> {
   if (s instanceof Response) return s;
   const db = ctx.env.sop_demo_db;
   const rows = await db.prepare(`
-    SELECT id, username, display_name, position FROM users
+    SELECT id, username, display_name, position, position_id, p.name as position_name FROM users
+    LEFT JOIN positions p ON p.id = users.position_id
     WHERE status = 'active' ORDER BY display_name ASC LIMIT 100
   `).all<{ id: string; username: string; display_name: string; position: string | null }>();
   return ok({ items: rows.results ?? [] });
@@ -138,6 +141,7 @@ export async function handleCreateUser(ctx: Ctx): Promise<Response> {
   const emailRaw = typeof body?.email === "string" ? body.email.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
   const position = typeof body?.position === "string" ? body.position.trim() || null : null;
+  const positionId = typeof body?.position_id === "string" && body.position_id.trim() ? body.position_id.trim() : null;
   const roles = validateRolesInput(body?.roles);
 
   const username = normalizeUsername(usernameRaw);
@@ -175,10 +179,10 @@ export async function handleCreateUser(ctx: Ctx): Promise<Response> {
   const stmts: D1PreparedStatement[] = [
     db
       .prepare(
-        `INSERT INTO users (id, username, display_name, email, position, status, failed_login_count, created_at, created_by)
-         VALUES (?, ?, ?, ?, ?, 'active', 0, ?, ?)`
+        `INSERT INTO users (id, username, display_name, email, position, position_id, status, failed_login_count, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, 'active', 0, ?, ?)`
       )
-      .bind(userId, username, displayName, emailRaw || null, position, now, (s as SessionInfo).user.id),
+      .bind(userId, username, displayName, emailRaw || null, position, positionId, now, (s as SessionInfo).user.id),
     db
       .prepare(
         `INSERT INTO local_credentials (id, user_id, password_hash, password_salt, hash_algorithm, hash_params, must_change_password, created_at, created_by)
@@ -265,6 +269,16 @@ export async function handlePatchUser(ctx: Ctx, id: string): Promise<Response> {
     updates.push("position = ?");
     binds.push(v);
     diff.position = v;
+  }
+  if (body?.position_id !== undefined) {
+    const v = typeof body.position_id === "string" && body.position_id.trim() ? body.position_id.trim() : null;
+    if (v) {
+      const p = await db.prepare(`SELECT id FROM positions WHERE id = ?`).bind(v).first();
+      if (!p) return apiError("VALIDATION_ERROR", "Chức vụ không tồn tại.", ctx.requestId);
+    }
+    updates.push("position_id = ?");
+    binds.push(v);
+    diff.position_id = v;
   }
 
   let roles: string[] | null = null;

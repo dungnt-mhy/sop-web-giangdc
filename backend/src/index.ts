@@ -72,6 +72,12 @@ import {
   handleStartStep,
 } from "./routes/executions";
 import {
+  handleCreatePosition,
+  handleDeletePosition,
+  handleListPositions,
+  handleUpdatePosition,
+} from "./routes/positions";
+import {
   handleDeleteEvidence,
   handleDownloadEvidence,
   handleListAllEvidence,
@@ -191,6 +197,16 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   if (method === "GET" && path === "/auth/session") return handleGetSession(ctx);
   if (method === "POST" && path === "/auth/change-password") {
     return handleChangePassword(ctx);
+  }
+
+  // --- Chức vụ ---
+  if (path === "/positions" && method === "GET") return handleListPositions(ctx);
+  if (path === "/positions" && method === "POST") return handleCreatePosition(ctx);
+  const posM = /^\/positions\/([^/:]+)$/.exec(path);
+  if (posM && UUID_RE.test(posM[1])) {
+    const pid = decodeURIComponent(posM[1]);
+    if (method === "PATCH") return handleUpdatePosition(ctx, pid);
+    if (method === "DELETE") return handleDeletePosition(ctx, pid);
   }
 
   // --- Users (quyền users.manage) ---

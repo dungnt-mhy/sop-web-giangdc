@@ -169,7 +169,10 @@ function openUserDialog(
           <label>Tên đăng nhập ${isNew ? '<input name="username" required minlength="3" maxlength="32" autocomplete="off" />' : `<input value="${esc(existing!.username)}" disabled />`}
             <span class="hint">3–32 ký tự: chữ thường, số, . _ -</span></label>
           <label>Tên hiển thị <input name="display_name" required maxlength="100" value="${existing ? esc(existing.display_name) : ""}" /></label>
-          <label>Chức vụ <input name="position" maxlength="100" placeholder="VD: Trưởng ca, Thợ chính…" value="${existing?.position ? esc(existing.position) : ""}" /></label>
+          <label>Chức vụ
+            <select name="position_id" id="user-position">
+              <option value="">— Chưa chọn —</option>
+            </select></label>
           <label>Email <input name="email" type="email" maxlength="120" value="${existing?.email ? esc(existing.email) : ""}" /></label>
           ${isNew ? `<label>Mật khẩu tạm <input name="password" type="password" required minlength="8" autocomplete="new-password" />
             <span class="hint">Ít nhất 8 ký tự. Người dùng bắt buộc đổi ở lần đăng nhập đầu.</span></label>` : ""}
@@ -214,6 +217,13 @@ function openUserDialog(
 
   const form = dialogRoot.querySelector<HTMLFormElement>("#user-form")!;
   const errBox = dialogRoot.querySelector<HTMLElement>("#user-form-error")!;
+  // Tải danh sách chức vụ.
+  const selPos = dialogRoot.querySelector<HTMLSelectElement>("#user-position")!;
+  api.listPositions().then(({ items }) => {
+    selPos.innerHTML = `<option value="">— Chưa chọn —</option>` + items.map((p) =>
+      `<option value="${esc(p.id)}" ${existing?.position_id === p.id ? "selected" : ""}>${esc(p.name)}</option>`
+    ).join("");
+  }).catch(() => {});
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     errBox.hidden = true;
@@ -231,7 +241,7 @@ function openUserDialog(
         await api.createUser({
           username: String(fd.get("username") ?? ""),
           display_name: String(fd.get("display_name") ?? ""),
-          position: String(fd.get("position") ?? "") || undefined,
+          position_id: String(fd.get("position_id") ?? "") || undefined,
           email: String(fd.get("email") ?? "") || undefined,
           password: String(fd.get("password") ?? ""),
           roles,
@@ -240,7 +250,7 @@ function openUserDialog(
       } else {
         await api.patchUser(existing!.id, {
           display_name: String(fd.get("display_name") ?? ""),
-          position: String(fd.get("position") ?? "") || undefined,
+          position_id: String(fd.get("position_id") ?? "") || undefined,
           email: String(fd.get("email") ?? "") || null,
           status: String(fd.get("status") ?? "active"),
           roles,

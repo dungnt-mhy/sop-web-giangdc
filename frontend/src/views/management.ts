@@ -13,6 +13,101 @@ const SEV_LABEL: Record<string, string> = { LOW: "Thấp", MEDIUM: "Trung bình"
 const ST_LABEL: Record<string, string> = { OPEN: "Mới", IN_PROGRESS: "Đang xử lý", RESOLVED: "Đã khắc phục", CLOSED: "Đã đóng" };
 const ST_PILL: Record<string, string> = { OPEN: "orange", IN_PROGRESS: "blue", RESOLVED: "green", CLOSED: "gray" };
 
+/** Trang quản lý chức vụ (#/positions). */
+export async function renderPositions(root: HTMLElement): Promise<void> {
+  root.innerHTML = `
+    <div class="page-head">
+      <div><h2>Chức vụ</h2>
+      <p class="page-sub">Danh mục chức vụ dùng chung cho nhân viên và bước quy trình.</p></div>
+      <button class="btn primary" id="pos-add">+ Thêm chức vụ</button>
+    </div>
+    <div id="pos-list"><p class="empty">Đang tải…</p></div>
+    <div id="pos-dialog-root"></div>`;
+
+  const listEl = root.querySelector<HTMLElement>("#pos-list")!;
+  const dialogRoot = root.querySelector<HTMLElement>("#pos-dialog-root")!;
+
+  async function reload(): Promise<void> {
+    try {
+      const { items } = await api.listPositions();
+      if (items.length === 0) {
+        listEl.innerHTML = `<p class="empty">Chưa có chức vụ nào.</p>`;
+        return;
+      }
+      listEl.innerHTML = `<div class="table-wrap"><table class="tbl">
+        <thead><tr><th>Tên chức vụ</th><th>Mô tả</th><th style="width:120px"></th></tr></thead>
+        <tbody>${items.map((p) => `
+          <tr data-id="${esc(p.id)}">
+            <td><strong>${esc(p.name)}</strong></td>
+            <td class="muted">${esc(p.description ?? "—")}</td>
+            <td class="actions">
+              <button class="btn sm" data-act="edit">Sửa</button>
+              <button class="btn sm danger" data-act="del">Xoá</button>
+            </td>
+          </tr>`).join("")}
+        </tbody></table></div>`;
+      listEl.querySelectorAll<HTMLButtonElement>("[data-act]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.closest("tr")!.dataset.id!;
+          const item = items.find((x) => x.id === id)!;
+          if (btn.dataset.act === "edit") openPositionDialog(dialogRoot, item, reload);
+          else if (btn.dataset.act === "del") {
+            if (confirm(`Xoá chức vụ "${item.name}"?`)) {
+              api.deletePosition(id).then(() => { toast("Đã xoá."); reload(); })
+                .catch((e) => toast(`Lỗi: ${msg(e)}`));
+            }
+          }
+        });
+      });
+    } catch (e) {
+      listEl.innerHTML = `<p class="empty">Không tải được: ${esc(msg(e))}</p>`;
+    }
+  }
+
+  root.querySelector("#pos-add")!.addEventListener("click", () => openPositionDialog(dialogRoot, null, reload));
+  await reload();
+}
+
+function openPositionDialog(dialogRoot: HTMLElement, existing: { id: string; name: string; description: string | null } | null, onDone: () => void): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true">
+        <h3>${existing ? "Sửa chức vụ" : "Thêm chức vụ"}</h3>
+        <form id="pos-form">
+          <label>Tên chức vụ <span class="req">*</span>
+            <input class="input" name="name" required maxlength="100" value="${existing ? esc(existing.name) : ""}" placeholder="VD: Kế toán, Thủ kho…" /></label>
+          <label>Mô tả <input class="input" name="description" maxlength="255" value="${existing?.description ? esc(existing.description) : ""}" /></label>
+          <p class="form-error" id="pos-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" class="btn" id="pos-cancel">Huỷ</button>
+            <button type="submit" class="btn primary">${existing ? "Lưu" : "Thêm"}</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#pos-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+  dialogRoot.querySelector<HTMLFormElement>("#pos-form")!.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target as HTMLFormElement);
+    const errEl = dialogRoot.querySelector<HTMLElement>("#pos-error")!;
+    const input = { name: String(fd.get("name") ?? "").trim(), description: String(fd.get("description") ?? "").trim() || undefined };
+    try {
+      if (existing) await api.updatePosition(existing.id, input);
+      else await api.createPosition(input);
+      toast(existing ? "Đã lưu." : "Đã thêm chức vụ.");
+      close();
+      onDone();
+    } catch (e) {
+      errEl.textContent = msg(e);
+      errEl.hidden = false;
+    }
+  });
+}
+
 /** Trang quản lý ngoại lệ (#/exceptions). */
 export async function renderExceptions(root: HTMLElement): Promise<void> {
   root.innerHTML = `

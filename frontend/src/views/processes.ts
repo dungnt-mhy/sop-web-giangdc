@@ -686,8 +686,11 @@ function openStepDialog(
         <div class="form-grid">
           <label>Mã bước <span class="req">*</span>
             <input class="input" name="code" required maxlength="32" value="${val(step?.code)}" style="text-transform:uppercase" /></label>
-          <label>Vai trò thực hiện <input class="input" name="role" maxlength="100" value="${val(step?.role)}"
-            placeholder="VD: Thủ kho" /></label>
+          <label>Chức vụ thực hiện
+            <select class="input" name="position_id" id="step-position">
+              <option value="">— Chưa chọn —</option>
+            </select>
+            <span class="hint">Chọn chức vụ để khi phân công sẽ gợi ý đúng người.</span></label>
         </div>
         <label>Tiêu đề hành động <span class="req">*</span>
           <input class="input" name="title" required maxlength="200" value="${val(step?.title)}"
@@ -734,6 +737,13 @@ function openStepDialog(
   const form = dialogRoot.querySelector<HTMLFormElement>("#step-form")!;
   const errEl = dialogRoot.querySelector<HTMLElement>("#step-error")!;
   const submitBtn = dialogRoot.querySelector<HTMLButtonElement>("#step-submit")!;
+  // Tải danh sách chức vụ.
+  const selPos = dialogRoot.querySelector<HTMLSelectElement>("#step-position")!;
+  api.listPositions().then(({ items }) => {
+    selPos.innerHTML = `<option value="">— Chưa chọn —</option>` + items.map((p) =>
+      `<option value="${esc(p.id)}" ${(step as unknown as Record<string, unknown>)?.position_id === p.id ? "selected" : ""}>${esc(p.name)}</option>`
+    ).join("");
+  }).catch(() => {});
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     errEl.hidden = true;
@@ -743,10 +753,12 @@ function openStepDialog(
       title: String(fd.get("title") ?? "").trim(),
       is_required: fd.get("is_required") === "on",
     };
-    for (const k of ["prerequisite", "input_desc", "instruction", "expected_result", "output_desc", "note", "role", "warning"]) {
+    for (const k of ["prerequisite", "input_desc", "instruction", "expected_result", "output_desc", "note", "warning"]) {
       const s = String(fd.get(k) ?? "").trim();
       if (s) input[k] = s;
     }
+    const positionId = String(fd.get("position_id") ?? "").trim();
+    if (positionId) input.position_id = positionId;
     const dur = String(fd.get("target_duration_min") ?? "").trim();
     if (dur) input.target_duration_min = parseInt(dur, 10);
     const minPhotos = parseInt(String(fd.get("min_photos") ?? "").trim(), 10);

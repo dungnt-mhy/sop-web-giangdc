@@ -25,6 +25,8 @@ export interface PublicUser {
   email: string | null;
   status: string;
   position: string | null;
+  position_id: string | null;
+  position_name: string | null;
   roles: string[];
   permissions: string[];
   must_change_password: boolean;
@@ -267,13 +269,27 @@ export const api = {
   listUsers(cursor?: string | null): Promise<{ items: PublicUser[]; next_cursor: string | null }> {
     return req("GET", "/users?limit=25" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : ""));
   },
-  listActiveUsers(): Promise<{ items: { id: string; username: string; display_name: string; position: string | null }[] }> {
+  listActiveUsers(): Promise<{ items: { id: string; username: string; display_name: string; position: string | null; position_id: string | null; position_name: string | null }[] }> {
     return req("GET", "/users/active");
+  },
+  // --- Chức vụ ---
+  listPositions(): Promise<{ items: { id: string; name: string; description: string | null }[]; total: number }> {
+    return req("GET", "/positions");
+  },
+  createPosition(input: { name: string; description?: string }): Promise<{ id: string; name: string }> {
+    return req("POST", "/positions", input);
+  },
+  updatePosition(id: string, input: { name?: string; description?: string }): Promise<{ id: string; name: string }> {
+    return req("PATCH", `/positions/${encodeURIComponent(id)}`, input);
+  },
+  deletePosition(id: string): Promise<{ deleted: boolean }> {
+    return req("DELETE", `/positions/${encodeURIComponent(id)}`);
   },
   createUser(input: {
     username: string;
     display_name: string;
     position?: string;
+    position_id?: string;
     email?: string;
     password: string;
     roles: string[];

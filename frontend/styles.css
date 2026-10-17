@@ -570,3 +570,4 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .assign-list { max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin: 12px 0; }
 .assign-item { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
 .assign-item:hover { background: #f8fafc; }
+.assign-match { background: #f0fdf4; border: 1px solid #bbf7d0; }
