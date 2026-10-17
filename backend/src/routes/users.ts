@@ -76,6 +76,18 @@ function validateRolesInput(v: unknown): string[] | null {
 }
 
 // GET /api/v1/users?limit=&cursor= — danh sách (cursor pagination).
+/** GET /users/active — danh sách user đang hoạt động (cho dropdown, chỉ cần đăng nhập). */
+export async function handleListActiveUsers(ctx: Ctx): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const db = ctx.env.sop_demo_db;
+  const rows = await db.prepare(`
+    SELECT id, username, display_name, position FROM users
+    WHERE status = 'active' ORDER BY display_name ASC LIMIT 100
+  `).all<{ id: string; username: string; display_name: string; position: string | null }>();
+  return ok({ items: rows.results ?? [] });
+}
+
 export async function handleListUsers(ctx: Ctx): Promise<Response> {
   const s = requirePermission(ctx, "users.manage");
   if (s instanceof Response) return s;

@@ -267,6 +267,9 @@ export const api = {
   listUsers(cursor?: string | null): Promise<{ items: PublicUser[]; next_cursor: string | null }> {
     return req("GET", "/users?limit=25" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : ""));
   },
+  listActiveUsers(): Promise<{ items: { id: string; username: string; display_name: string; position: string | null }[] }> {
+    return req("GET", "/users/active");
+  },
   createUser(input: {
     username: string;
     display_name: string;

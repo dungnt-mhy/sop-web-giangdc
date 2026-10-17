@@ -28,6 +28,7 @@ import {
   handleDeleteUser,
   handleForcePasswordChange,
   handleGetUser,
+  handleListActiveUsers,
   handleListUsers,
   handleLockUser,
   handlePatchUser,
@@ -193,6 +194,9 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   }
 
   // --- Users (quyền users.manage) ---
+  if (path === "/users/active" && method === "GET") {
+    return handleListActiveUsers(ctx);
+  }
   if (path === "/users") {
     if (method === "GET") return handleListUsers(ctx);
     if (method === "POST") return handleCreateUser(ctx);

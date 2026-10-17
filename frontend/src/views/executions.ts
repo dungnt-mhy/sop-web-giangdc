@@ -161,9 +161,9 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
   const selAssignee = dialogRoot.querySelector<HTMLSelectElement>("#exec-assignee")!;
   const selSupervisor = dialogRoot.querySelector<HTMLSelectElement>("#exec-supervisor")!;
   // Tải danh sách người dùng cho ô chọn người thực hiện / giám sát.
-  api.listUsers().then((res) => {
+  api.listActiveUsers().then((res) => {
     const items = res?.items ?? [];
-    const active = items.filter((u) => u.status === "ACTIVE");
+    const active = items;
     if (active.length > 0) {
       const opts = active.map((u) => {
         const label = u.position ? `${esc(u.display_name)} — ${esc(u.position)}` : esc(u.display_name);
@@ -734,10 +734,10 @@ async function openAssignDialog(
 ): Promise<void> {
   const [{ items: current }, { items: users }] = await Promise.all([
     api.listStepAssignees(execId, stepId),
-    api.listUsers(),
+    api.listActiveUsers(),
   ]);
   const currentIds = new Set(current.map((u) => u.id));
-  const active = (users ?? []).filter((u) => u.status === "ACTIVE");
+  const active = users ?? [];
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
       <div class="dialog" role="dialog" aria-modal="true" aria-label="Phân công bước">
