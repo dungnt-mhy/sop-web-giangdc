@@ -67,13 +67,20 @@ async function loadFullUser(db: D1Database, id: string) {
   return publicUser(u, roles, (cred?.must_change_password ?? 0) === 1);
 }
 
-function validateRolesInput(v: unknown): string[] | null {
+async function validateRolesInput(db: D1Database, v: unknown): Promise<string[] | null> {
   if (!Array.isArray(v) || v.length === 0 || v.length > 8) return null;
   const roles: string[] = [];
   for (const r of v) {
-    if (typeof r !== "string" || !isValidRole(r)) return null;
+    if (typeof r !== "string") return null;
     if (!roles.includes(r)) roles.push(r);
   }
+  // Kiểm tra tất cả code tồn tại trong DB.
+  const placeholders = roles.map(() => "?").join(",");
+  const rows = await db
+    .prepare(`SELECT code FROM roles WHERE code IN (${placeholders})`)
+    .bind(...roles)
+    .all<{ code: string }>();
+  if ((rows.results ?? []).length !== roles.length) return null;
   return roles;
 }
 
@@ -142,7 +149,7 @@ export async function handleCreateUser(ctx: Ctx): Promise<Response> {
   const password = typeof body?.password === "string" ? body.password : "";
   const position = typeof body?.position === "string" ? body.position.trim() || null : null;
   const positionId = typeof body?.position_id === "string" && body.position_id.trim() ? body.position_id.trim() : null;
-  const roles = validateRolesInput(body?.roles);
+  const roles = await validateRolesInput(ctx.env.sop_demo_db, body?.roles);
 
   const username = normalizeUsername(usernameRaw);
   if (!USERNAME_RE.test(username)) {
@@ -283,7 +290,7 @@ export async function handlePatchUser(ctx: Ctx, id: string): Promise<Response> {
 
   let roles: string[] | null = null;
   if (body?.roles !== undefined) {
-    roles = validateRolesInput(body.roles);
+    roles = await validateRolesInput(db, body.roles);
     if (!roles) return apiError("VALIDATION_ERROR", "Vai trò không hợp lệ.", ctx.requestId);
     if (id === me.user.id && !roles.includes("admin")) {
       return apiError("VALIDATION_ERROR", "Không thể tự gỡ quyền quản trị của chính mình.", ctx.requestId);

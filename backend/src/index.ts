@@ -78,6 +78,13 @@ import {
   handleUpdatePosition,
 } from "./routes/positions";
 import {
+  PERMISSION_CATALOG,
+  handleCreateRole,
+  handleDeleteRole,
+  handleListRoles,
+  handleUpdateRole,
+} from "./routes/roles";
+import {
   handleDeleteEvidence,
   handleDownloadEvidence,
   handleListAllEvidence,
@@ -197,6 +204,16 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   if (method === "GET" && path === "/auth/session") return handleGetSession(ctx);
   if (method === "POST" && path === "/auth/change-password") {
     return handleChangePassword(ctx);
+  }
+
+  // --- Vai trò ứng dụng ---
+  if (path === "/roles" && method === "GET") return handleListRoles(ctx);
+  if (path === "/roles" && method === "POST") return handleCreateRole(ctx);
+  const roleM = /^\/roles\/([^/:]+)$/.exec(path);
+  if (roleM && UUID_RE.test(roleM[1])) {
+    const rid = decodeURIComponent(roleM[1]);
+    if (method === "PATCH") return handleUpdateRole(ctx, rid);
+    if (method === "DELETE") return handleDeleteRole(ctx, rid);
   }
 
   // --- Chức vụ ---

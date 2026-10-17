@@ -93,6 +93,25 @@ export async function getUserRoles(db: D1Database, userId: string): Promise<stri
   return (res.results ?? []).map((r) => r.role);
 }
 
+/** Lấy quyền của user từ DB qua bảng roles/role_permissions. */
+export async function getPermissionsForRoles(
+  db: D1Database,
+  roles: string[]
+): Promise<string[]> {
+  if (roles.length === 0) return [];
+  const placeholders = roles.map(() => "?").join(",");
+  const rows = await db
+    .prepare(
+      `SELECT DISTINCT rp.permission
+       FROM role_permissions rp
+       JOIN roles r ON r.id = rp.role_id
+       WHERE r.code IN (${placeholders})`
+    )
+    .bind(...roles)
+    .all<{ permission: string }>();
+  return (rows.results ?? []).map((r) => r.permission).sort();
+}
+
 /** Ghi audit event. Không bao giờ ném lỗi ra ngoài (audit không được làm hỏng nghiệp vụ). */
 export async function audit(
   db: D1Database,

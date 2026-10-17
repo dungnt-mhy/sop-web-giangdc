@@ -176,11 +176,9 @@ function openUserDialog(
           <label>Email <input name="email" type="email" maxlength="120" value="${existing?.email ? esc(existing.email) : ""}" /></label>
           ${isNew ? `<label>Mật khẩu tạm <input name="password" type="password" required minlength="8" autocomplete="new-password" />
             <span class="hint">Ít nhất 8 ký tự. Người dùng bắt buộc đổi ở lần đăng nhập đầu.</span></label>` : ""}
-          <fieldset><legend>Vai trò hệ thống</legend>
-            <div class="roles-grid">
-              ${ALL_ROLES.map((r) => `
-                <label class="check"><input type="checkbox" name="role" value="${r}"
-                  ${existing && existing.roles.includes(r) ? "checked" : ""} /> ${esc(roleLabel(r))}</label>`).join("")}
+          <fieldset><legend>Vai trò ứng dụng</legend>
+            <div class="roles-grid" id="user-roles-grid">
+              <span class="muted small">Đang tải…</span>
             </div></fieldset>
           ${!isNew ? `<label>Trạng thái
             <select name="status">
@@ -224,6 +222,13 @@ function openUserDialog(
       `<option value="${esc(p.id)}" ${existing?.position_id === p.id ? "selected" : ""}>${esc(p.name)}</option>`
     ).join("");
   }).catch(() => {});
+  // Tải danh sách vai trò ứng dụng.
+  const rolesGrid = dialogRoot.querySelector<HTMLElement>("#user-roles-grid")!;
+  api.listRoles().then(({ items }) => {
+    rolesGrid.innerHTML = items.map((r) => `
+      <label class="check"><input type="checkbox" name="role" value="${esc(r.code)}"
+        ${existing && existing.roles.includes(r.code) ? "checked" : ""} /> ${esc(r.name)}</label>`).join("");
+  }).catch(() => { rolesGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; });
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     errBox.hidden = true;

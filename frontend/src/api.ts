@@ -285,6 +285,23 @@ export const api = {
   deletePosition(id: string): Promise<{ deleted: boolean }> {
     return req("DELETE", `/positions/${encodeURIComponent(id)}`);
   },
+  // --- Vai trò ứng dụng ---
+  listRoles(): Promise<{
+    items: { id: string; code: string; name: string; description: string | null; is_system: boolean; permissions: string[] }[];
+    total: number;
+    catalog: { code: string; label: string; group: string }[];
+  }> {
+    return req("GET", "/roles");
+  },
+  createRole(input: { name: string; description?: string; permissions: string[] }): Promise<unknown> {
+    return req("POST", "/roles", input);
+  },
+  updateRole(id: string, input: { name?: string; description?: string; permissions?: string[] }): Promise<unknown> {
+    return req("PATCH", `/roles/${encodeURIComponent(id)}`, input);
+  },
+  deleteRole(id: string): Promise<{ deleted: boolean }> {
+    return req("DELETE", `/roles/${encodeURIComponent(id)}`);
+  },
   createUser(input: {
     username: string;
     display_name: string;

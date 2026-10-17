@@ -13,6 +13,135 @@ const SEV_LABEL: Record<string, string> = { LOW: "Thấp", MEDIUM: "Trung bình"
 const ST_LABEL: Record<string, string> = { OPEN: "Mới", IN_PROGRESS: "Đang xử lý", RESOLVED: "Đã khắc phục", CLOSED: "Đã đóng" };
 const ST_PILL: Record<string, string> = { OPEN: "orange", IN_PROGRESS: "blue", RESOLVED: "green", CLOSED: "gray" };
 
+/** Trang quản lý vai trò ứng dụng (#/roles) — phân quyền qua checkbox. */
+export async function renderRoles(root: HTMLElement): Promise<void> {
+  root.innerHTML = `
+    <div class="page-head">
+      <div><h2>Vai trò ứng dụng</h2>
+      <p class="page-sub">Vai trò quyết định ai được làm gì trong app. Khác với <strong>Chức vụ</strong> (làm gì ở công ty).</p></div>
+      <button class="btn primary" id="role-add">+ Thêm vai trò</button>
+    </div>
+    <div id="role-list"><p class="empty">Đang tải…</p></div>
+    <div id="role-dialog-root"></div>`;
+
+  const listEl = root.querySelector<HTMLElement>("#role-list")!;
+  const dialogRoot = root.querySelector<HTMLElement>("#role-dialog-root")!;
+
+  async function reload(): Promise<void> {
+    try {
+      const { items, catalog } = await api.listRoles();
+      if (items.length === 0) {
+        listEl.innerHTML = `<p class="empty">Chưa có vai trò nào.</p>`;
+        return;
+      }
+      const permLabel = (code: string) => catalog.find((c) => c.code === code)?.label ?? code;
+      listEl.innerHTML = `<div class="table-wrap"><table class="tbl">
+        <thead><tr><th>Tên vai trò</th><th>Quyền</th><th style="width:120px"></th></tr></thead>
+        <tbody>${items.map((r) => `
+          <tr data-id="${esc(r.id)}">
+            <td><strong>${esc(r.name)}</strong>${r.is_system ? ` <span class="pill">Hệ thống</span>` : ""}
+              ${r.description ? `<div class="muted small">${esc(r.description)}</div>` : ""}</td>
+            <td class="small">${r.permissions.includes("*") ? "<strong>Toàn quyền</strong>" : r.permissions.map((p) => `<span class="pill">${esc(permLabel(p))}</span>`).join(" ") || `<span class="muted">—</span>`}</td>
+            <td class="actions">
+              <button class="btn sm" data-act="edit">Sửa</button>
+              ${r.is_system ? "" : `<button class="btn sm danger" data-act="del">Xoá</button>`}
+            </td>
+          </tr>`).join("")}
+        </tbody></table></div>`;
+      listEl.querySelectorAll<HTMLButtonElement>("[data-act]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.closest("tr")!.dataset.id!;
+          const item = items.find((x) => x.id === id)!;
+          if (btn.dataset.act === "edit") openRoleDialog(dialogRoot, item, catalog, reload);
+          else if (btn.dataset.act === "del") {
+            if (confirm(`Xoá vai trò "${item.name}"?`)) {
+              api.deleteRole(id).then(() => { toast("Đã xoá."); reload(); })
+                .catch((e) => toast(`Lỗi: ${msg(e)}`));
+            }
+          }
+        });
+      });
+    } catch (e) {
+      listEl.innerHTML = `<p class="empty">Không tải được: ${esc(msg(e))}</p>`;
+    }
+  }
+
+  root.querySelector("#role-add")!.addEventListener("click", async () => {
+    const { catalog } = await api.listRoles();
+    openRoleDialog(dialogRoot, null, catalog, reload);
+  });
+  await reload();
+}
+
+function openRoleDialog(
+  dialogRoot: HTMLElement,
+  existing: { id: string; name: string; description: string | null; permissions: string[] } | null,
+  catalog: { code: string; label: string; group: string }[],
+  onDone: () => void
+): void {
+  // Nhóm quyền theo group.
+  const groups = new Map<string, { code: string; label: string }[]>();
+  for (const c of catalog) {
+    if (!groups.has(c.group)) groups.set(c.group, []);
+    groups.get(c.group)!.push(c);
+  }
+  const currentPerms = new Set(existing?.permissions ?? []);
+
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true" style="max-width:560px">
+        <h3>${existing ? "Sửa vai trò" : "Thêm vai trò"}</h3>
+        <form id="role-form">
+          <label>Tên vai trò <span class="req">*</span>
+            <input class="input" name="name" required maxlength="100" value="${existing ? esc(existing.name) : ""}" placeholder="VD: Thủ kho kho A" /></label>
+          <label>Mô tả <input class="input" name="description" maxlength="255" value="${existing?.description ? esc(existing.description) : ""}" /></label>
+          <fieldset style="margin-top:12px">
+            <legend><strong>Quyền của vai trò</strong></legend>
+            ${[...groups.entries()].map(([g, perms]) => `
+              <div style="margin-bottom:10px">
+                <div class="muted small" style="margin-bottom:4px">${esc(g)}</div>
+                ${perms.map((p) => `
+                  <label class="assign-item">
+                    <input type="checkbox" name="permissions" value="${esc(p.code)}" ${currentPerms.has(p.code) ? "checked" : ""} />
+                    <span>${esc(p.label)}</span>
+                  </label>`).join("")}
+              </div>`).join("")}
+          </fieldset>
+          <p class="form-error" id="role-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" class="btn" id="role-cancel">Huỷ</button>
+            <button type="submit" class="btn primary">${existing ? "Lưu" : "Thêm"}</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#role-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+  dialogRoot.querySelector<HTMLFormElement>("#role-form")!.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target as HTMLFormElement);
+    const errEl = dialogRoot.querySelector<HTMLElement>("#role-error")!;
+    const input = {
+      name: String(fd.get("name") ?? "").trim(),
+      description: String(fd.get("description") ?? "").trim() || undefined,
+      permissions: fd.getAll("permissions").map(String),
+    };
+    try {
+      if (existing) await api.updateRole(existing.id, input);
+      else await api.createRole(input);
+      toast(existing ? "Đã lưu." : "Đã thêm vai trò.");
+      close();
+      onDone();
+    } catch (e) {
+      errEl.textContent = msg(e);
+      errEl.hidden = false;
+    }
+  });
+}
+
 /** Trang quản lý chức vụ (#/positions). */
 export async function renderPositions(root: HTMLElement): Promise<void> {
   root.innerHTML = `

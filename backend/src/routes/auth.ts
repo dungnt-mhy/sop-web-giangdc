@@ -9,6 +9,7 @@ import {
   getUserById,
   getUserByUsername,
   getUserRoles,
+  getPermissionsForRoles,
   newId,
   normalizeUsername,
   nowIso,
@@ -95,6 +96,7 @@ export async function loadSession(ctx: Ctx): Promise<SessionInfo | null> {
 
   const cred = await getCredential(db, user.id);
   const roles = await getUserRoles(db, user.id);
+  const permissions = await getPermissionsForRoles(db, roles);
 
   // Trượt hạn dùng: cập nhật last_seen_at + expires_at.
   await db
@@ -112,7 +114,7 @@ export async function loadSession(ctx: Ctx): Promise<SessionInfo | null> {
       status: user.status,
     },
     roles,
-    permissions: permissionsForRoles(roles),
+    permissions,
     mustChangePassword: (cred?.must_change_password ?? 0) === 1,
     expiresAt: refreshedExpiry(),
     viaCookie,
@@ -203,6 +205,7 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
   const expiresAt = addMs(now, SESSION_TTL_MS);
   const sessionId = newId();
   const roles = await getUserRoles(db, user.id);
+  const permissions = await getPermissionsForRoles(db, roles);
   await db.batch([
     db
       .prepare(`UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = ?`)
@@ -232,7 +235,7 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
       status: user.status,
     },
     roles,
-    permissions: permissionsForRoles(roles),
+    permissions,
     mustChangePassword: (cred?.must_change_password ?? 0) === 1,
     expiresAt,
     viaCookie: true,
