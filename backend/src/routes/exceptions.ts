@@ -240,3 +240,48 @@ export async function handleCloseException(ctx: Ctx, exceptionId: string) {
 }
 
 export { SEVERITY_LABELS, STATUS_LABELS };
+
+/** GET /exceptions — danh sách tất cả ngoại lệ (có lọc theo trạng thái/mức độ). */
+export async function handleListAllExceptions(ctx: Ctx) {
+  const me = await requirePermission(ctx, "exceptions.handle");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+
+  const url = new URL(ctx.request.url);
+  const status = url.searchParams.get("status");
+  const severity = url.searchParams.get("severity");
+
+  let sql = `
+    SELECT ex.*, u.display_name as creator_name, es.code as step_code,
+           e.code as execution_code, e.execution_date
+    FROM exceptions ex
+    LEFT JOIN users u ON u.id = ex.created_by
+    LEFT JOIN execution_steps es ON es.id = ex.execution_step_id
+    LEFT JOIN executions e ON e.id = ex.execution_id
+    WHERE 1=1`;
+  const params: unknown[] = [];
+  if (status && ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"].includes(status)) {
+    sql += ` AND ex.status = ?`;
+    params.push(status);
+  }
+  if (severity && ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(severity)) {
+    sql += ` AND ex.severity = ?`;
+    params.push(severity);
+  }
+  sql += ` ORDER BY ex.created_at DESC LIMIT 200`;
+
+  const rows = await db.prepare(sql).bind(...params).all<
+    ExceptionRow & { creator_name: string | null; step_code: string | null; execution_code: string | null; execution_date: string | null }
+  >();
+  return ok({
+    items: (rows.results ?? []).map((r) =>
+      toPublic(r, {
+        creator_name: r.creator_name,
+        step_code: r.step_code,
+        execution_code: r.execution_code,
+        execution_date: r.execution_date,
+      })
+    ),
+    total: (rows.results ?? []).length,
+  });
+}

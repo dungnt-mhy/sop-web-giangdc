@@ -79,6 +79,7 @@ export interface Execution {
   status: string;
   assignee_id: string | null;
   due_at: string | null;
+  execution_date: string | null;
   cancel_reason: string | null;
   created_at: string;
   started_at: string | null;
@@ -351,7 +352,7 @@ export const api = {
     const suffix = qs.toString() ? "?" + qs.toString() : "";
     return req("GET", "/executions" + suffix);
   },
-  createExecution(input: { process_id: string; title?: string; assignee_id?: string; due_at?: string }): Promise<Execution> {
+  createExecution(input: { process_id: string; title?: string; assignee_id?: string; due_at?: string; execution_date: string }): Promise<Execution> {
     return req("POST", "/executions", input);
   },
   getExecution(id: string): Promise<ExecutionDetail> {
@@ -462,6 +463,12 @@ export const api = {
   },
   closeException(exceptionId: string, close_note?: string): Promise<AppException> {
     return req("POST", `/exceptions/${encodeURIComponent(exceptionId)}:close`, { close_note });
+  },
+  listAllExceptions(query: string): Promise<{ items: AppException[]; total: number }> {
+    return req("GET", `/exceptions${query ? "?" + query : ""}`);
+  },
+  listAllEvidence(query: string): Promise<{ items: Record<string, unknown>[]; total: number }> {
+    return req("GET", `/evidence${query ? "?" + query : ""}`);
   },
 };
 

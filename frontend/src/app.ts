@@ -9,6 +9,7 @@ import { renderExecutionDetail, renderMyWork } from "./views/executions.js";
 import { renderProcessDetail, renderProcesses } from "./views/processes.js";
 import { renderUsers } from "./views/users.js";
 import { renderDashboard } from "./views/dashboard.js";
+import { renderExceptions, renderEvidence } from "./views/management.js";
 
 let session: SessionInfo | null = null;
 
@@ -62,6 +63,8 @@ function renderShell(): void {
     { hash: "#/my-work", label: "Công việc của tôi", perm: "executions.perform" },
     { hash: "#/processes", label: "Quy trình" },
     { hash: "#/dashboard", label: "Báo cáo", perm: "reports.view" },
+    { hash: "#/exceptions", label: "Ngoại lệ", perm: "exceptions.handle" },
+    { hash: "#/evidence", label: "Bằng chứng", perm: "executions.view" },
     { hash: "#/users", label: "Người dùng", perm: "users.manage" },
   ];
   $("#sidebar-nav").innerHTML = navItems
@@ -160,6 +163,24 @@ function route(): void {
       return;
     }
     void renderDashboard(page);
+    return;
+  }
+  if (hash === "#/exceptions") {
+    if (!can("exceptions.handle")) {
+      page.innerHTML = `<div class="card"><h3>Không có quyền</h3>
+        <p class="empty">Tài khoản của bạn không có quyền quản lý ngoại lệ.</p></div>`;
+      return;
+    }
+    void renderExceptions(page);
+    return;
+  }
+  if (hash === "#/evidence") {
+    if (!can("executions.view")) {
+      page.innerHTML = `<div class="card"><h3>Không có quyền</h3>
+        <p class="empty">Tài khoản của bạn không có quyền xem bằng chứng.</p></div>`;
+      return;
+    }
+    void renderEvidence(page);
     return;
   }
   const em = /^#\/executions\/([0-9a-f-]{36})$/.exec(hash);

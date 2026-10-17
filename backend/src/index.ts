@@ -71,6 +71,7 @@ import {
 import {
   handleDeleteEvidence,
   handleDownloadEvidence,
+  handleListAllEvidence,
   handleListEvidence,
   handleUploadEvidence,
 } from "./routes/evidence";
@@ -88,6 +89,7 @@ import {
 import {
   handleCloseException,
   handleCreateException,
+  handleListAllExceptions,
   handleListExceptions,
   handleResolveException,
   handleStartException,
@@ -328,6 +330,10 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   if (evDl && method === "GET" && UUID_RE.test(evDl[1])) {
     return handleDownloadEvidence(ctx, decodeURIComponent(evDl[1]));
   }
+  // --- Quản lý bằng chứng tổng hợp ---
+  if (path === "/evidence" && method === "GET") {
+    return handleListAllEvidence(ctx);
+  }
   // --- Tài nguyên hướng dẫn bước (Task 1.7: EVD-011) ---
   const srUp = /^\/processes\/x\/versions\/([^/:]+)\/steps\/([^/:]+)\/resources$/.exec(path);
   if (srUp && UUID_RE.test(srUp[1]) && UUID_RE.test(srUp[2])) {
@@ -356,6 +362,9 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     return handleDashboardExportCsv(ctx);
   }
   // --- Ngoại lệ (SPEC §9.5) ---
+  if (path === "/exceptions" && method === "GET") {
+    return handleListAllExceptions(ctx);
+  }
   const excCreate = /^\/executions\/([^/:]+)\/exceptions$/.exec(path);
   if (excCreate && UUID_RE.test(excCreate[1])) {
     const eid = decodeURIComponent(excCreate[1]);

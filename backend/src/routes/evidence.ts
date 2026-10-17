@@ -11,7 +11,7 @@ import type { Ctx } from "./context";
 const MAX_PHOTO_SOURCE_BYTES = 15 * 1024 * 1024; // ảnh nguồn tối đa 15MB
 const MAX_PHOTO_BYTES = 2 * 1024 * 1024; // ảnh sau nén mục tiêu tối đa 2MB (server cho phép tới 5MB)
 const MAX_PHOTO_SERVER_BYTES = 5 * 1024 * 1024;
-const MAX_FILE_BYTES = 25 * 1024 * 1024; // tệp không phải ảnh tối đa 25MB
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // tệp không phải ảnh tối đa 10MB
 const MAX_PHOTOS_PER_STEP = 10; // tối đa 10 ảnh/bước
 const MAX_BYTES_PER_STEP = 100 * 1024 * 1024; // tổng tệp một bước tối đa 100MB
 
@@ -213,6 +213,39 @@ export async function handleDeleteEvidence(ctx: Ctx, evidenceId: string) {
     diff: { execution_id: ev.execution_id, step_id: ev.execution_step_id },
   });
   return ok({ deleted: true });
+}
+
+/** GET /evidence — danh sách tất cả bằng chứng (có lọc theo loại/ngày). */
+export async function handleListAllEvidence(ctx: Ctx) {
+  const me = await requirePermission(ctx, "executions.view");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+
+  const url = new URL(ctx.request.url);
+  const kind = url.searchParams.get("kind");
+  const fromDate = url.searchParams.get("from_date");
+
+  let sql = `
+    SELECT ev.*, e.code as execution_code, es.code as step_code, es.title as step_title,
+           u.display_name as uploader_name
+    FROM evidence ev
+    LEFT JOIN executions e ON e.id = ev.execution_id
+    LEFT JOIN execution_steps es ON es.id = ev.execution_step_id
+    LEFT JOIN users u ON u.id = ev.uploaded_by
+    WHERE 1=1`;
+  const params: unknown[] = [];
+  if (kind && ["PHOTO", "FILE"].includes(kind)) {
+    sql += ` AND ev.kind = ?`;
+    params.push(kind);
+  }
+  if (fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)) {
+    sql += ` AND substr(ev.created_at, 1, 10) >= ?`;
+    params.push(fromDate);
+  }
+  sql += ` ORDER BY ev.created_at DESC LIMIT 200`;
+
+  const rows = await db.prepare(sql).bind(...params).all();
+  return ok({ items: rows.results ?? [], total: (rows.results ?? []).length });
 }
 
 /** GET /evidence/{id}/download — URL tải/xem tệp (kiểm tra quyền, chuyển hướng tới R2). */

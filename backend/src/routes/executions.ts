@@ -185,12 +185,17 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
     ? body.assignee_id.trim()
     : me.user.id;
   const dueAt = typeof body?.due_at === "string" ? body.due_at.trim() || null : null;
+  // Ngày thực hiện là bắt buộc (yêu cầu khách hàng).
+  const executionDate = typeof body?.execution_date === "string" ? body.execution_date.trim() : "";
+  if (!executionDate || !/^\d{4}-\d{2}-\d{2}$/.test(executionDate)) {
+    return apiError("VALIDATION_ERROR", "Thiếu ngày thực hiện (định dạng YYYY-MM-DD).", ctx.requestId);
+  }
 
   const stmts: D1PreparedStatement[] = [
     db.prepare(
-      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, due_at, created_at, created_by)
-       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?)`
-    ).bind(execId, code, processId, version.id, title, assigneeId, dueAt, now, me.user.id),
+      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, due_at, execution_date, created_at, created_by)
+       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?)`
+    ).bind(execId, code, processId, version.id, title, assigneeId, dueAt, executionDate, now, me.user.id),
   ];
   for (const [idx, st] of steps.results.entries()) {
     stmts.push(

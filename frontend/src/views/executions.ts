@@ -57,9 +57,9 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
     </div>
     <div class="table-wrap"><table class="tbl clickable-rows" id="exec-table">
       <thead><tr>
-        <th>Mã lượt</th><th>Quy trình</th><th>Tiến độ</th><th>Trạng thái</th>
+        <th>Mã lượt</th><th>Quy trình</th><th>Ngày thực hiện</th><th>Tiến độ</th><th>Trạng thái</th>
       </tr></thead>
-      <tbody><tr><td colspan="4" class="empty">Đang tải…</td></tr></tbody>
+      <tbody><tr><td colspan="5" class="empty">Đang tải…</td></tr></tbody>
     </table></div>
     <div id="exec-dialog-root"></div>`;
 
@@ -81,6 +81,7 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
         return `<tr data-id="${esc(e.id)}">
           <td><strong>${esc(e.code)}</strong>${e.title ? `<div class="muted small">${esc(e.title)}</div>` : ""}</td>
           <td>${esc(e.process_name ?? "—")}</td>
+          <td>${esc(e.execution_date ?? "—")}</td>
           <td><div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
             <span class="muted small">${p?.done ?? 0}/${p?.total ?? 0}</span></td>
           <td>${execPill(e.status)}</td>
@@ -121,6 +122,8 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
           <span class="hint">Chỉ hiện quy trình có phiên bản đang hiệu lực.</span></label>
         <label>Tiêu đề lượt <input class="input" name="title" maxlength="200"
           placeholder="VD: Xuất hàng đợt sáng 17/10" /></label>
+        <label>Ngày thực hiện <span class="req">*</span>
+          <input class="input" type="date" name="execution_date" required /></label>
         <p class="form-error" id="exec-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button type="button" class="btn" id="exec-cancel">Huỷ</button>
@@ -164,9 +167,16 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
     const input: Record<string, unknown> = { process_id };
     const title = String(fd.get("title") ?? "").trim();
     if (title) input.title = title;
+    const execution_date = String(fd.get("execution_date") ?? "").trim();
+    if (!execution_date) {
+      errEl.textContent = "Vui lòng chọn ngày thực hiện.";
+      errEl.hidden = false;
+      return;
+    }
+    input.execution_date = execution_date;
     setLoading(submitBtn, true, "Đang tạo…");
     try {
-      const created = await api.createExecution(input as { process_id: string; title?: string });
+      const created = await api.createExecution(input as { process_id: string; title?: string; execution_date: string });
       toast(`Đã tạo lượt ${created.code}.`);
       close();
       onDone();
@@ -422,9 +432,9 @@ async function uploadEvidenceFiles(
         }
         toUpload = compressed;
       } else {
-        // Tệp tài liệu: kiểm tra dung lượng 25MB phía client.
-        if (f.size > 25 * 1024 * 1024) {
-          throw new Error("Tệp vượt quá 25MB.");
+        // Tệp tài liệu: kiểm tra dung lượng 10MB phía client.
+        if (f.size > 10 * 1024 * 1024) {
+          throw new Error("Tệp vượt quá 10MB.");
         }
         toast(`Đang tải lên ${f.name}…`);
       }
@@ -650,6 +660,7 @@ function detailHtml(e: ExecutionDetail): string {
       <dl class="info-list">
         <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}</dd></div>
         <div class="info-row"><dt>Quy trình</dt><dd>${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})</dd></div>
+        <div class="info-row"><dt>Ngày thực hiện</dt><dd>${esc(e.execution_date ?? "—")}</dd></div>
         <div class="info-row"><dt>Tiến độ</dt><dd>
           <div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
           ${p?.done ?? 0}/${p?.total ?? 0} bước (${pct}%)</dd></div>
@@ -711,7 +722,7 @@ function detailHtml(e: ExecutionDetail): string {
                 </span>` : ""}
               </div>
               <div class="evidence-grid" data-ev-grid></div>
-              <p class="evidence-hint muted small">Ảnh được nén trước khi tải lên (tối đa 10 ảnh/bước). Tệp: PDF, Word, Excel, tối đa 25MB.</p>
+              <p class="evidence-hint muted small">Ảnh được nén trước khi tải lên (tối đa 10 ảnh/bước). Tệp: PDF, Word, Excel, tối đa 10MB.</p>
             </div>
           </li>`;
         }).join("")}
