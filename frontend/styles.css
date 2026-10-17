@@ -346,6 +346,57 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .flow-node.exec.skipped { border-style: dashed; background: #f8fafc; }
 .flow-node.exec.skipped .flow-num { background: #94a3b8; }
 
+/* Modal sơ đồ quy trình (mở từ danh mục). */
+.dialog.diagram-dialog { max-width: 560px; max-height: 85vh; display: flex; flex-direction: column; }
+.diagram-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.diagram-header h3 { margin: 0; }
+.icon-btn { border: 1px solid #cbd5e1; background: #fff; border-radius: 8px; width: 36px; height: 36px; font-size: 16px; cursor: pointer; flex: none; }
+#dg-body { overflow-y: auto; padding: 8px 4px; }
+
+/* Sơ đồ đẹp — gradient + bóng đổ + animation. */
+.beauty-diagram { display: flex; flex-direction: column; align-items: center; padding: 12px 8px 20px; }
+.beauty-start, .beauty-end {
+  padding: 10px 28px; border-radius: 999px; font-weight: 700; font-size: 14px; color: #fff;
+  display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.beauty-start { background: linear-gradient(135deg, #1e3a5f, #2d5a8f); }
+.beauty-end { background: linear-gradient(135deg, #166534, #22c55e); }
+.beauty-connector { display: flex; flex-direction: column; align-items: center; height: 28px; }
+.beauty-line { width: 3px; flex: 1; background: linear-gradient(to bottom, #94a3b8, #cbd5e1); border-radius: 2px; }
+.beauty-dot { width: 10px; height: 10px; border-radius: 50%; background: #64748b; margin-top: -1px; box-shadow: 0 0 0 3px #e2e8f0; }
+.beauty-node {
+  width: 100%; max-width: 440px; display: flex; gap: 14px; align-items: flex-start;
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  border: 1px solid #e2e8f0; border-left: 5px solid var(--accent);
+  border-radius: 14px; padding: 14px 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06), 0 8px 24px rgba(30,58,95,0.06);
+  animation: beauty-in 0.4s ease backwards; animation-delay: calc(var(--i) * 0.06s);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.beauty-node:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 12px 32px rgba(30,58,95,0.1); }
+.beauty-node.optional { border-left-color: #94a3b8; border-left-style: dashed; background: linear-gradient(135deg, #f8fafc, #f1f5f9); }
+.beauty-num {
+  flex: none; width: 38px; height: 38px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark)); color: #fff;
+  font-weight: 800; font-size: 16px; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+.beauty-node.optional .beauty-num { background: linear-gradient(135deg, #94a3b8, #64748b); }
+.beauty-content { flex: 1; min-width: 0; }
+.beauty-code { font-size: 12.5px; font-weight: 700; color: var(--accent-dark); letter-spacing: 0.3px; margin-bottom: 2px; }
+.beauty-title { font-size: 15.5px; font-weight: 700; color: #1e293b; line-height: 1.35; }
+.beauty-role, .beauty-time { font-size: 13px; color: #64748b; margin-top: 4px; }
+@keyframes beauty-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .beauty-node { animation: none; }
+}
+/* Dòng quy trình có thể nhấn để xem sơ đồ. */
+#proc-table tbody tr { cursor: pointer; }
+#proc-table tbody tr:hover { background: #f8fafc; }
+
 /* ---------- Bảng ---------- */
 .table-wrap {
   overflow-x: auto; background: #fff; border-radius: var(--radius);

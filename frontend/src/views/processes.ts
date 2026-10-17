@@ -71,11 +71,20 @@ export async function renderProcesses(root: HTMLElement, canManage: boolean): Pr
     }
   }
 
-  tbody.addEventListener("click", (ev) => {
+  tbody.addEventListener("click", async (ev) => {
     const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-act]");
-    if (!btn) return;
-    const id = btn.closest("tr")!.dataset.id!;
-    if (btn.dataset.act === "view") location.hash = "#/processes/" + id;
+    const tr = (ev.target as HTMLElement).closest("tr");
+    if (!tr?.dataset.id) return;
+    const id = tr.dataset.id;
+    // Nút "Chi tiết" → trang chi tiết đầy đủ.
+    if (btn?.dataset.act === "view") {
+      location.hash = "#/processes/" + id;
+      return;
+    }
+    // Nhấn vào dòng (không phải nút) → mở sơ đồ ngay.
+    if (!(ev.target as HTMLElement).closest("button")) {
+      await openProcessDiagram(dialogRoot, id);
+    }
   });
 
   const doSearch = () => reload();
@@ -89,6 +98,76 @@ export async function renderProcesses(root: HTMLElement, canManage: boolean): Pr
   });
 
   await reload();
+}
+
+/** Modal sơ đồ quy trình — mở ngay khi nhấn vào dòng quy trình ở danh mục. */
+async function openProcessDiagram(dialogRoot: HTMLElement, processId: string): Promise<void> {
+  dialogRoot.innerHTML = `
+    <div class="dialog-scrim"></div>
+    <div class="dialog diagram-dialog" role="dialog" aria-modal="true" aria-label="Sơ đồ quy trình">
+      <div class="diagram-header">
+        <div><h3 id="dg-name">Đang tải…</h3><p class="muted small" id="dg-sub"></p></div>
+        <button class="btn icon-btn" id="dg-close" aria-label="Đóng">✕</button>
+      </div>
+      <div id="dg-body"><p class="empty">Đang tải sơ đồ…</p></div>
+      <div class="dialog-actions">
+        <button class="btn" id="dg-detail">Xem chi tiết</button>
+      </div>
+    </div>`;
+  const close = () => {
+    dialogRoot.innerHTML = "";
+  };
+  dialogRoot.querySelector("#dg-close")!.addEventListener("click", close);
+  dialogRoot.querySelector(".dialog-scrim")!.addEventListener("click", close);
+  dialogRoot.querySelector("#dg-detail")!.addEventListener("click", () => {
+    close();
+    location.hash = "#/processes/" + processId;
+  });
+
+  try {
+    const p = await api.getProcess(processId);
+    // Ưu tiên bản đang hiệu lực, nếu không có thì lấy bản mới nhất.
+    const sorted = [...p.versions].sort((a, b) => b.version_number - a.version_number);
+    const ver = sorted.find((v) => v.status === "ACTIVE") ?? sorted[0];
+    dialogRoot.querySelector("#dg-name")!.textContent = p.name;
+    const verLabel = ver ? `v${ver.version_number} — ${STATUS_LABELS[ver.status] ?? ver.status}` : "Chưa có phiên bản";
+    dialogRoot.querySelector("#dg-sub")!.textContent = `Mã: ${p.code} · ${verLabel}`;
+    const body = dialogRoot.querySelector("#dg-body")!;
+    if (!ver) {
+      body.innerHTML = `<p class="empty">Quy trình chưa có phiên bản nào.</p>`;
+      return;
+    }
+    const { items } = await api.listSteps(ver.id);
+    if (items.length === 0) {
+      body.innerHTML = `<p class="empty">Phiên bản ${verLabel} chưa có bước nào.</p>`;
+      return;
+    }
+    body.innerHTML = renderBeautifulDiagram(items, p.name);
+  } catch (e) {
+    dialogRoot.querySelector("#dg-body")!.innerHTML =
+      `<p class="empty">Không tải được sơ đồ: ${esc(msg(e))}</p>`;
+  }
+}
+
+/** Vẽ sơ đồ đẹp — gradient, bóng đổ, hiệu ứng. */
+function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], processName: string): string {
+  return `
+    <div class="beauty-diagram" role="img" aria-label="Sơ đồ quy trình ${esc(processName)}">
+      <div class="beauty-start"><span>▶</span> Bắt đầu</div>
+      ${items.map((st, idx) => `
+        <div class="beauty-connector" aria-hidden="true"><span class="beauty-line"></span><span class="beauty-dot"></span></div>
+        <div class="beauty-node${st.is_required ? "" : " optional"}" style="--i:${idx}">
+          <div class="beauty-num">${idx + 1}</div>
+          <div class="beauty-content">
+            <div class="beauty-code">${esc(st.code)}${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}</div>
+            <div class="beauty-title">${esc(st.title)}</div>
+            ${st.role ? `<div class="beauty-role">👤 ${esc(st.role)}</div>` : ""}
+            ${st.target_duration_min ? `<div class="beauty-time">⏱ ~${st.target_duration_min} phút</div>` : ""}
+          </div>
+        </div>`).join("")}
+      <div class="beauty-connector" aria-hidden="true"><span class="beauty-line"></span><span class="beauty-dot"></span></div>
+      <div class="beauty-end"><span>■</span> Kết thúc</div>
+    </div>`;
 }
 
 function rowHtml(p: SopProcess): string {
