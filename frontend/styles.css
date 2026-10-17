@@ -548,3 +548,9 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .clickable-rows tbody tr { cursor: pointer; }
 .clickable-rows tbody tr:hover { background: #f8fafc; }
 .evidence-upload-group { display: flex; gap: 6px; }
+
+/* Ngoại lệ (SPEC §9.5). */
+.exception-item { background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+.exception-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.exception-desc { margin: 6px 0; font-size: 14px; white-space: pre-wrap; }
+.exception-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }

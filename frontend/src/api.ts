@@ -130,6 +130,27 @@ export interface StepResource {
   created_at: string;
 }
 
+export interface AppException {
+  id: string;
+  execution_id: string;
+  execution_step_id: string | null;
+  title: string;
+  description: string;
+  severity: string;
+  status: string;
+  created_by: string;
+  created_at: string;
+  creator_name?: string | null;
+  step_code?: string | null;
+  assigned_to: string | null;
+  resolution: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  close_note: string | null;
+  closed_by: string | null;
+  closed_at: string | null;
+}
+
 export interface ExecutionDetail extends Execution {
   process_code: string | null;
   steps: ExecutionStep[];
@@ -424,6 +445,23 @@ export const api = {
   },
   dashboardExportUrl(query: string): string {
     return `${apiBase()}/api/v1/dashboard/export.csv${query ? "?" + query : ""}`;
+  },
+
+  // --- Ngoại lệ (SPEC §9.5) ---
+  listExceptions(execId: string): Promise<{ items: AppException[]; total: number }> {
+    return req("GET", `/executions/${encodeURIComponent(execId)}/exceptions`);
+  },
+  createException(execId: string, input: { title: string; description: string; severity?: string; execution_step_id?: string }): Promise<AppException> {
+    return req("POST", `/executions/${encodeURIComponent(execId)}/exceptions`, input);
+  },
+  startException(exceptionId: string): Promise<AppException> {
+    return req("POST", `/exceptions/${encodeURIComponent(exceptionId)}:start`, {});
+  },
+  resolveException(exceptionId: string, resolution: string): Promise<AppException> {
+    return req("POST", `/exceptions/${encodeURIComponent(exceptionId)}:resolve`, { resolution });
+  },
+  closeException(exceptionId: string, close_note?: string): Promise<AppException> {
+    return req("POST", `/exceptions/${encodeURIComponent(exceptionId)}:close`, { close_note });
   },
 };
 

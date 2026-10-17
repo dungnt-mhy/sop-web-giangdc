@@ -220,6 +220,9 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       });
       // Tải bằng chứng cho từng bước.
       await loadAllEvidence(body, e.id);
+      // Tải danh sách ngoại lệ.
+      const isActive = e.status === "IN_PROGRESS" || e.status === "PAUSED";
+      await loadExceptions(body, dialogRoot, e.id, isActive, reload);
       // Xử lý chọn ảnh để tải lên (nén trước khi gửi).
       body.querySelectorAll<HTMLInputElement>("[data-ev-input]").forEach((input) => {
         input.addEventListener("change", async () => {
@@ -476,6 +479,167 @@ function openCompleteConfirm(
   });
 }
 
+/** Tải và hiển thị danh sách ngoại lệ. */
+async function loadExceptions(
+  body: HTMLElement,
+  dialogRoot: HTMLElement,
+  execId: string,
+  active: boolean,
+  reload: () => void
+): Promise<void> {
+  const listEl = body.querySelector<HTMLElement>("#exc-list")!;
+  const countEl = body.querySelector("[data-exc-count]") as HTMLElement;
+  try {
+    const { items } = await api.listExceptions(execId);
+    countEl.textContent = items.length > 0 ? `(${items.length})` : "";
+    if (items.length === 0) {
+      listEl.innerHTML = `<p class="empty">Chưa có ngoại lệ nào.</p>`;
+    } else {
+      const SEV_LABEL: Record<string, string> = { LOW: "Thấp", MEDIUM: "Trung bình", HIGH: "Cao", CRITICAL: "Nghiêm trọng" };
+      const ST_LABEL: Record<string, string> = { OPEN: "Mới", IN_PROGRESS: "Đang xử lý", RESOLVED: "Đã khắc phục", CLOSED: "Đã đóng" };
+      const stPill: Record<string, string> = { OPEN: "orange", IN_PROGRESS: "blue", RESOLVED: "green", CLOSED: "gray" };
+      listEl.innerHTML = items.map((ex) => `
+        <div class="exception-item" data-exid="${esc(ex.id)}">
+          <div class="exception-head">
+            <strong>${esc(ex.title)}</strong>
+            <span class="pill ${stPill[ex.status] ?? "gray"}">${esc(ST_LABEL[ex.status] ?? ex.status)}</span>
+            <span class="pill gray">${esc(SEV_LABEL[ex.severity] ?? ex.severity)}</span>
+          </div>
+          <p class="exception-desc">${esc(ex.description)}</p>
+          ${ex.step_code ? `<div class="muted small">Bước: ${esc(ex.step_code)}</div>` : ""}
+          ${ex.resolution ? `<div class="muted small">Khắc phục: ${esc(ex.resolution)}</div>` : ""}
+          <div class="muted small">Báo bởi ${esc(ex.creator_name ?? "—")} · ${esc(ex.created_at.slice(0, 16).replace("T", " "))}</div>
+          <div class="exception-actions">
+            ${ex.status === "OPEN" ? `<button class="btn sm" data-exc="start">Nhận xử lý</button>` : ""}
+            ${["OPEN", "IN_PROGRESS"].includes(ex.status) ? `<button class="btn sm primary" data-exc="resolve">Ghi nhận khắc phục</button>` : ""}
+            ${ex.status === "RESOLVED" ? `<button class="btn sm" data-exc="close">Đóng</button>` : ""}
+          </div>
+        </div>`).join("");
+      listEl.querySelectorAll<HTMLButtonElement>("[data-exc]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const exid = btn.closest("[data-exid]")!.getAttribute("data-exid")!;
+          const act = btn.dataset.exc!;
+          if (act === "start") {
+            try {
+              await api.startException(exid);
+              toast("Đã nhận xử lý ngoại lệ.");
+              await loadExceptions(body, dialogRoot, execId, active, reload);
+            } catch (e) { toast(`Lỗi: ${msg(e)}`); }
+          } else if (act === "resolve") {
+            openResolveDialog(dialogRoot, exid, async () => {
+              await loadExceptions(body, dialogRoot, execId, active, reload);
+            });
+          } else if (act === "close") {
+            const note = prompt("Ghi chú khi đóng (tùy chọn):") ?? "";
+            try {
+              await api.closeException(exid, note || undefined);
+              toast("Đã đóng ngoại lệ.");
+              await loadExceptions(body, dialogRoot, execId, active, reload);
+            } catch (e) { toast(`Lỗi: ${msg(e)}`); }
+          }
+        });
+      });
+    }
+    // Nút báo ngoại lệ.
+    body.querySelector("[data-exc-act='create']")?.addEventListener("click", () => {
+      openCreateExceptionDialog(dialogRoot, execId, async () => {
+        await loadExceptions(body, dialogRoot, execId, active, reload);
+      });
+    });
+  } catch {
+    listEl.innerHTML = `<p class="empty">Không tải được ngoại lệ.</p>`;
+  }
+}
+
+/** Dialog tạo ngoại lệ mới. */
+function openCreateExceptionDialog(dialogRoot: HTMLElement, execId: string, onDone: () => void): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Báo ngoại lệ">
+        <h3>⚠️ Báo ngoại lệ</h3>
+        <form id="exc-form">
+          <label>Tiêu đề <span class="req">*</span>
+            <input class="input" name="title" required maxlength="200" placeholder="VD: Hàng bị móp méo" /></label>
+          <label>Mô tả sự cố <span class="req">*</span>
+            <textarea class="input" name="description" rows="3" required placeholder="Mô tả chi tiết sự cố..."></textarea></label>
+          <label>Mức độ
+            <select class="input" name="severity">
+              <option value="LOW">Thấp</option>
+              <option value="MEDIUM" selected>Trung bình</option>
+              <option value="HIGH">Cao</option>
+              <option value="CRITICAL">Nghiêm trọng</option>
+            </select></label>
+          <p class="form-error" id="exc-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" class="btn" id="exc-cancel">Huỷ</button>
+            <button type="submit" class="btn primary">Báo ngoại lệ</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#exc-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+  dialogRoot.querySelector<HTMLFormElement>("#exc-form")!.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target as HTMLFormElement);
+    const errEl = dialogRoot.querySelector<HTMLElement>("#exc-error")!;
+    try {
+      await api.createException(execId, {
+        title: String(fd.get("title") ?? "").trim(),
+        description: String(fd.get("description") ?? "").trim(),
+        severity: String(fd.get("severity") ?? "MEDIUM"),
+      });
+      toast("Đã báo ngoại lệ.");
+      close();
+      onDone();
+    } catch (e) {
+      errEl.textContent = msg(e);
+      errEl.hidden = false;
+    }
+  });
+}
+
+/** Dialog ghi nhận cách khắc phục. */
+function openResolveDialog(dialogRoot: HTMLElement, exceptionId: string, onDone: () => void): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Ghi nhận khắc phục">
+        <h3>Ghi nhận khắc phục</h3>
+        <form id="exc-resolve-form">
+          <label>Cách khắc phục <span class="req">*</span>
+            <textarea class="input" name="resolution" rows="4" required placeholder="Mô tả cách đã xử lý..."></textarea></label>
+          <p class="form-error" id="exc-resolve-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" class="btn" id="exc-resolve-cancel">Huỷ</button>
+            <button type="submit" class="btn primary">Xác nhận đã khắc phục</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#exc-resolve-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+  dialogRoot.querySelector<HTMLFormElement>("#exc-resolve-form")!.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target as HTMLFormElement);
+    const errEl = dialogRoot.querySelector<HTMLElement>("#exc-resolve-error")!;
+    try {
+      await api.resolveException(exceptionId, String(fd.get("resolution") ?? "").trim());
+      toast("Đã ghi nhận khắc phục.");
+      close();
+      onDone();
+    } catch (e) {
+      errEl.textContent = msg(e);
+      errEl.hidden = false;
+    }
+  });
+}
+
 function detailHtml(e: ExecutionDetail): string {
   const p = e.progress;
   const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
@@ -556,6 +720,13 @@ function detailHtml(e: ExecutionDetail): string {
       <div data-exec-diagram hidden>
         ${renderExecDiagram(e.steps)}
       </div>
+    </section>
+    <section class="card">
+      <div class="steps-toolbar">
+        <h3>⚠️ Ngoại lệ <span class="muted small" data-exc-count></span></h3>
+        ${active ? `<button class="btn sm" data-exc-act="create">+ Báo ngoại lệ</button>` : ""}
+      </div>
+      <div id="exc-list"><p class="empty">Đang tải…</p></div>
     </section>`;
 }
 

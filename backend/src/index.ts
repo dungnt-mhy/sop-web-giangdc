@@ -85,6 +85,13 @@ import {
   handleDashboardExportCsv,
   handleDashboardSummary,
 } from "./routes/dashboard";
+import {
+  handleCloseException,
+  handleCreateException,
+  handleListExceptions,
+  handleResolveException,
+  handleStartException,
+} from "./routes/exceptions";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -347,6 +354,20 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   }
   if (path === "/dashboard/export.csv" && method === "GET") {
     return handleDashboardExportCsv(ctx);
+  }
+  // --- Ngoại lệ (SPEC §9.5) ---
+  const excCreate = /^\/executions\/([^/:]+)\/exceptions$/.exec(path);
+  if (excCreate && UUID_RE.test(excCreate[1])) {
+    const eid = decodeURIComponent(excCreate[1]);
+    if (method === "POST") return handleCreateException(ctx, eid);
+    if (method === "GET") return handleListExceptions(ctx, eid);
+  }
+  const excAct = /^\/exceptions\/([^/:]+):(start|resolve|close)$/.exec(path);
+  if (excAct && method === "POST" && UUID_RE.test(excAct[1])) {
+    const exid = decodeURIComponent(excAct[1]);
+    if (excAct[2] === "start") return handleStartException(ctx, exid);
+    if (excAct[2] === "resolve") return handleResolveException(ctx, exid);
+    if (excAct[2] === "close") return handleCloseException(ctx, exid);
   }
 
   return apiError("NOT_FOUND", "Not found", ctx.requestId);
