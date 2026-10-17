@@ -20,6 +20,7 @@ type ExecutionRow = {
   status: string;
   assignee_id: string | null;
   due_at: string | null;
+  execution_date: string | null;
   cancel_reason: string | null;
   created_at: string;
   updated_at: string | null;
@@ -55,6 +56,7 @@ function toPublicExec(e: ExecutionRow, processName?: string, progress?: { total:
     status: e.status,
     assignee_id: e.assignee_id,
     due_at: e.due_at,
+    execution_date: e.execution_date,
     cancel_reason: e.cancel_reason,
     created_at: e.created_at,
     started_at: e.started_at,

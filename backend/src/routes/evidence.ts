@@ -227,10 +227,10 @@ export async function handleListAllEvidence(ctx: Ctx) {
 
   let sql = `
     SELECT ev.*, e.code as execution_code, es.code as step_code, es.title as step_title,
-           u.display_name as uploader_name
+           u.display_name as uploader_name, es.execution_id
     FROM evidence ev
-    LEFT JOIN executions e ON e.id = ev.execution_id
     LEFT JOIN execution_steps es ON es.id = ev.execution_step_id
+    LEFT JOIN executions e ON e.id = es.execution_id
     LEFT JOIN users u ON u.id = ev.uploaded_by
     WHERE 1=1`;
   const params: unknown[] = [];
