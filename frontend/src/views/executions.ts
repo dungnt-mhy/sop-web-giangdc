@@ -870,6 +870,18 @@ function detailHtml(e: ExecutionDetail): string {
               <div class="step-assignees" data-assignees-for="${esc(st.id)}"><span class="muted small">Đang tải…</span></div>
             </div>
             ${st.instruction ? `<p class="step-instr">${esc(st.instruction)}</p>` : ""}
+            ${(st as unknown as Record<string, unknown>).prerequisite || (st as unknown as Record<string, unknown>).input_desc || (st as unknown as Record<string, unknown>).expected_result || (st as unknown as Record<string, unknown>).output_desc || (st as unknown as Record<string, unknown>).warning || (st as unknown as Record<string, unknown>).target_duration_min ? `
+            <details class="step-details">
+              <summary>📋 Chi tiết bước</summary>
+              <dl class="detail-list">
+                ${(st as unknown as Record<string, unknown>).prerequisite ? `<div><dt>Điều kiện tiên quyết</dt><dd>${esc((st as unknown as Record<string, unknown>).prerequisite as string)}</dd></div>` : ""}
+                ${(st as unknown as Record<string, unknown>).input_desc ? `<div><dt>Đầu vào</dt><dd>${esc((st as unknown as Record<string, unknown>).input_desc as string)}</dd></div>` : ""}
+                ${(st as unknown as Record<string, unknown>).expected_result ? `<div><dt>Kết quả mong đợi</dt><dd>${esc((st as unknown as Record<string, unknown>).expected_result as string)}</dd></div>` : ""}
+                ${(st as unknown as Record<string, unknown>).output_desc ? `<div><dt>Đầu ra</dt><dd>${esc((st as unknown as Record<string, unknown>).output_desc as string)}</dd></div>` : ""}
+                ${(st as unknown as Record<string, unknown>).target_duration_min ? `<div><dt>Thời gian mục tiêu</dt><dd>${esc(String((st as unknown as Record<string, unknown>).target_duration_min))} phút</dd></div>` : ""}
+                ${(st as unknown as Record<string, unknown>).warning ? `<div class="warning"><dt>⚠️ Cảnh báo</dt><dd>${esc((st as unknown as Record<string, unknown>).warning as string)}</dd></div>` : ""}
+              </dl>
+            </details>` : ""}
             <div class="evidence-section" data-evidence-for="${esc(st.id)}">
               <div class="evidence-head">
                 <span class="evidence-title">📷 Bằng chứng <span class="evidence-count" data-ev-count></span></span>

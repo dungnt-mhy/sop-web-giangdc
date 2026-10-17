@@ -577,3 +577,11 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .nav-parent .nav-arrow { float: right; transition: transform 0.2s; }
 .nav-group.open .nav-parent .nav-arrow { transform: rotate(180deg); }
 .nav-child { font-size: 0.95em; }
+.step-details { margin: 8px 0; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px; background: #f9fafb; }
+.step-details summary { cursor: pointer; font-weight: 600; color: #374151; }
+.step-details .detail-list { margin: 8px 0 0; }
+.step-details .detail-list div { margin-bottom: 6px; }
+.step-details .detail-list dt { font-weight: 600; font-size: 0.9em; color: #6b7280; }
+.step-details .detail-list dd { margin: 2px 0 0; }
+.step-details .warning dt { color: #d97706; }
+.step-details .warning dd { color: #92400e; background: #fef3c7; padding: 6px 8px; border-radius: 4px; }
