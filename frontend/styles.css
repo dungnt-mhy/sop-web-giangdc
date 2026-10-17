@@ -566,3 +566,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 @media (max-width: 480px) { .form-row-2 { grid-template-columns: 1fr; } }
 .view-toggle { display: flex; gap: 4px; margin-left: auto; }
 .view-btn.active { background: #e0e7ff; border-color: #6366f1; }
+.step-assignees { margin-top: 6px; }
+.assign-list { max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin: 12px 0; }
+.assign-item { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.assign-item:hover { background: #f8fafc; }

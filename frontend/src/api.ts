@@ -24,6 +24,7 @@ export interface PublicUser {
   display_name: string;
   email: string | null;
   status: string;
+  position: string | null;
   roles: string[];
   permissions: string[];
   must_change_password: boolean;
@@ -84,6 +85,8 @@ export interface Execution {
   execution_date: string | null;
   execution_time: string | null;
   shift: string | null;
+  supervisor_id: string | null;
+  supervisor_name?: string | null;
   cancel_reason: string | null;
   created_at: string;
   started_at: string | null;
@@ -267,6 +270,7 @@ export const api = {
   createUser(input: {
     username: string;
     display_name: string;
+    position?: string;
     email?: string;
     password: string;
     roles: string[];
@@ -356,7 +360,7 @@ export const api = {
     const suffix = qs.toString() ? "?" + qs.toString() : "";
     return req("GET", "/executions" + suffix);
   },
-  createExecution(input: { process_id: string; title?: string; assignee_id?: string; due_at?: string; execution_date: string; execution_time?: string; shift?: string }): Promise<Execution> {
+  createExecution(input: { process_id: string; title?: string; assignee_id?: string; supervisor_id?: string; due_at?: string; execution_date: string; execution_time?: string; shift?: string }): Promise<Execution> {
     return req("POST", "/executions", input);
   },
   getExecution(id: string): Promise<ExecutionDetail> {
@@ -473,6 +477,12 @@ export const api = {
   },
   listAllEvidence(query: string): Promise<{ items: Record<string, unknown>[]; total: number }> {
     return req("GET", `/evidence${query ? "?" + query : ""}`);
+  },
+  listStepAssignees(execId: string, stepId: string): Promise<{ items: { id: string; username: string; display_name: string; position: string | null }[] }> {
+    return req("GET", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/assignees`);
+  },
+  setStepAssignees(execId: string, stepId: string, user_ids: string[]): Promise<{ assigned: number }> {
+    return req("PUT", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/assignees`, { user_ids });
   },
 };
 

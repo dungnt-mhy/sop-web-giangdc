@@ -28,6 +28,7 @@ function publicUser(
     display_name: string;
     email: string | null;
     status: string;
+    position: string | null;
     password_changed_at: string | null;
     failed_login_count: number;
     locked_until: string | null;
@@ -43,6 +44,7 @@ function publicUser(
     display_name: u.display_name,
     email: u.email,
     status: u.status,
+    position: u.position,
     roles,
     permissions: permissionsForRoles(roles),
     must_change_password: mustChangePassword,
@@ -93,7 +95,7 @@ export async function handleListUsers(ctx: Ctx): Promise<Response> {
     .bind(cursor, cursor, cursor, cursor, limit + 1)
     .all<{
       id: string; username: string; display_name: string; email: string | null;
-      status: string; password_changed_at: string | null; failed_login_count: number;
+      status: string; position: string | null; password_changed_at: string | null; failed_login_count: number;
       locked_until: string | null; created_at: string; updated_at: string | null;
     }>();
   const all = rows.results ?? [];
@@ -123,6 +125,7 @@ export async function handleCreateUser(ctx: Ctx): Promise<Response> {
   const displayName = typeof body?.display_name === "string" ? body.display_name.trim() : "";
   const emailRaw = typeof body?.email === "string" ? body.email.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
+  const position = typeof body?.position === "string" ? body.position.trim() || null : null;
   const roles = validateRolesInput(body?.roles);
 
   const username = normalizeUsername(usernameRaw);
@@ -160,10 +163,10 @@ export async function handleCreateUser(ctx: Ctx): Promise<Response> {
   const stmts: D1PreparedStatement[] = [
     db
       .prepare(
-        `INSERT INTO users (id, username, display_name, email, status, failed_login_count, created_at, created_by)
-         VALUES (?, ?, ?, ?, 'active', 0, ?, ?)`
+        `INSERT INTO users (id, username, display_name, email, position, status, failed_login_count, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, 'active', 0, ?, ?)`
       )
-      .bind(userId, username, displayName, emailRaw || null, now, (s as SessionInfo).user.id),
+      .bind(userId, username, displayName, emailRaw || null, position, now, (s as SessionInfo).user.id),
     db
       .prepare(
         `INSERT INTO local_credentials (id, user_id, password_hash, password_salt, hash_algorithm, hash_params, must_change_password, created_at, created_by)
@@ -244,6 +247,12 @@ export async function handlePatchUser(ctx: Ctx, id: string): Promise<Response> {
     updates.push("status = ?");
     binds.push(v);
     diff.status = v;
+  }
+  if (body?.position !== undefined) {
+    const v = typeof body.position === "string" ? body.position.trim() || null : null;
+    updates.push("position = ?");
+    binds.push(v);
+    diff.position = v;
   }
 
   let roles: string[] | null = null;

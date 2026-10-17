@@ -62,8 +62,10 @@ import {
   handleCreateExecution,
   handleGetExecution,
   handleListExecutions,
+  handleListStepAssignees,
   handlePauseExecution,
   handleResumeExecution,
+  handleSetStepAssignees,
   handleSkipStep,
   handleStartExecution,
   handleStartStep,
@@ -312,6 +314,14 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     if (action === "start") return handleStartStep(ctx, eid, sid);
     if (action === "complete") return handleCompleteStep(ctx, eid, sid);
     if (action === "skip") return handleSkipStep(ctx, eid, sid);
+  }
+  // --- Phân công người cho bước ---
+  const asg = /^\/executions\/([^/:]+)\/steps\/([^/:]+)\/assignees$/.exec(path);
+  if (asg && UUID_RE.test(asg[1]) && UUID_RE.test(asg[2])) {
+    const eid = decodeURIComponent(asg[1]);
+    const sid = decodeURIComponent(asg[2]);
+    if (method === "GET") return handleListStepAssignees(ctx, eid, sid);
+    if (method === "PUT") return handleSetStepAssignees(ctx, eid, sid);
   }
   // --- Bằng chứng (Task 1.7: EVD-001..013) ---
   const evUp = /^\/executions\/([^/:]+)\/steps\/([^/:]+)\/evidence$/.exec(path);

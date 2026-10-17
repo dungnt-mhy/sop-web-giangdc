@@ -140,6 +140,10 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
             <option value="">Tôi (mặc định)</option>
           </select>
           <span class="hint">Để trống = chính bạn thực hiện. Admin có thể chọn người khác.</span></label>
+        <label>Người giám sát
+          <select class="input" name="supervisor_id" id="exec-supervisor">
+            <option value="">— Không có —</option>
+          </select></label>
         <p class="form-error" id="exec-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button type="button" class="btn" id="exec-cancel">Huỷ</button>
@@ -155,14 +159,18 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
 
   const sel = dialogRoot.querySelector<HTMLSelectElement>("#exec-process")!;
   const selAssignee = dialogRoot.querySelector<HTMLSelectElement>("#exec-assignee")!;
-  // Tải danh sách người dùng cho ô chọn người thực hiện.
+  const selSupervisor = dialogRoot.querySelector<HTMLSelectElement>("#exec-supervisor")!;
+  // Tải danh sách người dùng cho ô chọn người thực hiện / giám sát.
   api.listUsers().then((res) => {
     const items = res?.items ?? [];
     const active = items.filter((u) => u.status === "ACTIVE");
     if (active.length > 0) {
-      selAssignee.innerHTML = `<option value="">Tôi (mặc định)</option>` + active.map((u) =>
-        `<option value="${esc(u.id)}">${esc(u.display_name ?? u.username)} (${esc(u.username)})</option>`
-      ).join("");
+      const opts = active.map((u) => {
+        const label = u.position ? `${esc(u.display_name)} — ${esc(u.position)}` : esc(u.display_name);
+        return `<option value="${esc(u.id)}">${label} (${esc(u.username)})</option>`;
+      }).join("");
+      selAssignee.innerHTML = `<option value="">Tôi (mặc định)</option>` + opts;
+      selSupervisor.innerHTML = `<option value="">— Không có —</option>` + opts;
     }
   }).catch(() => { /* giữ mặc định */ });
   api.listProcesses().then(({ items }) => {
@@ -207,9 +215,11 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
     if (shift) input.shift = shift;
     const assignee_id = String(fd.get("assignee_id") ?? "").trim();
     if (assignee_id) input.assignee_id = assignee_id;
+    const supervisor_id = String(fd.get("supervisor_id") ?? "").trim();
+    if (supervisor_id) input.supervisor_id = supervisor_id;
     setLoading(submitBtn, true, "Đang tạo…");
     try {
-      const created = await api.createExecution(input as { process_id: string; title?: string; execution_date: string; execution_time?: string; shift?: string; assignee_id?: string });
+      const created = await api.createExecution(input as { process_id: string; title?: string; execution_date: string; execution_time?: string; shift?: string; assignee_id?: string; supervisor_id?: string });
       toast(`Đã tạo lượt ${created.code}.`);
       close();
       onDone();
@@ -263,6 +273,8 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       });
       // Tải bằng chứng cho từng bước.
       await loadAllEvidence(body, e.id);
+      // Tải phân công cho từng bước.
+      await loadAllAssignees(body, e.id);
       // Tải danh sách ngoại lệ.
       const isActive = e.status === "IN_PROGRESS" || e.status === "PAUSED";
       await loadExceptions(body, dialogRoot, e.id, isActive, reload);
@@ -316,6 +328,12 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         }
         await api.skipStep(execId, sid, reason.trim());
         toast("Đã bỏ qua bước.");
+      } else if (act === "assign") {
+        restore();
+        await openAssignDialog(dialogRoot, execId, sid, step?.code ?? "", async () => {
+          await loadAllAssignees(body, execId);
+        });
+        return;
       }
       await reload();
     } catch (e) {
@@ -685,6 +703,84 @@ function openResolveDialog(dialogRoot: HTMLElement, exceptionId: string, onDone:
 
 const SHIFT_LABEL: Record<string, string> = { MORNING: "sáng", NOON: "trưa", AFTERNOON: "chiều", NIGHT: "đêm" };
 
+/** Tải phân công cho tất cả các bước. */
+async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void> {
+  const els = body.querySelectorAll<HTMLElement>("[data-assignees-for]");
+  for (let i = 0; i < els.length; i++) {
+    const el = els[i];
+    const sid = el.dataset.assigneesFor!;
+    try {
+      const { items } = await api.listStepAssignees(execId, sid);
+      if (items.length === 0) {
+        el.innerHTML = `<span class="muted small">Chưa phân công</span>`;
+      } else {
+        el.innerHTML = `<span class="muted small">👥 ` + items.map((u) =>
+          esc(u.display_name) + (u.position ? ` (${esc(u.position)})` : "")
+        ).join(", ") + `</span>`;
+      }
+    } catch {
+      el.innerHTML = ``;
+    }
+  }
+}
+
+/** Dialog phân công nhiều người cho bước. */
+async function openAssignDialog(
+  dialogRoot: HTMLElement,
+  execId: string,
+  stepId: string,
+  stepCode: string,
+  onDone: () => void
+): Promise<void> {
+  const [{ items: current }, { items: users }] = await Promise.all([
+    api.listStepAssignees(execId, stepId),
+    api.listUsers(),
+  ]);
+  const currentIds = new Set(current.map((u) => u.id));
+  const active = (users ?? []).filter((u) => u.status === "ACTIVE");
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Phân công bước">
+        <h3>👥 Phân công bước "${esc(stepCode)}"</h3>
+        <p class="muted small">Chọn một hoặc nhiều người thực hiện bước này.</p>
+        <form id="assign-form">
+          <div class="assign-list">
+            ${active.map((u) => `
+              <label class="assign-item">
+                <input type="checkbox" name="user_ids" value="${esc(u.id)}" ${currentIds.has(u.id) ? "checked" : ""} />
+                <span>${esc(u.display_name)}${u.position ? ` <span class="muted small">— ${esc(u.position)}</span>` : ""}</span>
+              </label>`).join("")}
+          </div>
+          <p class="form-error" id="assign-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" class="btn" id="assign-cancel">Huỷ</button>
+            <button type="submit" class="btn primary">Lưu phân công</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#assign-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+  dialogRoot.querySelector<HTMLFormElement>("#assign-form")!.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target as HTMLFormElement);
+    const userIds = fd.getAll("user_ids").map(String);
+    const errEl = dialogRoot.querySelector<HTMLElement>("#assign-error")!;
+    try {
+      await api.setStepAssignees(execId, stepId, userIds);
+      toast(`Đã phân công ${userIds.length} người.`);
+      close();
+      onDone();
+    } catch (e) {
+      errEl.textContent = msg(e);
+      errEl.hidden = false;
+    }
+  });
+}
+
 function detailHtml(e: ExecutionDetail): string {
   const p = e.progress;
   const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
@@ -697,6 +793,7 @@ function detailHtml(e: ExecutionDetail): string {
         <div class="info-row"><dt>Quy trình</dt><dd>${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})</dd></div>
         <div class="info-row"><dt>Ngày thực hiện</dt><dd>${esc(e.execution_date ?? "—")}${e.execution_time ? ` · ${esc(e.execution_time)}` : ""}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>
         <div class="info-row"><dt>Người thực hiện</dt><dd>${esc(e.assignee_name ?? "—")}</dd></div>
+        ${e.supervisor_name ? `<div class="info-row"><dt>Người giám sát</dt><dd>${esc(e.supervisor_name)}</dd></div>` : ""}
         ${e.creator_name && e.creator_name !== e.assignee_name ? `<div class="info-row"><dt>Người tạo</dt><dd>${esc(e.creator_name)}</dd></div>` : ""}
         <div class="info-row"><dt>Tiến độ</dt><dd>
           <div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
@@ -741,7 +838,9 @@ function detailHtml(e: ExecutionDetail): string {
                 ${canStart ? `<button class="btn sm primary" data-step="start">Bắt đầu</button>` : ""}
                 ${canFinish ? `<button class="btn sm primary" data-step="complete">Hoàn thành</button>` : ""}
                 ${canSkip ? `<button class="btn sm" data-step="skip">Bỏ qua</button>` : ""}
+                ${active ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : ""}
               </div>
+              <div class="step-assignees" data-assignees-for="${esc(st.id)}"><span class="muted small">Đang tải…</span></div>
             </div>
             ${st.instruction ? `<p class="step-instr">${esc(st.instruction)}</p>` : ""}
             <div class="evidence-section" data-evidence-for="${esc(st.id)}">

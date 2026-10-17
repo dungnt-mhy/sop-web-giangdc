@@ -23,6 +23,7 @@ type ExecutionRow = {
   execution_date: string | null;
   execution_time: string | null;
   shift: string | null;
+  supervisor_id: string | null;
   cancel_reason: string | null;
   created_at: string;
   updated_at: string | null;
@@ -61,6 +62,7 @@ function toPublicExec(e: ExecutionRow, processName?: string, progress?: { total:
     execution_date: e.execution_date,
     execution_time: e.execution_time,
     shift: e.shift,
+    supervisor_id: e.supervisor_id,
     cancel_reason: e.cancel_reason,
     created_at: e.created_at,
     started_at: e.started_at,
@@ -125,19 +127,21 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
   const rows = await db
     .prepare(
       `SELECT e.*, p.name AS process_name,
-              ua.display_name AS assignee_name, uc.display_name AS creator_name FROM executions e
+              ua.display_name AS assignee_name, uc.display_name AS creator_name,
+              us.display_name AS supervisor_name FROM executions e
        LEFT JOIN processes p ON p.id = e.process_id
        LEFT JOIN users ua ON ua.id = e.assignee_id
        LEFT JOIN users uc ON uc.id = e.created_by
+       LEFT JOIN users us ON us.id = e.supervisor_id
        ${where} ORDER BY e.created_at DESC LIMIT 100`
     )
     .bind(...binds)
-    .all<ExecutionRow & { process_name: string; assignee_name: string | null; creator_name: string | null }>();
+    .all<ExecutionRow & { process_name: string; assignee_name: string | null; creator_name: string | null; supervisor_name: string | null }>();
 
   const items = [];
   for (const r of rows.results) {
     const progress = await getProgress(db, r.id);
-    items.push({ ...toPublicExec(r, r.process_name, progress), assignee_name: r.assignee_name, creator_name: r.creator_name });
+    items.push({ ...toPublicExec(r, r.process_name, progress), assignee_name: r.assignee_name, creator_name: r.creator_name, supervisor_name: r.supervisor_name });
   }
   return ok({ items, total: items.length });
 }
@@ -205,12 +209,19 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   const shift = typeof body?.shift === "string" && ["MORNING", "NOON", "AFTERNOON", "NIGHT"].includes(body.shift)
     ? body.shift
     : null;
+  const supervisorId = typeof body?.supervisor_id === "string" && body.supervisor_id.trim()
+    ? body.supervisor_id.trim()
+    : null;
+  if (supervisorId) {
+    const sup = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(supervisorId).first();
+    if (!sup) return apiError("VALIDATION_ERROR", "Người giám sát không tồn tại.", ctx.requestId);
+  }
 
   const stmts: D1PreparedStatement[] = [
     db.prepare(
-      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, due_at, execution_date, execution_time, shift, created_at, created_by)
-       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(execId, code, processId, version.id, title, assigneeId, dueAt, executionDate, executionTime, shift, now, me.user.id),
+      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, supervisor_id, due_at, execution_date, execution_time, shift, created_at, created_by)
+       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorId, dueAt, executionDate, executionTime, shift, now, me.user.id),
   ];
   for (const [idx, st] of steps.results.entries()) {
     stmts.push(
@@ -246,7 +257,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     name: string;
     code: string;
   }>();
-  const users = await db.prepare(`SELECT id, display_name FROM users WHERE id IN (?, ?)`).bind(e.assignee_id, e.created_by).all<{ id: string; display_name: string }>();
+  const users = await db.prepare(`SELECT id, display_name FROM users WHERE id IN (?, ?, ?)`).bind(e.assignee_id, e.created_by, e.supervisor_id).all<{ id: string; display_name: string }>();
   const nameById: Record<string, string> = {};
   for (const u of users.results ?? []) nameById[u.id] = u.display_name;
   const steps = await db
@@ -259,8 +270,66 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     process_code: pname?.code ?? null,
     assignee_name: e.assignee_id ? nameById[e.assignee_id] ?? null : null,
     creator_name: e.created_by ? nameById[e.created_by] ?? null : null,
+    supervisor_name: e.supervisor_id ? nameById[e.supervisor_id] ?? null : null,
     steps: steps.results.map(toPublicStep),
   });
+}
+
+/** GET /executions/{eid}/steps/{sid}/assignees — danh sách người được phân công. */
+export async function handleListStepAssignees(ctx: Ctx, execId: string, stepId: string) {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const db = ctx.env.sop_demo_db;
+  const rows = await db.prepare(`
+    SELECT u.id, u.username, u.display_name, u.position, a.assigned_at
+    FROM execution_step_assignees a
+    JOIN users u ON u.id = a.user_id
+    WHERE a.execution_step_id = ?
+    ORDER BY a.assigned_at ASC
+  `).bind(stepId).all();
+  return ok({ items: rows.results ?? [] });
+}
+
+/** PUT /executions/{eid}/steps/{sid}/assignees — gán danh sách người (thay thế toàn bộ). */
+export async function handleSetStepAssignees(ctx: Ctx, execId: string, stepId: string) {
+  const me = await requirePermission(ctx, "executions.execute");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+
+  const step = await db.prepare(`SELECT id, execution_id FROM execution_steps WHERE id = ?`).bind(stepId).first<{ id: string; execution_id: string }>();
+  if (!step || step.execution_id !== execId) {
+    return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
+  }
+
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const userIds = Array.isArray(body?.user_ids) ? body.user_ids.filter((x): x is string => typeof x === "string") : [];
+  // Kiểm tra tất cả user tồn tại.
+  for (const uid of userIds) {
+    const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(uid).first();
+    if (!u) return apiError("VALIDATION_ERROR", `Người dùng không tồn tại: ${uid}`, ctx.requestId);
+  }
+
+  const now = nowIso();
+  const stmts: D1PreparedStatement[] = [
+    db.prepare(`DELETE FROM execution_step_assignees WHERE execution_step_id = ?`).bind(stepId),
+  ];
+  for (const uid of [...new Set(userIds)]) {
+    stmts.push(
+      db.prepare(`INSERT INTO execution_step_assignees (execution_step_id, user_id, assigned_at, assigned_by) VALUES (?, ?, ?, ?)`)
+        .bind(stepId, uid, now, me.user.id)
+    );
+  }
+  await db.batch(stmts);
+
+  await audit(db, {
+    event_type: "STEP_ASSIGNEES_SET",
+    actor_id: me.user.id,
+    object_type: "execution_step",
+    object_id: stepId,
+    request_id: ctx.requestId,
+    diff: { user_ids: userIds },
+  });
+  return ok({ assigned: [...new Set(userIds)].length });
 }
 
 // Chuyển trạng thái execution — dùng chung.

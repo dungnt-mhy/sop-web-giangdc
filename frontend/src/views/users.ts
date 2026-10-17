@@ -86,7 +86,7 @@ function rowHtml(u: PublicUser, selfId: string): string {
   const locked = !!(u.locked_until && u.locked_until > new Date().toISOString());
   return `<tr data-id="${esc(u.id)}">
     <td><strong>${esc(u.username)}</strong>${isSelf ? ' <span class="muted">(bạn)</span>' : ""}</td>
-    <td>${esc(u.display_name)}${u.email ? `<div class="muted small">${esc(u.email)}</div>` : ""}</td>
+    <td>${esc(u.display_name)}${u.position ? `<div class="muted small">${esc(u.position)}</div>` : ""}${u.email ? `<div class="muted small">${esc(u.email)}</div>` : ""}</td>
     <td>${u.roles.map((r) => `<span class="role-badge sm">${esc(roleLabel(r))}</span>`).join(" ")}</td>
     <td>${statusLabel(u)}</td>
     <td class="actions">
@@ -169,6 +169,7 @@ function openUserDialog(
           <label>Tên đăng nhập ${isNew ? '<input name="username" required minlength="3" maxlength="32" autocomplete="off" />' : `<input value="${esc(existing!.username)}" disabled />`}
             <span class="hint">3–32 ký tự: chữ thường, số, . _ -</span></label>
           <label>Tên hiển thị <input name="display_name" required maxlength="100" value="${existing ? esc(existing.display_name) : ""}" /></label>
+          <label>Chức vụ <input name="position" maxlength="100" placeholder="VD: Trưởng ca, Thợ chính…" value="${existing?.position ? esc(existing.position) : ""}" /></label>
           <label>Email <input name="email" type="email" maxlength="120" value="${existing?.email ? esc(existing.email) : ""}" /></label>
           ${isNew ? `<label>Mật khẩu tạm <input name="password" type="password" required minlength="8" autocomplete="new-password" />
             <span class="hint">Ít nhất 8 ký tự. Người dùng bắt buộc đổi ở lần đăng nhập đầu.</span></label>` : ""}
@@ -230,6 +231,7 @@ function openUserDialog(
         await api.createUser({
           username: String(fd.get("username") ?? ""),
           display_name: String(fd.get("display_name") ?? ""),
+          position: String(fd.get("position") ?? "") || undefined,
           email: String(fd.get("email") ?? "") || undefined,
           password: String(fd.get("password") ?? ""),
           roles,
@@ -238,6 +240,7 @@ function openUserDialog(
       } else {
         await api.patchUser(existing!.id, {
           display_name: String(fd.get("display_name") ?? ""),
+          position: String(fd.get("position") ?? "") || undefined,
           email: String(fd.get("email") ?? "") || null,
           status: String(fd.get("status") ?? "active"),
           roles,
