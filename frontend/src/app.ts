@@ -59,7 +59,7 @@ function renderShell(): void {
   const name = session.user.display_name || session.user.username;
   const navItems: Array<{ hash: string; label: string; perm?: string }> = [
     { hash: "#/home", label: "Trang chủ" },
-    { hash: "#/my-work", label: "Việc của tôi", perm: "executions.perform" },
+    { hash: "#/my-work", label: "Công việc của tôi", perm: "executions.perform" },
     { hash: "#/processes", label: "Quy trình" },
     { hash: "#/dashboard", label: "Báo cáo", perm: "reports.view" },
     { hash: "#/users", label: "Người dùng", perm: "users.manage" },

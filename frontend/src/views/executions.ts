@@ -36,13 +36,13 @@ function msg(e: unknown): string {
   return e instanceof Error ? e.message : "lỗi không xác định";
 }
 
-/** Trang "Việc của tôi" (#/my-work) — danh sách lượt được giao (EXE-011). */
+/** Trang "Công việc của tôi" (#/my-work) — danh sách lượt được giao (EXE-011). */
 export async function renderMyWork(root: HTMLElement): Promise<void> {
   root.innerHTML = `
     <div class="page-head">
-      <div><h2>Việc của tôi</h2>
+      <div><h2>Công việc của tôi</h2>
       <p class="page-sub">Các lượt thực hiện được giao cho bạn.</p></div>
-      <button class="btn primary" id="btn-create-exec">+ Tạo lượt mới</button>
+      <button class="btn primary" id="btn-create-exec">+ Tạo lượt công việc mới</button>
     </div>
     <div class="filter-bar">
       <select id="flt-status" class="input" aria-label="Trạng thái">
@@ -112,7 +112,7 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
   dialogRoot.innerHTML = `
     <div class="dialog-scrim"></div>
     <div class="dialog" role="dialog" aria-modal="true" aria-label="Tạo lượt thực hiện">
-      <h3>Tạo lượt thực hiện mới</h3>
+      <h3>Tạo lượt công việc mới</h3>
       <form id="exec-form" novalidate>
         <label>Quy trình <span class="req">*</span>
           <select class="input" name="process_id" id="exec-process" required>
@@ -183,7 +183,7 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
 export async function renderExecutionDetail(root: HTMLElement, execId: string): Promise<void> {
   root.innerHTML = `
     <div class="page-head">
-      <div><a href="#/my-work" class="link back">← Việc của tôi</a>
+      <div><a href="#/my-work" class="link back">← Công việc của tôi</a>
       <h2 id="ex-code">Đang tải…</h2>
       <p class="page-sub" id="ex-sub"></p></div>
       <div class="head-actions" id="ex-actions"></div>
@@ -482,7 +482,7 @@ function detailHtml(e: ExecutionDetail): string {
   const active = e.status === "IN_PROGRESS";
   return `
     <section class="card">
-      <h3>Thông tin lượt</h3>
+      <h3>Thông tin lượt công việc</h3>
       <dl class="info-list">
         <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}</dd></div>
         <div class="info-row"><dt>Quy trình</dt><dd>${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})</dd></div>

@@ -28,7 +28,7 @@ export async function renderDashboard(root: HTMLElement): Promise<void> {
     </div>
     <div id="db-kpis"><p class="empty">Đang tải…</p></div>
     <section class="card">
-      <h3>Lượt thực hiện</h3>
+      <h3>Lượt công việc</h3>
       <div id="db-list"><p class="empty">Đang tải…</p></div>
     </section>`;
 
@@ -93,7 +93,7 @@ function renderList(root: HTMLElement, items: any[]): void {
   }
   el.innerHTML = `
     <div class="table-wrap"><table class="table clickable-rows" id="db-table">
-      <thead><tr><th>Mã lượt</th><th>Quy trình</th><th>Trạng thái</th><th>Người thực hiện</th><th>Tạo lúc</th><th>Hoàn thành</th></tr></thead>
+      <thead><tr><th>Mã lượt công việc</th><th>Quy trình</th><th>Trạng thái</th><th>Người thực hiện</th><th>Tạo lúc</th><th>Hoàn thành</th></tr></thead>
       <tbody>
         ${items.map((e) => `
           <tr data-id="${esc(e.id)}">

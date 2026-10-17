@@ -22,7 +22,7 @@ export function renderHome(root: HTMLElement, ctx: HomeCtx): void {
   if (can(session, "executions.perform")) {
     cards.push(`
       <section class="card">
-        <h3>Việc của tôi</h3>
+        <h3>Công việc của tôi</h3>
         <p class="empty">Chưa có công việc nào được giao. Khi có lượt thực hiện mới,
         chúng sẽ hiện ở đây để bạn tiếp tục.</p>
       </section>`);
