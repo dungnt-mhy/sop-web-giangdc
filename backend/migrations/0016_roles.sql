@@ -38,27 +38,33 @@ INSERT INTO role_permissions (role_id, permission)
 SELECT id, '*' FROM roles WHERE code = 'admin';
 
 INSERT INTO role_permissions (role_id, permission)
-SELECT id, p FROM roles, (VALUES ('processes.manage'), ('processes.review'), ('exceptions.handle'), ('reports.view')) AS v(p)
-WHERE code = 'process_owner';
+SELECT id, 'processes.manage' FROM roles WHERE code = 'process_owner'
+UNION ALL SELECT id, 'processes.review' FROM roles WHERE code = 'process_owner'
+UNION ALL SELECT id, 'exceptions.handle' FROM roles WHERE code = 'process_owner'
+UNION ALL SELECT id, 'reports.view' FROM roles WHERE code = 'process_owner';
 
 INSERT INTO role_permissions (role_id, permission)
 SELECT id, 'processes.manage' FROM roles WHERE code = 'editor';
 
 INSERT INTO role_permissions (role_id, permission)
-SELECT id, p FROM roles, (VALUES ('processes.review'), ('reports.view')) AS v(p)
-WHERE code = 'reviewer';
+SELECT id, 'processes.review' FROM roles WHERE code = 'reviewer'
+UNION ALL SELECT id, 'reports.view' FROM roles WHERE code = 'reviewer';
 
 INSERT INTO role_permissions (role_id, permission)
-SELECT id, p FROM roles, (VALUES ('processes.approve'), ('exceptions.handle'), ('reports.view')) AS v(p)
-WHERE code = 'approver';
+SELECT id, 'processes.approve' FROM roles WHERE code = 'approver'
+UNION ALL SELECT id, 'exceptions.handle' FROM roles WHERE code = 'approver'
+UNION ALL SELECT id, 'reports.view' FROM roles WHERE code = 'approver';
 
 INSERT INTO role_permissions (role_id, permission)
-SELECT id, p FROM roles, (VALUES ('executions.perform'), ('reports.view')) AS v(p)
-WHERE code = 'executor';
+SELECT id, 'executions.perform' FROM roles WHERE code = 'executor'
+UNION ALL SELECT id, 'reports.view' FROM roles WHERE code = 'executor';
 
 INSERT INTO role_permissions (role_id, permission)
-SELECT id, p FROM roles, (VALUES ('executions.perform'), ('executions.manage'), ('exceptions.handle'), ('reports.view'), ('audit.view')) AS v(p)
-WHERE code = 'monitor';
+SELECT id, 'executions.perform' FROM roles WHERE code = 'monitor'
+UNION ALL SELECT id, 'executions.manage' FROM roles WHERE code = 'monitor'
+UNION ALL SELECT id, 'exceptions.handle' FROM roles WHERE code = 'monitor'
+UNION ALL SELECT id, 'reports.view' FROM roles WHERE code = 'monitor'
+UNION ALL SELECT id, 'audit.view' FROM roles WHERE code = 'monitor';
 
 INSERT INTO role_permissions (role_id, permission)
 SELECT id, 'reports.view' FROM roles WHERE code = 'viewer';
