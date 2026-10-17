@@ -47,6 +47,8 @@ type ExecStepRow = {
   output_desc: string | null;
   target_duration_min: number | null;
   warning: string | null;
+  skip_policy: string | null;
+  failure_policy: string | null;
   is_required: number;
   completion_req: string | null;
   status: string;
@@ -96,6 +98,8 @@ function toPublicStep(s: ExecStepRow) {
     output_desc: s.output_desc,
     target_duration_min: s.target_duration_min,
     warning: s.warning,
+    skip_policy: s.skip_policy,
+    failure_policy: s.failure_policy,
     is_required: s.is_required === 1,
     completion_req: s.completion_req,
     status: s.status,
@@ -254,11 +258,13 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
       db.prepare(
         `INSERT INTO execution_steps (id, execution_id, sort_order, code, title, instruction, role, position_id,
           prerequisite, input_desc, expected_result, output_desc, target_duration_min, warning,
+          skip_policy, failure_policy,
           is_required, completion_req, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?)`
       ).bind(newId(), execId, idx + 1, st.code, st.title, st.instruction, st.role, s.position_id ?? null,
         s.prerequisite ?? null, s.input_desc ?? null, s.expected_result ?? null, s.output_desc ?? null,
         s.target_duration_min ?? null, s.warning ?? null,
+        s.skip_policy ?? null, s.failure_policy ?? null,
         st.is_required, st.completion_req, now)
     );
   }
