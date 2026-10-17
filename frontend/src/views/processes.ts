@@ -219,11 +219,22 @@ export async function renderProcessDetail(
       else if (act === "return") await api.returnVersion(vid);
       else if (act === "activate") await api.activateVersion(vid);
       else if (act === "retire") {
-        if (!confirm(`Ngừng phiên bản ${label}? Phiên bản ngừng sẽ không dùng cho lượt mới.`)) {
-          restore();
-          return;
-        }
-        await api.retireVersion(vid);
+        restore();
+        openConfirmDialog(
+          dialogRoot,
+          `Ngừng phiên bản ${label}?`,
+          "Phiên bản ngừng sẽ không dùng cho lượt mới.",
+          async () => {
+            try {
+              await api.retireVersion(vid);
+              toast(`Đã ngừng phiên bản ${label}.`);
+              await reload();
+            } catch (e) {
+              toast(`Lỗi: ${msg(e)}`);
+            }
+          }
+        );
+        return;
       }
       const names: Record<string, string> = {
         submit: "gửi duyệt",
@@ -440,14 +451,15 @@ async function toggleSteps(
           toast(`Lỗi: ${msg(e)}`);
         }
       } else if (act === "del") {
-        if (!confirm(`Xóa bước "${step?.code}"?`)) return;
-        try {
-          await api.deleteStep(versionId, sid);
-          toast("Đã xóa bước.");
-          refresh();
-        } catch (e) {
-          toast(`Lỗi: ${msg(e)}`);
-        }
+        openConfirmDialog(dialogRoot, `Xóa bước "${step?.code}"?`, "Hành động này không thể hoàn tác.", async () => {
+          try {
+            await api.deleteStep(versionId, sid);
+            toast("Đã xóa bước.");
+            refresh();
+          } catch (e) {
+            toast(`Lỗi: ${msg(e)}`);
+          }
+        });
       } else if (act === "up" || act === "down") {
         const idx = items.findIndex((x) => x.id === sid);
         const newIdx = act === "up" ? idx - 1 : idx + 1;
@@ -465,6 +477,34 @@ async function toggleSteps(
   } catch (e) {
     container.innerHTML = `<p class="empty">Không tải được bước: ${esc(msg(e))}</p>`;
   }
+}
+
+/** Dialog xác nhận tùy chỉnh (không dùng window.confirm). */
+function openConfirmDialog(
+  dialogRoot: HTMLElement,
+  title: string,
+  message: string,
+  onConfirm: () => void
+): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-scrim"></div>
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+      <h3>${esc(title)}</h3>
+      <p>${esc(message)}</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="cf-cancel">Huỷ</button>
+        <button type="button" class="btn danger" id="cf-ok">Xóa</button>
+      </div>
+    </div>`;
+  const close = () => {
+    dialogRoot.innerHTML = "";
+  };
+  dialogRoot.querySelector("#cf-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector(".dialog-scrim")!.addEventListener("click", close);
+  dialogRoot.querySelector("#cf-ok")!.addEventListener("click", () => {
+    close();
+    onConfirm();
+  });
 }
 
 /** Dialog thêm/sửa bước (PRC-005). */

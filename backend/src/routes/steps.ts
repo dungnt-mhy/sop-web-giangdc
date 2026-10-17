@@ -335,10 +335,16 @@ export async function handleReorderSteps(ctx: Ctx, versionId: string): Promise<R
   if (ids.length !== existingIds.size || !ids.every((id) => existingIds.has(id as string))) {
     return apiError("VALIDATION_ERROR", "Danh sách bước không khớp với phiên bản.", ctx.requestId);
   }
-  const stmts = ids.map((id, idx) =>
-    db.prepare(`UPDATE process_steps SET sort_order = ?, updated_at = ? WHERE id = ?`).bind(idx + 1, nowIso(), id)
+  const now = nowIso();
+  // Cập nhật 2 pha để tránh vi phạm UNIQUE(version_id, sort_order):
+  // pha 1 chuyển tất cả về số âm (không trùng), pha 2 chuyển về thứ tự mới.
+  const phase1 = ids.map((id, idx) =>
+    db.prepare(`UPDATE process_steps SET sort_order = ? WHERE id = ?`).bind(-(idx + 1), id)
   );
-  await db.batch(stmts);
+  const phase2 = ids.map((id, idx) =>
+    db.prepare(`UPDATE process_steps SET sort_order = ?, updated_at = ? WHERE id = ?`).bind(idx + 1, now, id)
+  );
+  await db.batch([...phase1, ...phase2]);
   await audit(db, {
     event_type: "PROCESS_STEPS_REORDERED",
     actor_id: me.user.id,
