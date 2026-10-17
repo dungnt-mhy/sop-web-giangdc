@@ -96,11 +96,26 @@ export interface ExecutionStep {
   instruction: string | null;
   role: string | null;
   is_required: boolean;
+  completion_req: string | null;
   status: string;
   completed_by: string | null;
   completed_at: string | null;
   note: string | null;
   skip_reason: string | null;
+}
+
+export interface Evidence {
+  id: string;
+  execution_step_id: string;
+  uploaded_by: string;
+  uploader_name: string | null;
+  kind: string;
+  original_name: string;
+  mime: string;
+  size_bytes: number;
+  status: string;
+  note: string | null;
+  created_at: string;
 }
 
 export interface ExecutionDetail extends Execution {
@@ -332,6 +347,32 @@ export const api = {
   },
   skipStep(execId: string, stepId: string, skip_reason: string): Promise<ExecutionStep> {
     return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:skip`, { skip_reason });
+  },
+
+  // --- Bằng chứng (Task 1.7: EVD-001..013) ---
+  listEvidence(execId: string, stepId: string): Promise<{ items: Evidence[]; total: number }> {
+    return req("GET", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/evidence`);
+  },
+  async uploadEvidence(execId: string, stepId: string, file: File, note?: string): Promise<Evidence> {
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    if (note) fd.append("note", note);
+    const res = await fetch(`${apiBase()}/api/v1/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/evidence`, {
+      method: "POST",
+      body: fd,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, data?.error?.message ?? `Lỗi tải lên (${res.status})`, data?.error);
+    }
+    return res.json();
+  },
+  deleteEvidence(evidenceId: string): Promise<{ deleted: boolean }> {
+    return req("DELETE", `/evidence/${encodeURIComponent(evidenceId)}`);
+  },
+  evidenceDownloadUrl(evidenceId: string): string {
+    return `${apiBase()}/api/v1/evidence/${encodeURIComponent(evidenceId)}/download`;
   },
 };
 

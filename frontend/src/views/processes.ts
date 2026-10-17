@@ -707,6 +707,12 @@ function openStepDialog(
           <label>Thời lượng mục tiêu (phút)
             <input class="input" name="target_duration_min" type="number" min="0" step="1"
               value="${step?.target_duration_min ?? ""}" /></label>
+          <label>Số ảnh bằng chứng tối thiểu
+            <input class="input" name="min_photos" type="number" min="0" max="10" step="1"
+              value="${(() => { try { const cr = step?.completion_req as Record<string, unknown> | null; const v = cr?.["min_photos"]; return typeof v === "number" ? String(v) : ""; } catch { return ""; } })()}"
+              placeholder="VD: 2 (0 = không yêu cầu)" /></label>
+        </div>
+        <div class="form-grid">
           <label class="check"><input type="checkbox" name="is_required" ${step?.is_required !== false ? "checked" : ""} />
             Bước bắt buộc</label>
         </div>
@@ -743,6 +749,12 @@ function openStepDialog(
     }
     const dur = String(fd.get("target_duration_min") ?? "").trim();
     if (dur) input.target_duration_min = parseInt(dur, 10);
+    const minPhotos = parseInt(String(fd.get("min_photos") ?? "").trim(), 10);
+    if (!isNaN(minPhotos) && minPhotos > 0) {
+      input.completion_req = JSON.stringify({ min_photos: Math.min(minPhotos, 10) });
+    } else if (!isNaN(minPhotos) && minPhotos === 0) {
+      input.completion_req = null;
+    }
     setLoading(submitBtn, true, isEdit ? "Đang lưu…" : "Đang thêm…");
     try {
       if (isEdit) {

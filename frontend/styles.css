@@ -513,3 +513,23 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   #sidebar { transition: none; }
 }
+
+/* Bằng chứng ảnh (Task 1.7: EVD-001..013). */
+.evidence-section { margin: 10px 0 0 44px; padding: 10px 12px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; }
+.evidence-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.evidence-title { font-size: 13.5px; font-weight: 700; color: #334155; }
+.evidence-upload-btn { cursor: pointer; margin: 0; }
+.evidence-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+.evidence-item { position: relative; border-radius: 8px; overflow: hidden; background: #fff; border: 1px solid #e2e8f0; }
+.evidence-item img { width: 100%; height: 88px; object-fit: cover; display: block; }
+.evidence-file { padding: 12px 8px; font-size: 12px; word-break: break-word; min-height: 88px; }
+.evidence-meta { font-size: 11px; color: #64748b; padding: 4px 6px; text-align: center; }
+.evidence-del {
+  position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%;
+  border: 0; background: rgba(0,0,0,0.6); color: #fff; font-size: 12px; cursor: pointer; line-height: 1;
+}
+.evidence-hint { margin: 8px 0 0; }
+.pill.orange { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+@media (max-width: 640px) {
+  .evidence-section { margin-left: 0; }
+}

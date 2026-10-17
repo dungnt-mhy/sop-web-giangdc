@@ -68,6 +68,12 @@ import {
   handleStartExecution,
   handleStartStep,
 } from "./routes/executions";
+import {
+  handleDeleteEvidence,
+  handleDownloadEvidence,
+  handleListEvidence,
+  handleUploadEvidence,
+} from "./routes/evidence";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -286,6 +292,23 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     if (action === "start") return handleStartStep(ctx, eid, sid);
     if (action === "complete") return handleCompleteStep(ctx, eid, sid);
     if (action === "skip") return handleSkipStep(ctx, eid, sid);
+  }
+  // --- Bằng chứng (Task 1.7: EVD-001..013) ---
+  const evUp = /^\/executions\/([^/:]+)\/steps\/([^/:]+)\/evidence$/.exec(path);
+  if (evUp && UUID_RE.test(evUp[1]) && UUID_RE.test(evUp[2])) {
+    const eid = decodeURIComponent(evUp[1]);
+    const sid = decodeURIComponent(evUp[2]);
+    if (method === "POST") return handleUploadEvidence(ctx, eid, sid);
+    if (method === "GET") return handleListEvidence(ctx, eid, sid);
+  }
+  const evDel = /^\/evidence\/([^/:]+)$/.exec(path);
+  if (evDel && UUID_RE.test(evDel[1])) {
+    const evid = decodeURIComponent(evDel[1]);
+    if (method === "DELETE") return handleDeleteEvidence(ctx, evid);
+  }
+  const evDl = /^\/evidence\/([^/:]+)\/download$/.exec(path);
+  if (evDl && method === "GET" && UUID_RE.test(evDl[1])) {
+    return handleDownloadEvidence(ctx, decodeURIComponent(evDl[1]));
   }
 
   return apiError("NOT_FOUND", "Not found", ctx.requestId);

@@ -218,6 +218,19 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           if (diagramView) diagramView.hidden = !isDiagram;
         });
       });
+      // Tải bằng chứng cho từng bước.
+      await loadAllEvidence(body, e.id);
+      // Xử lý chọn ảnh để tải lên (nén trước khi gửi).
+      body.querySelectorAll<HTMLInputElement>("[data-ev-input]").forEach((input) => {
+        input.addEventListener("change", async () => {
+          const li = input.closest("li")!;
+          const sid = li.dataset.sid!;
+          const files = Array.from(input.files ?? []);
+          input.value = "";
+          if (files.length === 0) return;
+          await uploadEvidenceFiles(body, e.id, sid, files);
+        });
+      });
     } catch (err) {
       body.innerHTML = `<p class="empty">Không tải được lượt: ${esc(msg(err))}</p>`;
     }
@@ -311,6 +324,104 @@ function renderActions(
   };
 }
 
+/** Tải và hiển thị bằng chứng cho tất cả các bước. */
+async function loadAllEvidence(body: HTMLElement, execId: string): Promise<void> {
+  const sections = body.querySelectorAll<HTMLElement>("[data-evidence-for]");
+  await Promise.all(
+    Array.from(sections).map(async (sec) => {
+      const sid = sec.dataset.evidenceFor!;
+      try {
+        const { items } = await api.listEvidence(execId, sid);
+        renderEvidenceGrid(sec, execId, sid, items);
+      } catch {
+        // Không chặn hiển thị chính nếu tải bằng chứng lỗi.
+      }
+    })
+  );
+}
+
+function renderEvidenceGrid(
+  sec: HTMLElement,
+  execId: string,
+  sid: string,
+  items: import("../api.js").Evidence[]
+): void {
+  const grid = sec.querySelector("[data-ev-grid]") as HTMLElement;
+  const countEl = sec.querySelector("[data-ev-count]") as HTMLElement;
+  countEl.textContent = items.length > 0 ? `(${items.length})` : "";
+  const canDelete = !!sec.querySelector("[data-ev-input]");
+  grid.innerHTML = items
+    .map(
+      (ev) => `
+      <div class="evidence-item" data-evid="${esc(ev.id)}">
+        <a href="${esc(api.evidenceDownloadUrl(ev.id))}" target="_blank" rel="noopener" title="${esc(ev.original_name)}">
+          ${ev.kind === "PHOTO"
+            ? `<img src="${esc(api.evidenceDownloadUrl(ev.id))}" alt="${esc(ev.original_name)}" loading="lazy" />`
+            : `<div class="evidence-file">📄 ${esc(ev.original_name)}</div>`}
+        </a>
+        <div class="evidence-meta">${esc(formatBytes(ev.size_bytes))}</div>
+        ${canDelete ? `<button class="evidence-del" data-ev-del title="Xóa">✕</button>` : ""}
+      </div>`
+    )
+    .join("");
+  grid.querySelectorAll<HTMLButtonElement>("[data-ev-del]").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      const evid = btn.closest("[data-evid]")!.getAttribute("data-evid")!;
+      if (!confirm("Xóa bằng chứng này?")) return;
+      try {
+        await api.deleteEvidence(evid);
+        toast("Đã xóa bằng chứng.");
+        const { items: fresh } = await api.listEvidence(execId, sid);
+        renderEvidenceGrid(sec, execId, sid, fresh);
+      } catch (e) {
+        toast(`Lỗi: ${msg(e)}`);
+      }
+    });
+  });
+}
+
+/** Nén và tải lên các ảnh đã chọn. */
+async function uploadEvidenceFiles(
+  body: HTMLElement,
+  execId: string,
+  sid: string,
+  files: File[]
+): Promise<void> {
+  const sec = body.querySelector<HTMLElement>(`[data-evidence-for="${sid}"]`);
+  if (!sec) return;
+  const { compressImage, formatBytes: fmt } = await import("../image.js");
+  let done = 0;
+  let failed = 0;
+  for (const f of files) {
+    try {
+      toast(`Đang nén ${f.name}…`);
+      const { file: compressed, originalBytes, compressedBytes, wasCompressed } = await compressImage(f);
+      if (wasCompressed) {
+        toast(`Đã nén ${fmt(originalBytes)} → ${fmt(compressedBytes)}. Đang tải lên…`);
+      } else {
+        toast(`Đang tải lên ${f.name}…`);
+      }
+      await api.uploadEvidence(execId, sid, compressed);
+      done++;
+    } catch (e) {
+      failed++;
+      toast(`Lỗi ${f.name}: ${msg(e)}`);
+    }
+  }
+  if (done > 0) {
+    toast(`Đã tải lên ${done} ảnh${failed > 0 ? `, ${failed} lỗi` : ""}.`);
+    const { items } = await api.listEvidence(execId, sid);
+    renderEvidenceGrid(sec, execId, sid, items);
+  }
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
+}
+
 function detailHtml(e: ExecutionDetail): string {
   const p = e.progress;
   const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
@@ -341,6 +452,13 @@ function detailHtml(e: ExecutionDetail): string {
           const canStart = active && st.status === "NOT_STARTED";
           const canFinish = active && st.status === "IN_PROGRESS";
           const canSkip = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") && !st.is_required;
+          const canUpload = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS");
+          // Yêu cầu ảnh từ completion_req (EXE-007).
+          let minPhotos = 0;
+          try {
+            const cr = st.completion_req ? JSON.parse(st.completion_req) : null;
+            minPhotos = cr?.min_photos ?? (cr?.require_photo ? 1 : 0);
+          } catch { /* bỏ qua */ }
           return `<li data-sid="${esc(st.id)}">
             <div class="step-head">
               <span class="step-num">${idx + 1}</span>
@@ -348,6 +466,7 @@ function detailHtml(e: ExecutionDetail): string {
                 <strong>${esc(st.code)}</strong> — ${esc(st.title)}
                 ${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}
                 <span class="pill ${st.status === "PASSED" ? "green" : st.status === "SKIPPED" ? "gray" : st.status === "IN_PROGRESS" ? "blue" : "gray"}">${esc(STEP_STATUS_LABELS[st.status] ?? st.status)}</span>
+                ${minPhotos > 0 ? ` <span class="pill orange" title="Yêu cầu ít nhất ${minPhotos} ảnh">📷 ${minPhotos} ảnh</span>` : ""}
                 ${st.role ? `<div class="muted small">Vai trò: ${esc(st.role)}</div>` : ""}
                 ${st.skip_reason ? `<div class="muted small">Lý do bỏ qua: ${esc(st.skip_reason)}</div>` : ""}
                 ${st.note ? `<div class="muted small">Ghi chú: ${esc(st.note)}</div>` : ""}
@@ -359,6 +478,17 @@ function detailHtml(e: ExecutionDetail): string {
               </div>
             </div>
             ${st.instruction ? `<p class="step-instr">${esc(st.instruction)}</p>` : ""}
+            <div class="evidence-section" data-evidence-for="${esc(st.id)}">
+              <div class="evidence-head">
+                <span class="evidence-title">📷 Bằng chứng <span class="evidence-count" data-ev-count></span></span>
+                ${canUpload ? `<label class="btn sm evidence-upload-btn">
+                  + Thêm ảnh
+                  <input type="file" accept="image/*" multiple hidden data-ev-input />
+                </label>` : ""}
+              </div>
+              <div class="evidence-grid" data-ev-grid></div>
+              <p class="evidence-hint muted small">Ảnh được nén trước khi tải lên (tối đa 10 ảnh/bước).</p>
+            </div>
           </li>`;
         }).join("")}
       </ol>

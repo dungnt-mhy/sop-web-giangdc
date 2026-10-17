@@ -37,6 +37,7 @@ type ExecStepRow = {
   instruction: string | null;
   role: string | null;
   is_required: number;
+  completion_req: string | null;
   status: string;
   completed_by: string | null;
   completed_at: string | null;
@@ -73,6 +74,7 @@ function toPublicStep(s: ExecStepRow) {
     instruction: s.instruction,
     role: s.role,
     is_required: s.is_required === 1,
+    completion_req: s.completion_req,
     status: s.status,
     completed_by: s.completed_by,
     completed_at: s.completed_at,
@@ -161,6 +163,7 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
       instruction: string | null;
       role: string | null;
       is_required: number;
+      completion_req: string | null;
     }>();
   if (steps.results.length === 0) {
     return apiError("VALIDATION_ERROR", "Phiên bản hiệu lực chưa có bước nào.", ctx.requestId);
@@ -192,9 +195,9 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   for (const [idx, st] of steps.results.entries()) {
     stmts.push(
       db.prepare(
-        `INSERT INTO execution_steps (id, execution_id, sort_order, code, title, instruction, role, is_required, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?)`
-      ).bind(newId(), execId, idx + 1, st.code, st.title, st.instruction, st.role, st.is_required, now)
+        `INSERT INTO execution_steps (id, execution_id, sort_order, code, title, instruction, role, is_required, completion_req, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?)`
+      ).bind(newId(), execId, idx + 1, st.code, st.title, st.instruction, st.role, st.is_required, st.completion_req, now)
     );
   }
   await db.batch(stmts);
@@ -411,7 +414,36 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
   const note = typeof body?.note === "string" ? body.note.trim() || null : null;
-  // EXE-007: kiểm tra yêu cầu bắt buộc (MVP: ghi chú bắt buộc nếu bước yêu cầu — mở rộng ở Task 1.7).
+
+  // EXE-007: chặn hoàn thành bước khi thiếu yêu cầu bắt buộc.
+  // completion_req là JSON: { require_photo?: boolean, min_photos?: number, require_note?: boolean }
+  if (step.completion_req) {
+    try {
+      const req = JSON.parse(step.completion_req) as {
+        require_photo?: boolean; min_photos?: number; require_note?: boolean;
+      };
+      const minPhotos = req.min_photos ?? (req.require_photo ? 1 : 0);
+      if (minPhotos > 0) {
+        const { countVerifiedEvidence } = await import("./evidence");
+        const photoCount = await countVerifiedEvidence(db, stepId);
+        if (photoCount < minPhotos) {
+          return apiError("VALIDATION_ERROR", `Bước yêu cầu ít nhất ${minPhotos} ảnh bằng chứng (đã có ${photoCount}).`, ctx.requestId, {
+            code: "EVIDENCE_REQUIRED",
+            required: minPhotos,
+            provided: photoCount,
+          });
+        }
+      }
+      if (req.require_note && !note) {
+        return apiError("VALIDATION_ERROR", "Bước yêu cầu ghi chú khi hoàn thành.", ctx.requestId, {
+          code: "NOTE_REQUIRED",
+        });
+      }
+    } catch {
+      // completion_req không phải JSON hợp lệ — bỏ qua.
+    }
+  }
+
   const now = nowIso();
   await db
     .prepare(
