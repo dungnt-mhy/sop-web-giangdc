@@ -292,13 +292,23 @@ export async function handleDeleteStep(ctx: Ctx, versionId: string, stepId: stri
     .first<StepRow>();
   if (!step) return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
 
-  // Xóa và dồn thứ tự lại.
-  await db.batch([
-    db.prepare(`DELETE FROM process_steps WHERE id = ?`).bind(stepId),
-    db.prepare(
-      `UPDATE process_steps SET sort_order = sort_order - 1 WHERE version_id = ? AND sort_order > ?`
-    ).bind(versionId, step.sort_order),
-  ]);
+  // Xóa và dồn thứ tự lại (tách 2 lệnh riêng để tránh xung đột constraint trong batch).
+  await db.prepare(`DELETE FROM process_steps WHERE id = ?`).bind(stepId).run();
+  // Dồn thứ tự: cập nhật từng bước một cách an toàn qua giá trị âm trung gian.
+  const remaining = await db
+    .prepare(`SELECT id, sort_order FROM process_steps WHERE version_id = ? ORDER BY sort_order ASC`)
+    .bind(versionId)
+    .all<{ id: string; sort_order: number }>();
+  if (remaining.results.length > 0) {
+    const phase1 = remaining.results.map((r) =>
+      db.prepare(`UPDATE process_steps SET sort_order = ? WHERE id = ?`).bind(-r.sort_order, r.id)
+    );
+    await db.batch(phase1);
+    const phase2 = remaining.results.map((r, idx) =>
+      db.prepare(`UPDATE process_steps SET sort_order = ? WHERE id = ?`).bind(idx + 1, r.id)
+    );
+    await db.batch(phase2);
+  }
   await audit(db, {
     event_type: "PROCESS_STEP_DELETED",
     actor_id: me.user.id,
