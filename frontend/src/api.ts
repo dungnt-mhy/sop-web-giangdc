@@ -33,6 +33,42 @@ export interface PublicUser {
   updated_at: string | null;
 }
 
+// --- Quy trình (Task 1.4) ---
+export interface SopProcess {
+  id: string;
+  code: string;
+  name: string;
+  purpose: string | null;
+  scope: string | null;
+  applicable_objects: string | null;
+  start_condition: string | null;
+  end_condition: string | null;
+  owner_id: string | null;
+  applying_unit: string | null;
+  review_trigger: string | null;
+  group_name: string | null;
+  created_at: string;
+  updated_at: string | null;
+  active_version: { id: string; version_number: number; status: string } | null;
+}
+
+export interface ProcessVersion {
+  id: string;
+  process_id: string;
+  version_number: number;
+  status: string;
+  effective_from: string | null;
+  effective_to: string | null;
+  change_summary: string | null;
+  created_at: string;
+  updated_at: string | null;
+  created_by: string | null;
+}
+
+export interface SopProcessDetail extends SopProcess {
+  versions: ProcessVersion[];
+}
+
 declare global {
   interface Window {
     SOP_CONFIG?: { apiBase?: string };
@@ -138,6 +174,41 @@ export const api = {
   },
   resetPassword(id: string, password: string): Promise<PublicUser> {
     return req("POST", `/users/${encodeURIComponent(id)}:reset-password`, { password });
+  },
+  // --- Quy trình (Task 1.4) ---
+  listProcesses(params?: { q?: string; group?: string }): Promise<{ items: SopProcess[]; total: number }> {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set("q", params.q);
+    if (params?.group) qs.set("group", params.group);
+    const suffix = qs.toString() ? "?" + qs.toString() : "";
+    return req("GET", "/processes" + suffix);
+  },
+  createProcess(input: Record<string, unknown>): Promise<SopProcess> {
+    return req("POST", "/processes", input);
+  },
+  getProcess(id: string): Promise<SopProcessDetail> {
+    return req("GET", "/processes/" + encodeURIComponent(id));
+  },
+  patchProcess(id: string, input: Record<string, unknown>): Promise<SopProcess> {
+    return req("PATCH", "/processes/" + encodeURIComponent(id), input);
+  },
+  createVersion(processId: string, change_summary?: string): Promise<ProcessVersion> {
+    return req("POST", `/processes/${encodeURIComponent(processId)}/versions`, { change_summary });
+  },
+  submitVersion(versionId: string): Promise<ProcessVersion> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}:submit`);
+  },
+  approveVersion(versionId: string, effective_from?: string): Promise<ProcessVersion> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}:approve`, { effective_from });
+  },
+  returnVersion(versionId: string): Promise<ProcessVersion> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}:return`);
+  },
+  activateVersion(versionId: string): Promise<ProcessVersion> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}:activate`);
+  },
+  retireVersion(versionId: string): Promise<ProcessVersion> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}:retire`);
   },
 };
 

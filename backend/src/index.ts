@@ -34,6 +34,18 @@ import {
   handleResetPassword,
   handleUnlockUser,
 } from "./routes/users";
+import {
+  handleActivateVersion,
+  handleApproveVersion,
+  handleCreateProcess,
+  handleCreateVersion,
+  handleGetProcess,
+  handleListProcesses,
+  handlePatchProcess,
+  handleRetireVersion,
+  handleReturnVersion,
+  handleSubmitVersion,
+} from "./routes/processes";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -151,6 +163,42 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
       if (action === "unlock") return handleUnlockUser(ctx, id);
       if (action === "force-password-change") return handleForcePasswordChange(ctx, id);
       if (action === "reset-password") return handleResetPassword(ctx, id);
+    }
+  }
+
+  // --- Processes (Task 1.4: danh mục quy trình + phiên bản) ---
+  if (path === "/processes") {
+    if (method === "GET") return handleListProcesses(ctx);
+    if (method === "POST") return handleCreateProcess(ctx);
+  }
+  const pm = /^\/processes\/([^/:]+)(\/versions)?$/.exec(path);
+  if (pm) {
+    const pid = decodeURIComponent(pm[1]);
+    const isVersions = !!pm[2];
+    if (!UUID_RE.test(pid)) {
+      return apiError("NOT_FOUND", "Không tìm thấy quy trình.", ctx.requestId);
+    }
+    if (!isVersions) {
+      if (method === "GET") return handleGetProcess(ctx, pid);
+      if (method === "PATCH") return handlePatchProcess(ctx, pid);
+    } else if (method === "POST") {
+      return handleCreateVersion(ctx, pid);
+    }
+  }
+  const vm =
+    /^\/processes\/[^/:]+\/versions\/([^/:]+)(?::(submit|approve|return|activate|retire))?$/.exec(path);
+  if (vm) {
+    const vid = decodeURIComponent(vm[1]);
+    const action = vm[2];
+    if (!UUID_RE.test(vid)) {
+      return apiError("NOT_FOUND", "Không tìm thấy phiên bản.", ctx.requestId);
+    }
+    if (method === "POST" && action) {
+      if (action === "submit") return handleSubmitVersion(ctx, vid);
+      if (action === "approve") return handleApproveVersion(ctx, vid);
+      if (action === "return") return handleReturnVersion(ctx, vid);
+      if (action === "activate") return handleActivateVersion(ctx, vid);
+      if (action === "retire") return handleRetireVersion(ctx, vid);
     }
   }
 

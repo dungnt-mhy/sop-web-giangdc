@@ -266,6 +266,20 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .pill.red { background: #fdecea; color: #8f2b20; }
 .pill.amber { background: #fdf3e0; color: #8a5a13; }
 .pill.gray { background: #eef1f5; color: var(--muted); }
+.pill.blue { background: #e3eefc; color: #1d4fa3; }
+
+/* Danh mục quy trình (Task 1.4). */
+.filter-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+.filter-bar .input { flex: 1; max-width: 420px; }
+.info-list { margin: 0; display: grid; gap: 8px; }
+.info-row { display: grid; grid-template-columns: 180px 1fr; gap: 12px; }
+.info-row dt { color: var(--muted); font-size: 13.5px; }
+.info-row dd { margin: 0; font-size: 14.5px; }
+.head-actions { display: flex; gap: 8px; }
+.link.back { display: inline-block; margin-bottom: 6px; font-size: 14px; }
+@media (max-width: 640px) {
+  .info-row { grid-template-columns: 1fr; gap: 2px; }
+}
 
 /* ---------- Bảng ---------- */
 .table-wrap {

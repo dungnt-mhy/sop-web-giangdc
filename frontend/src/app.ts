@@ -5,6 +5,7 @@
 import { api, isUnauthenticated, type SessionInfo } from "./api.js";
 import { EYE_OFF_SVG, EYE_OPEN_SVG, esc, setLoading, toast } from "./ui.js";
 import { renderHome } from "./views/home.js";
+import { renderProcessDetail, renderProcesses } from "./views/processes.js";
 import { renderUsers } from "./views/users.js";
 
 let session: SessionInfo | null = null;
@@ -56,6 +57,7 @@ function renderShell(): void {
   const name = session.user.display_name || session.user.username;
   const navItems: Array<{ hash: string; label: string; perm?: string }> = [
     { hash: "#/home", label: "Trang chủ" },
+    { hash: "#/processes", label: "Quy trình" },
     { hash: "#/users", label: "Người dùng", perm: "users.manage" },
   ];
   $("#sidebar-nav").innerHTML = navItems
@@ -126,6 +128,16 @@ function route(): void {
       return;
     }
     void renderUsers(page, session.user.id);
+    return;
+  }
+  if (hash === "#/processes") {
+    const canManage = can("processes.manage");
+    void renderProcesses(page, canManage);
+    return;
+  }
+  const pm = /^#\/processes\/([0-9a-f-]{36})$/.exec(hash);
+  if (pm) {
+    void renderProcessDetail(page, pm[1], session.permissions);
     return;
   }
   // Mặc định: trang chủ.
