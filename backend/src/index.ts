@@ -46,6 +46,15 @@ import {
   handleReturnVersion,
   handleSubmitVersion,
 } from "./routes/processes";
+import {
+  handleCopyStep,
+  handleCreateStep,
+  handleDeleteStep,
+  handleListSteps,
+  handlePatchStep,
+  handleReorderSteps,
+  handleValidateVersion,
+} from "./routes/steps";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -199,6 +208,34 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
       if (action === "return") return handleReturnVersion(ctx, vid);
       if (action === "activate") return handleActivateVersion(ctx, vid);
       if (action === "retire") return handleRetireVersion(ctx, vid);
+    }
+  }
+
+  // --- Steps (Task 1.5: bước công việc trong phiên bản) ---
+  const sm = /^\/processes\/[^/:]+\/versions\/([^/:]+)\/steps((?:\/[^/:]+)?)((?::(?:reorder|copy|validate))?)$/.exec(path);
+  if (sm) {
+    const vid = decodeURIComponent(sm[1]);
+    const stepPart = sm[2]; // "" | "/{sid}"
+    const action = sm[3]; // "" | ":reorder" | ":copy" | ":validate"
+    if (!UUID_RE.test(vid)) {
+      return apiError("NOT_FOUND", "Không tìm thấy phiên bản.", ctx.requestId);
+    }
+    const sid = stepPart ? decodeURIComponent(stepPart.slice(1)) : null;
+    if (sid && !UUID_RE.test(sid)) {
+      return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
+    }
+    if (!stepPart && !action) {
+      if (method === "GET") return handleListSteps(ctx, vid);
+      if (method === "POST") return handleCreateStep(ctx, vid);
+    } else if (!stepPart && action === ":reorder" && method === "POST") {
+      return handleReorderSteps(ctx, vid);
+    } else if (!stepPart && action === ":validate" && method === "GET") {
+      return handleValidateVersion(ctx, vid);
+    } else if (sid && !action) {
+      if (method === "PATCH") return handlePatchStep(ctx, vid, sid);
+      if (method === "DELETE") return handleDeleteStep(ctx, vid, sid);
+    } else if (sid && action === ":copy" && method === "POST") {
+      return handleCopyStep(ctx, vid, sid);
     }
   }
 

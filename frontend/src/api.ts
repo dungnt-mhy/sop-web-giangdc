@@ -69,6 +69,30 @@ export interface SopProcessDetail extends SopProcess {
   versions: ProcessVersion[];
 }
 
+// --- Bước công việc (Task 1.5) ---
+export interface ProcessStep {
+  id: string;
+  version_id: string;
+  sort_order: number;
+  code: string;
+  title: string;
+  prerequisite: string | null;
+  input_desc: string | null;
+  instruction: string | null;
+  expected_result: string | null;
+  output_desc: string | null;
+  note: string | null;
+  role: string | null;
+  is_required: boolean;
+  target_duration_min: number | null;
+  warning: string | null;
+  completion_req: Record<string, unknown> | null;
+  skip_policy: Record<string, unknown> | null;
+  failure_policy: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
 declare global {
   interface Window {
     SOP_CONFIG?: { apiBase?: string };
@@ -209,6 +233,28 @@ export const api = {
   },
   retireVersion(versionId: string): Promise<ProcessVersion> {
     return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}:retire`);
+  },
+  // --- Bước công việc (Task 1.5) ---
+  listSteps(versionId: string): Promise<{ items: ProcessStep[]; total: number }> {
+    return req("GET", `/processes/x/versions/${encodeURIComponent(versionId)}/steps`);
+  },
+  createStep(versionId: string, input: Record<string, unknown>): Promise<ProcessStep> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}/steps`, input);
+  },
+  patchStep(versionId: string, stepId: string, input: Record<string, unknown>): Promise<ProcessStep> {
+    return req("PATCH", `/processes/x/versions/${encodeURIComponent(versionId)}/steps/${encodeURIComponent(stepId)}`, input);
+  },
+  deleteStep(versionId: string, stepId: string): Promise<{ deleted: boolean; id: string }> {
+    return req("DELETE", `/processes/x/versions/${encodeURIComponent(versionId)}/steps/${encodeURIComponent(stepId)}`);
+  },
+  reorderSteps(versionId: string, stepIds: string[]): Promise<{ items: ProcessStep[] }> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}/steps:reorder`, { step_ids: stepIds });
+  },
+  copyStep(versionId: string, stepId: string): Promise<ProcessStep> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}/steps/${encodeURIComponent(stepId)}:copy`);
+  },
+  validateVersion(versionId: string): Promise<{ valid: boolean; errors: Array<{ step_id: string | null; step_code: string | null; field: string; message: string }> }> {
+    return req("GET", `/processes/x/versions/${encodeURIComponent(versionId)}:validate`);
   },
 };
 

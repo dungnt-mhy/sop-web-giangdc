@@ -209,6 +209,11 @@ export async function renderProcessDetail(
     const label = `v${v?.version_number ?? "?"}`;
     const restore = setLoading(btn, true, "…");
     try {
+      if (act === "steps") {
+        restore();
+        await toggleSteps(body, dialogRoot, vid, current, canManage);
+        return;
+      }
       if (act === "submit") await api.submitVersion(vid);
       else if (act === "approve") await api.approveVersion(vid);
       else if (act === "return") await api.returnVersion(vid);
@@ -273,6 +278,9 @@ function detailHtml(p: import("../api.js").SopProcessDetail): string {
             <td>${statusPill(v.status)}</td>
             <td>${v.effective_from ? esc(v.effective_from.slice(0, 10)) : '<span class="muted">—</span>'}</td>
             <td class="actions" data-vact></td>
+          </tr>
+          <tr class="steps-row" data-steps-for="${esc(v.id)}" hidden>
+            <td colspan="4"><div class="steps-container" data-steps-container></div></td>
           </tr>`
             )
             .join("")}
@@ -288,6 +296,8 @@ function renderVersionButtons(body: HTMLElement, canManage: boolean, canApprove:
     const status = tr.dataset.status!;
     const cell = tr.querySelector("[data-vact]") as HTMLElement;
     const btns: string[] = [];
+    // Nút xem bước — mọi phiên bản đều xem được.
+    btns.push(`<button class="link" data-v="steps"><span>Bước</span></button>`);
     if (status === "DRAFT" && canManage) {
       btns.push(`<button class="link" data-v="submit"><span>Gửi duyệt</span></button>`);
     }
@@ -347,6 +357,208 @@ function openVersionDialog(dialogRoot: HTMLElement, processId: string, onDone: (
       setLoading(submitBtn, false, "");
     }
   });
+}
+
+/** Bật/tắt hiển thị danh sách bước của một phiên bản. */
+async function toggleSteps(
+  body: HTMLElement,
+  dialogRoot: HTMLElement,
+  versionId: string,
+  current: import("../api.js").SopProcessDetail | null,
+  canManage: boolean
+): Promise<void> {
+  const row = body.querySelector(`tr[data-steps-for="${versionId}"]`) as HTMLTableRowElement | null;
+  if (!row) return;
+  const container = row.querySelector("[data-steps-container]") as HTMLElement;
+  // Nếu đang hiện thì ẩn đi.
+  if (!row.hidden && container.dataset.loaded === "1") {
+    row.hidden = true;
+    return;
+  }
+  const v = current?.versions.find((x) => x.id === versionId);
+  const isDraft = v?.status === "DRAFT";
+  const editable = isDraft && canManage;
+
+  row.hidden = false;
+  container.dataset.loaded = "1";
+  container.innerHTML = `<p class="empty">Đang tải bước…</p>`;
+  try {
+    const { items } = await api.listSteps(versionId);
+    if (items.length === 0) {
+      container.innerHTML = `
+        <p class="empty">Chưa có bước nào.</p>
+        ${editable ? `<p><button class="btn primary" data-step-act="add">+ Thêm bước</button></p>` : ""}`;
+    } else {
+      container.innerHTML = `
+        ${editable ? `<p><button class="btn primary" data-step-act="add">+ Thêm bước</button></p>` : ""}
+        <ol class="step-list">
+          ${items.map((st, idx) => `
+            <li data-sid="${esc(st.id)}">
+              <div class="step-head">
+                <span class="step-num">${idx + 1}</span>
+                <div class="step-title">
+                  <strong>${esc(st.code)}</strong> — ${esc(st.title)}
+                  ${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}
+                  ${st.role ? `<div class="muted small">Vai trò: ${esc(st.role)}</div>` : ""}
+                </div>
+                ${editable ? `<div class="step-actions">
+                  <button class="link sm" data-step-act="up" title="Lên" ${idx === 0 ? "disabled" : ""}>↑</button>
+                  <button class="link sm" data-step-act="down" title="Xuống" ${idx === items.length - 1 ? "disabled" : ""}>↓</button>
+                  <button class="link sm" data-step-act="edit"><span>Sửa</span></button>
+                  <button class="link sm" data-step-act="copy"><span>Sao chép</span></button>
+                  <button class="link sm danger" data-step-act="del"><span>Xóa</span></button>
+                </div>` : ""}
+              </div>
+              ${st.instruction ? `<p class="step-instr">${esc(st.instruction)}</p>` : ""}
+            </li>`).join("")}
+        </ol>`;
+    }
+    const refresh = async (): Promise<void> => {
+      container.dataset.loaded = "";
+      row.hidden = true;
+      await toggleSteps(body, dialogRoot, versionId, current, canManage);
+    };
+    container.onclick = async (ev) => {
+      const b = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-step-act]");
+      if (!b) return;
+      const act = b.dataset.stepAct!;
+      if (act === "add") {
+        openStepDialog(dialogRoot, versionId, null, refresh);
+        return;
+      }
+      const li = b.closest("li") as HTMLLIElement;
+      const sid = li.dataset.sid!;
+      const step = items.find((x) => x.id === sid);
+      if (act === "edit") {
+        openStepDialog(dialogRoot, versionId, step ?? null, refresh);
+      } else if (act === "copy") {
+        try {
+          await api.copyStep(versionId, sid);
+          toast("Đã sao chép bước.");
+          refresh();
+        } catch (e) {
+          toast(`Lỗi: ${msg(e)}`);
+        }
+      } else if (act === "del") {
+        if (!confirm(`Xóa bước "${step?.code}"?`)) return;
+        try {
+          await api.deleteStep(versionId, sid);
+          toast("Đã xóa bước.");
+          refresh();
+        } catch (e) {
+          toast(`Lỗi: ${msg(e)}`);
+        }
+      } else if (act === "up" || act === "down") {
+        const idx = items.findIndex((x) => x.id === sid);
+        const newIdx = act === "up" ? idx - 1 : idx + 1;
+        if (newIdx < 0 || newIdx >= items.length) return;
+        const ids = items.map((x) => x.id);
+        [ids[idx], ids[newIdx]] = [ids[newIdx], ids[idx]];
+        try {
+          await api.reorderSteps(versionId, ids);
+          refresh();
+        } catch (e) {
+          toast(`Lỗi: ${msg(e)}`);
+        }
+      }
+    };
+  } catch (e) {
+    container.innerHTML = `<p class="empty">Không tải được bước: ${esc(msg(e))}</p>`;
+  }
+}
+
+/** Dialog thêm/sửa bước (PRC-005). */
+function openStepDialog(
+  dialogRoot: HTMLElement,
+  versionId: string,
+  step: import("../api.js").ProcessStep | null,
+  onDone: () => void
+): void {
+  const isEdit = !!step;
+  const val = (v: string | null | undefined) => esc(v ?? "");
+  dialogRoot.innerHTML = `
+    <div class="dialog-scrim"></div>
+    <div class="dialog wide" role="dialog" aria-modal="true" aria-label="${isEdit ? "Sửa bước" : "Thêm bước"}">
+      <h3>${isEdit ? "Sửa bước" : "Thêm bước mới"}</h3>
+      <form id="step-form" novalidate>
+        <div class="form-grid">
+          <label>Mã bước <span class="req">*</span>
+            <input class="input" name="code" required maxlength="32" value="${val(step?.code)}" style="text-transform:uppercase" /></label>
+          <label>Vai trò thực hiện <input class="input" name="role" maxlength="100" value="${val(step?.role)}"
+            placeholder="VD: Thủ kho" /></label>
+        </div>
+        <label>Tiêu đề hành động <span class="req">*</span>
+          <input class="input" name="title" required maxlength="200" value="${val(step?.title)}"
+            placeholder="VD: Kiểm tra nhiệt độ kho" /></label>
+        <label>Hướng dẫn thực hiện
+          <textarea class="input" name="instruction" rows="3">${val(step?.instruction)}</textarea></label>
+        <div class="form-grid">
+          <label>Điều kiện tiên quyết <textarea class="input" name="prerequisite" rows="2">${val(step?.prerequisite)}</textarea></label>
+          <label>Kết quả mong đợi <textarea class="input" name="expected_result" rows="2">${val(step?.expected_result)}</textarea></label>
+        </div>
+        <div class="form-grid">
+          <label>Đầu vào <textarea class="input" name="input_desc" rows="2">${val(step?.input_desc)}</textarea></label>
+          <label>Đầu ra / bàn giao <textarea class="input" name="output_desc" rows="2">${val(step?.output_desc)}</textarea></label>
+        </div>
+        <label>Ghi chú <textarea class="input" name="note" rows="2">${val(step?.note)}</textarea></label>
+        <div class="form-grid">
+          <label>Thời lượng mục tiêu (phút)
+            <input class="input" name="target_duration_min" type="number" min="0" step="1"
+              value="${step?.target_duration_min ?? ""}" /></label>
+          <label class="check"><input type="checkbox" name="is_required" ${step?.is_required !== false ? "checked" : ""} />
+            Bước bắt buộc</label>
+        </div>
+        <label>Cảnh báo <input class="input" name="warning" maxlength="500" value="${val(step?.warning)}"
+          placeholder="VD: Cẩn thận hàng dễ vỡ" /></label>
+        <p class="form-error" id="step-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="step-cancel">Huỷ</button>
+          <button type="submit" class="btn primary" id="step-submit">${isEdit ? "Lưu" : "Thêm bước"}</button>
+        </div>
+      </form>
+    </div>`;
+  const close = () => {
+    dialogRoot.innerHTML = "";
+  };
+  dialogRoot.querySelector("#step-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector(".dialog-scrim")!.addEventListener("click", close);
+
+  const form = dialogRoot.querySelector<HTMLFormElement>("#step-form")!;
+  const errEl = dialogRoot.querySelector<HTMLElement>("#step-error")!;
+  const submitBtn = dialogRoot.querySelector<HTMLButtonElement>("#step-submit")!;
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    errEl.hidden = true;
+    const fd = new FormData(form);
+    const input: Record<string, unknown> = {
+      code: String(fd.get("code") ?? "").trim(),
+      title: String(fd.get("title") ?? "").trim(),
+      is_required: fd.get("is_required") === "on",
+    };
+    for (const k of ["prerequisite", "input_desc", "instruction", "expected_result", "output_desc", "note", "role", "warning"]) {
+      const s = String(fd.get(k) ?? "").trim();
+      if (s) input[k] = s;
+    }
+    const dur = String(fd.get("target_duration_min") ?? "").trim();
+    if (dur) input.target_duration_min = parseInt(dur, 10);
+    setLoading(submitBtn, true, isEdit ? "Đang lưu…" : "Đang thêm…");
+    try {
+      if (isEdit) {
+        await api.patchStep(versionId, step!.id, input);
+        toast("Đã lưu bước.");
+      } else {
+        await api.createStep(versionId, input);
+        toast("Đã thêm bước.");
+      }
+      close();
+      onDone();
+    } catch (e) {
+      errEl.textContent = msg(e);
+      errEl.hidden = false;
+      setLoading(submitBtn, false, "");
+    }
+  });
+  dialogRoot.querySelector<HTMLInputElement>('input[name="code"]')!.focus();
 }
 
 export { STATUS_LABELS };
