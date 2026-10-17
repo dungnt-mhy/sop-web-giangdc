@@ -63,6 +63,7 @@ function toPublicExec(e: ExecutionRow, processName?: string, progress?: { total:
     execution_time: e.execution_time,
     shift: e.shift,
     supervisor_id: e.supervisor_id,
+    creator_id: (e as unknown as Record<string, unknown>).creator_id as string | null ?? null,
     cancel_reason: e.cancel_reason,
     created_at: e.created_at,
     started_at: e.started_at,
@@ -128,15 +129,19 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
     .prepare(
       `SELECT e.*, p.name AS process_name,
               ua.display_name AS assignee_name, uc.display_name AS creator_name,
-              us.display_name AS supervisor_name FROM executions e
+              us.display_name AS supervisor_name,
+              ucr.display_name AS creator_display_name, pos.name AS creator_position_name
+       FROM executions e
        LEFT JOIN processes p ON p.id = e.process_id
        LEFT JOIN users ua ON ua.id = e.assignee_id
        LEFT JOIN users uc ON uc.id = e.created_by
        LEFT JOIN users us ON us.id = e.supervisor_id
+       LEFT JOIN users ucr ON ucr.id = e.creator_id
+       LEFT JOIN positions pos ON pos.id = ucr.position_id
        ${where} ORDER BY e.created_at DESC LIMIT 100`
     )
     .bind(...binds)
-    .all<ExecutionRow & { process_name: string; assignee_name: string | null; creator_name: string | null; supervisor_name: string | null }>();
+    .all<ExecutionRow & { process_name: string; assignee_name: string | null; creator_name: string | null; supervisor_name: string | null; creator_display_name: string | null; creator_position_name: string | null }>();
 
   const items = [];
   for (const r of rows.results) {
@@ -212,6 +217,12 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   const supervisorId = typeof body?.supervisor_id === "string" && body.supervisor_id.trim()
     ? body.supervisor_id.trim()
     : null;
+  // Người tạo: bắt buộc chọn, mặc định là chính người đang đăng nhập.
+  const creatorId = typeof body?.creator_id === "string" && body.creator_id.trim()
+    ? body.creator_id.trim()
+    : me.user.id;
+  const creator = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(creatorId).first();
+  if (!creator) return apiError("VALIDATION_ERROR", "Người tạo không tồn tại.", ctx.requestId);
   if (supervisorId) {
     const sup = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(supervisorId).first();
     if (!sup) return apiError("VALIDATION_ERROR", "Người giám sát không tồn tại.", ctx.requestId);
@@ -219,9 +230,9 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
 
   const stmts: D1PreparedStatement[] = [
     db.prepare(
-      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, supervisor_id, due_at, execution_date, execution_time, shift, created_at, created_by)
-       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorId, dueAt, executionDate, executionTime, shift, now, me.user.id),
+      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, supervisor_id, creator_id, due_at, execution_date, execution_time, shift, created_at, created_by)
+       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorId, creatorId, dueAt, executionDate, executionTime, shift, now, me.user.id),
   ];
   for (const [idx, st] of steps.results.entries()) {
     stmts.push(
@@ -257,9 +268,20 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     name: string;
     code: string;
   }>();
-  const users = await db.prepare(`SELECT id, display_name FROM users WHERE id IN (?, ?, ?)`).bind(e.assignee_id, e.created_by, e.supervisor_id).all<{ id: string; display_name: string }>();
+  const users = await db.prepare(`SELECT id, display_name, position_id FROM users WHERE id IN (?, ?, ?, ?)`).bind(e.assignee_id, e.created_by, e.supervisor_id, (e as unknown as Record<string, unknown>).creator_id).all<{ id: string; display_name: string; position_id: string | null }>();
   const nameById: Record<string, string> = {};
-  for (const u of users.results ?? []) nameById[u.id] = u.display_name;
+  const posById: Record<string, string | null> = {};
+  for (const u of users.results ?? []) {
+    nameById[u.id] = u.display_name;
+    posById[u.id] = u.position_id;
+  }
+  // Lấy tên chức vụ của người tạo.
+  const creatorId = (e as unknown as Record<string, unknown>).creator_id as string | null;
+  let creatorPositionName: string | null = null;
+  if (creatorId && posById[creatorId]) {
+    const pos = await db.prepare(`SELECT name FROM positions WHERE id = ?`).bind(posById[creatorId]).first<{ name: string }>();
+    creatorPositionName = pos?.name ?? null;
+  }
   const steps = await db
     .prepare(`SELECT es.*, p.name as position_name FROM execution_steps es LEFT JOIN positions p ON p.id = es.position_id WHERE execution_id = ? ORDER BY sort_order ASC`)
     .bind(id)
@@ -269,7 +291,8 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     ...toPublicExec(e, pname?.name, progress),
     process_code: pname?.code ?? null,
     assignee_name: e.assignee_id ? nameById[e.assignee_id] ?? null : null,
-    creator_name: e.created_by ? nameById[e.created_by] ?? null : null,
+    creator_name: creatorId ? nameById[creatorId] ?? null : null,
+    creator_position_name: creatorPositionName,
     supervisor_name: e.supervisor_id ? nameById[e.supervisor_id] ?? null : null,
     steps: steps.results.map(toPublicStep),
   });

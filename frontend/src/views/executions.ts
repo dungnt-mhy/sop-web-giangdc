@@ -135,11 +135,16 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
               <option value="NIGHT">Đêm</option>
             </select></label>
         </div>
-        <label>Người thực hiện
+        <label>Người tạo <span class="req">*</span>
+          <select class="input" name="creator_id" id="exec-creator" required>
+            <option value="">— Chọn người tạo —</option>
+          </select>
+          <span class="hint">Người chịu trách nhiệm tạo lượt công việc này.</span></label>
+        <label>Người thực hiện chính
           <select class="input" name="assignee_id" id="exec-assignee">
             <option value="">Tôi (mặc định)</option>
           </select>
-          <span class="hint">Để trống = chính bạn thực hiện. Admin có thể chọn người khác.</span></label>
+          <span class="hint">Để trống = người tạo cũng là người thực hiện chính.</span></label>
         <label>Người giám sát
           <select class="input" name="supervisor_id" id="exec-supervisor">
             <option value="">— Không có —</option>
@@ -160,15 +165,19 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
   const sel = dialogRoot.querySelector<HTMLSelectElement>("#exec-process")!;
   const selAssignee = dialogRoot.querySelector<HTMLSelectElement>("#exec-assignee")!;
   const selSupervisor = dialogRoot.querySelector<HTMLSelectElement>("#exec-supervisor")!;
-  // Tải danh sách người dùng cho ô chọn người thực hiện / giám sát.
+  const selCreator = dialogRoot.querySelector<HTMLSelectElement>("#exec-creator")!;
+  // Tải danh sách người dùng cho ô chọn người tạo / thực hiện / giám sát.
   api.listActiveUsers().then((res) => {
     const items = res?.items ?? [];
     const active = items;
     if (active.length > 0) {
       const opts = active.map((u) => {
-        const label = u.position ? `${esc(u.display_name)} — ${esc(u.position)}` : esc(u.display_name);
+        const posName = u.position_name ?? u.position;
+        const label = posName ? `${esc(u.display_name)} — ${esc(posName)}` : esc(u.display_name);
         return `<option value="${esc(u.id)}">${label} (${esc(u.username)})</option>`;
       }).join("");
+      // Người tạo mặc định là chính người đang đăng nhập (option đầu tiên sau placeholder).
+      selCreator.innerHTML = `<option value="">— Chọn người tạo —</option>` + opts;
       selAssignee.innerHTML = `<option value="">Tôi (mặc định)</option>` + opts;
       selSupervisor.innerHTML = `<option value="">— Không có —</option>` + opts;
     }
@@ -217,9 +226,16 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
     if (assignee_id) input.assignee_id = assignee_id;
     const supervisor_id = String(fd.get("supervisor_id") ?? "").trim();
     if (supervisor_id) input.supervisor_id = supervisor_id;
+    const creator_id = String(fd.get("creator_id") ?? "").trim();
+    if (!creator_id) {
+      errEl.textContent = "Vui lòng chọn người tạo.";
+      errEl.hidden = false;
+      return;
+    }
+    input.creator_id = creator_id;
     setLoading(submitBtn, true, "Đang tạo…");
     try {
-      const created = await api.createExecution(input as { process_id: string; title?: string; execution_date: string; execution_time?: string; shift?: string; assignee_id?: string; supervisor_id?: string });
+      const created = await api.createExecution(input as { process_id: string; title?: string; execution_date: string; execution_time?: string; shift?: string; assignee_id?: string; supervisor_id?: string; creator_id: string });
       toast(`Đã tạo lượt ${created.code}.`);
       close();
       onDone();
@@ -803,9 +819,9 @@ function detailHtml(e: ExecutionDetail): string {
         <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}</dd></div>
         <div class="info-row"><dt>Quy trình</dt><dd>${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})</dd></div>
         <div class="info-row"><dt>Ngày thực hiện</dt><dd>${esc(e.execution_date ?? "—")}${e.execution_time ? ` · ${esc(e.execution_time)}` : ""}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>
-        <div class="info-row"><dt>Người thực hiện</dt><dd>${esc(e.assignee_name ?? "—")}</dd></div>
+        <div class="info-row"><dt>Người tạo</dt><dd>${esc(e.creator_name ?? "—")}${(e as unknown as Record<string, unknown>).creator_position_name ? ` <span class="muted small">— ${esc((e as unknown as Record<string, unknown>).creator_position_name as string)}</span>` : ""}</dd></div>
+        <div class="info-row"><dt>Người thực hiện chính</dt><dd>${esc(e.assignee_name ?? "—")}</dd></div>
         ${e.supervisor_name ? `<div class="info-row"><dt>Người giám sát</dt><dd>${esc(e.supervisor_name)}</dd></div>` : ""}
-        ${e.creator_name && e.creator_name !== e.assignee_name ? `<div class="info-row"><dt>Người tạo</dt><dd>${esc(e.creator_name)}</dd></div>` : ""}
         <div class="info-row"><dt>Tiến độ</dt><dd>
           <div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
           ${p?.done ?? 0}/${p?.total ?? 0} bước (${pct}%)</dd></div>

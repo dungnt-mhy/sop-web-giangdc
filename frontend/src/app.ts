@@ -58,25 +58,52 @@ function navigate(hash: string): void {
 function renderShell(): void {
   if (!session) return;
   const name = session.user.display_name || session.user.username;
-  const navItems: Array<{ hash: string; label: string; perm?: string }> = [
+  type NavItem = { hash: string; label: string; perm?: string; children?: NavItem[] };
+  const navItems: NavItem[] = [
     { hash: "#/home", label: "Trang chủ" },
     { hash: "#/my-work", label: "Công việc của tôi", perm: "executions.perform" },
     { hash: "#/processes", label: "Quy trình" },
     { hash: "#/dashboard", label: "Báo cáo", perm: "reports.view" },
     { hash: "#/exceptions", label: "Ngoại lệ", perm: "exceptions.handle" },
     { hash: "#/evidence", label: "Bằng chứng", perm: "executions.view" },
-    { hash: "#/positions", label: "Chức vụ", perm: "users.manage" },
-    { hash: "#/roles", label: "Vai trò", perm: "users.manage" },
-    { hash: "#/users", label: "Người dùng", perm: "users.manage" },
+    {
+      hash: "#/users", label: "Quản lý người dùng", perm: "users.manage",
+      children: [
+        { hash: "#/users", label: "Người dùng", perm: "users.manage" },
+        { hash: "#/roles", label: "Vai trò", perm: "users.manage" },
+        { hash: "#/positions", label: "Chức vụ", perm: "users.manage" },
+      ],
+    },
   ];
-  $("#sidebar-nav").innerHTML = navItems
-    .filter((i) => !i.perm || can(i.perm))
-    .map(
-      (i) =>
-        `<a href="${i.hash}" data-route="${i.hash}" class="nav-item">
-           <span class="nav-dot" aria-hidden="true"></span>${esc(i.label)}</a>`
-    )
+  const visibleItems = navItems.filter((i) => !i.perm || can(i.perm));
+  $("#sidebar-nav").innerHTML = visibleItems
+    .map((i) => {
+      if (i.children) {
+        const visibleChildren = i.children.filter((c) => !c.perm || can(c.perm));
+        if (visibleChildren.length === 0) return "";
+        const isActive = visibleChildren.some((c) => location.hash.startsWith(c.hash));
+        return `<div class="nav-group ${isActive ? "open" : ""}">
+          <button class="nav-item nav-parent" data-parent>
+            <span class="nav-dot" aria-hidden="true"></span>${esc(i.label)}
+            <span class="nav-arrow">▾</span>
+          </button>
+          <div class="nav-children">
+            ${visibleChildren.map((c) => `
+              <a href="${c.hash}" data-route="${c.hash}" class="nav-item nav-child">
+                <span class="nav-dot" aria-hidden="true"></span>${esc(c.label)}</a>`).join("")}
+          </div>
+        </div>`;
+      }
+      return `<a href="${i.hash}" data-route="${i.hash}" class="nav-item">
+         <span class="nav-dot" aria-hidden="true"></span>${esc(i.label)}</a>`;
+    })
     .join("");
+  // Toggle menu cha.
+  document.querySelectorAll<HTMLButtonElement>("[data-parent]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      btn.closest(".nav-group")?.classList.toggle("open");
+    });
+  });
   $("#user-chip").innerHTML = `
     <span class="avatar" aria-hidden="true">${esc(initial(name))}</span>
     <span class="user-name">${esc(name)}</span>`;

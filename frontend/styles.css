@@ -571,3 +571,9 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .assign-item { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
 .assign-item:hover { background: #f8fafc; }
 .assign-match { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.nav-group .nav-children { display: none; padding-left: 12px; }
+.nav-group.open .nav-children { display: block; }
+.nav-parent { width: 100%; text-align: left; cursor: pointer; background: none; border: none; }
+.nav-parent .nav-arrow { float: right; transition: transform 0.2s; }
+.nav-group.open .nav-parent .nav-arrow { transform: rotate(180deg); }
+.nav-child { font-size: 0.95em; }

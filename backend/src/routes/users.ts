@@ -110,16 +110,18 @@ export async function handleListUsers(ctx: Ctx): Promise<Response> {
   const db = ctx.env.sop_demo_db;
   const rows = await db
     .prepare(
-      `SELECT * FROM users
-       WHERE (? IS NULL OR (created_at > (SELECT created_at FROM users WHERE id = ?)
-             OR (created_at = (SELECT created_at FROM users WHERE id = ?) AND id > ?)))
-       ORDER BY created_at ASC, id ASC
+      `SELECT u.*, p.name as position_name FROM users u
+       LEFT JOIN positions p ON p.id = u.position_id
+       WHERE (? IS NULL OR (u.created_at > (SELECT created_at FROM users WHERE id = ?)
+             OR (u.created_at = (SELECT created_at FROM users WHERE id = ?) AND u.id > ?)))
+       ORDER BY u.created_at ASC, u.id ASC
        LIMIT ?`
     )
     .bind(cursor, cursor, cursor, cursor, limit + 1)
     .all<{
       id: string; username: string; display_name: string; email: string | null;
-      status: string; position: string | null; password_changed_at: string | null; failed_login_count: number;
+      status: string; position: string | null; position_id: string | null; position_name: string | null;
+      password_changed_at: string | null; failed_login_count: number;
       locked_until: string | null; created_at: string; updated_at: string | null;
     }>();
   const all = rows.results ?? [];

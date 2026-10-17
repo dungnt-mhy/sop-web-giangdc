@@ -33,7 +33,7 @@ export async function renderUsers(root: HTMLElement, selfId: string): Promise<vo
     </div>
     <div class="table-wrap"><table class="tbl" id="users-table">
       <thead><tr>
-        <th>Tên đăng nhập</th><th>Tên hiển thị</th><th>Vai trò</th>
+        <th>Tên đăng nhập</th><th>Tên hiển thị</th><th>Chức vụ</th><th>Vai trò</th>
         <th>Trạng thái</th><th>Thao tác</th>
       </tr></thead>
       <tbody><tr><td colspan="5" class="empty">Đang tải…</td></tr></tbody>
@@ -84,9 +84,11 @@ function statusLabel(u: PublicUser): string {
 function rowHtml(u: PublicUser, selfId: string): string {
   const isSelf = u.id === selfId;
   const locked = !!(u.locked_until && u.locked_until > new Date().toISOString());
+  const posName = u.position_name ?? u.position;
   return `<tr data-id="${esc(u.id)}">
     <td><strong>${esc(u.username)}</strong>${isSelf ? ' <span class="muted">(bạn)</span>' : ""}</td>
-    <td>${esc(u.display_name)}${u.position ? `<div class="muted small">${esc(u.position)}</div>` : ""}${u.email ? `<div class="muted small">${esc(u.email)}</div>` : ""}</td>
+    <td>${esc(u.display_name)}${u.email ? `<div class="muted small">${esc(u.email)}</div>` : ""}</td>
+    <td>${posName ? esc(posName) : `<span class="muted">—</span>`}</td>
     <td>${u.roles.map((r) => `<span class="role-badge sm">${esc(roleLabel(r))}</span>`).join(" ")}</td>
     <td>${statusLabel(u)}</td>
     <td class="actions">
