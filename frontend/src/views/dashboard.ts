@@ -266,23 +266,46 @@ function renderFullDashboard(root: HTMLElement, s: any, o: any): void {
 
     <!-- WORKLOAD -->
     <section class="card">
-      <h3>📊 Khối lượng công việc theo người</h3>
+      <div class="card-head"><h3>📊 Khối lượng công việc theo người</h3>
+      <span class="muted small" id="wl-count"></span></div>
       ${(o.workload as any[]).length === 0 ? `<p class="empty">Chưa có dữ liệu.</p>` : `
-      <div class="table-wrap"><table class="tbl">
+      <div class="table-wrap"><table class="tbl" id="wl-table">
         <thead><tr><th>Người thực hiện</th><th>Tổng lượt</th><th>Hoàn thành</th><th>Đang làm</th><th>Tiến độ</th></tr></thead>
-        <tbody>
-          ${(o.workload as any[]).map((w: any) => {
-            const pctDone = w.total > 0 ? Math.round((w.done / w.total) * 100) : 0;
-            return `<tr>
-              <td><strong>${esc(w.display_name)}</strong> <span class="muted small">(${esc(w.username)})</span></td>
-              <td>${w.total}</td>
-              <td><span class="pill green">${w.done}</span></td>
-              <td><span class="pill blue">${w.active}</span></td>
-              <td><div class="progress"><div class="progress-bar" style="width:${pctDone}%"></div></div> ${pctDone}%</td>
-            </tr>`;
-          }).join("")}
+        <tbody id="wl-body">
         </tbody>
-      </table></div>`}
+      </table></div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+        <button class="btn sm" id="wl-prev">‹ Trước</button>
+        <span class="muted small" id="wl-page" style="align-self:center"></span>
+        <button class="btn sm" id="wl-next">Sau ›</button>
+      </div>
+      <script>
+      (function(){
+        const data = ${(JSON.stringify(o.workload))};
+        const perPage = 10;
+        let page = 0;
+        const pages = Math.max(1, Math.ceil(data.length / perPage));
+        const body = document.getElementById('wl-body');
+        const pgEl = document.getElementById('wl-page');
+        const cntEl = document.getElementById('wl-count');
+        function render(){
+          const start = page * perPage;
+          const slice = data.slice(start, start + perPage);
+          body.innerHTML = slice.map((w) => {
+            const pctDone = w.total > 0 ? Math.round((w.done / w.total) * 100) : 0;
+            return '<tr><td><strong>' + w.display_name.replace(/</g,'&lt;') + '</strong> <span class="muted small">(' + w.username.replace(/</g,'&lt;') + ')</span></td>'
+              + '<td>' + w.total + '</td><td><span class="pill green">' + w.done + '</span></td>'
+              + '<td><span class="pill blue">' + w.active + '</span></td>'
+              + '<td><div class="progress"><div class="progress-bar" style="width:' + pctDone + '%"></div></div> ' + pctDone + '%</td></tr>';
+          }).join('');
+          pgEl.textContent = 'Trang ' + (page + 1) + ' / ' + pages;
+          cntEl.textContent = data.length + ' người';
+        }
+        document.getElementById('wl-prev').onclick = () => { if (page > 0) { page--; render(); } };
+        document.getElementById('wl-next').onclick = () => { if (page < pages - 1) { page++; render(); } };
+        render();
+      })();
+      </script>`}
     </section>
 
     <!-- KPI CHI TIẾT -->

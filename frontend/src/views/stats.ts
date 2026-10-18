@@ -33,9 +33,32 @@ function barChart(items: { label: string; value: number; color?: string }[], max
   return `<div class="chart-bars">${rows}</div>`;
 }
 
+/** Vẽ biểu đồ cột dọc với scroll ngang — cho mobile. Giới hạn top N. */
+function verticalBars(items: { label: string; value: number; color?: string }[], topN = 10): string {
+  const top = items.slice(0, topN);
+  if (top.length === 0) return `<p class="empty">Chưa có dữ liệu.</p>`;
+  const max = Math.max(...top.map((i) => i.value), 1);
+  const W = 64, GAP = 12, H = 150;
+  const totalW = top.length * (W + GAP) + GAP;
+  const bars = top.map((it, i) => {
+    const x = GAP + i * (W + GAP);
+    const h = Math.max(4, Math.round((it.value / max) * H));
+    const shortLabel = it.label.length > 12 ? it.label.slice(0, 11) + "…" : it.label;
+    return `
+      <g>
+        <rect x="${x}" y="${H - h}" width="${W}" height="${h}" fill="${it.color || "#3b82f6"}" rx="4">
+          <title>${esc(it.label)}: ${it.value}</title></rect>
+        <text x="${x + W / 2}" y="${H - h - 6}" font-size="12" font-weight="700" text-anchor="middle" fill="#1e293b">${it.value}</text>
+        <text x="${x + W / 2}" y="${H + 14}" font-size="10" text-anchor="middle" fill="#64748b">
+          <title>${esc(it.label)}</title>${esc(shortLabel)}</text>
+      </g>`;
+  }).join("");
+  const note = items.length > topN ? `<p class="muted small" style="margin-top:8px">Hiện top ${topN} / ${items.length}.</p>` : "";
+  return `<div style="overflow-x:auto"><svg width="${Math.max(totalW, 320)}" height="${H + 22}" style="min-width:100%">${bars}</svg></div>${note}`;
+}
+
 /** Vẽ biểu đồ donut SVG. */
-function donutChart(segments: { label: string; value: number; color: string }[]): string {
-  const total = segments.reduce((a, s) => a + s.value, 0) || 1;
+function donutChart(segments: { label: string; value: number; color: string }[]): string {  const total = segments.reduce((a, s) => a + s.value, 0) || 1;
   let acc = 0;
   const circles = segments.map((s) => {
     const frac = s.value / total;
@@ -178,12 +201,12 @@ export async function renderStatsUnit(root: HTMLElement): Promise<void> {
           <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">Tổng lượt</div></div>
           <div class="stat-card"><div class="stat-num">${items.length}</div><div class="stat-label">Đơn vị</div></div>
         </div>
-        <div class="card"><h3>Biểu đồ theo đơn vị</h3>
-          ${barChart(items.map((r) => ({
+        <div class="card"><h3>Biểu đồ theo đơn vị (top 10)</h3>
+          ${verticalBars(items.map((r) => ({
             label: String(r.unit_name),
             value: Number(r.total) || 0,
             color: "#3b82f6",
-          })))}
+          })), 10)}
         </div>
         <div class="card"><div class="card-head"><h3>Chi tiết</h3><button class="btn sm" data-export>📥 Xuất Excel</button></div>
           <div class="table-wrap"><table class="table">
@@ -240,12 +263,12 @@ export async function renderStatsPerson(root: HTMLElement): Promise<void> {
         return;
       }
       resultEl.innerHTML = `
-        <div class="card"><h3>Biểu đồ khối lượng</h3>
-          ${barChart(items.slice(0, 15).map((r) => ({
+        <div class="card"><h3>Biểu đồ khối lượng (top 10)</h3>
+          ${verticalBars(items.map((r) => ({
             label: String(r.display_name || r.username),
             value: Number(r.total) || 0,
             color: "#22c55e",
-          })))}
+          })), 10)}
         </div>
         <div class="card"><div class="card-head"><h3>Chi tiết</h3><button class="btn sm" data-export>📥 Xuất Excel</button></div>
           <div class="table-wrap"><table class="table">
@@ -291,12 +314,12 @@ export async function renderStatsProcess(root: HTMLElement): Promise<void> {
         return;
       }
       resultEl.innerHTML = `
-        <div class="card"><h3>Biểu đồ lượt theo quy trình</h3>
-          ${barChart(items.slice(0, 15).map((r) => ({
-            label: `${String(r.process_code)} — ${String(r.process_name)}`,
+        <div class="card"><h3>Biểu đồ lượt theo quy trình (top 10)</h3>
+          ${verticalBars(items.map((r) => ({
+            label: `${String(r.process_code)}`,
             value: Number(r.total) || 0,
             color: "#8b5cf6",
-          })))}
+          })), 10)}
         </div>
         <div class="card"><div class="card-head"><h3>Chi tiết</h3><button class="btn sm" data-export>📥 Xuất Excel</button></div>
           <div class="table-wrap"><table class="table">
