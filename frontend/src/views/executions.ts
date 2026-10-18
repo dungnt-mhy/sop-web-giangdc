@@ -305,7 +305,13 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       root.querySelector("#ex-sub")!.textContent =
         `${e.process_name ?? ""}${(e as unknown as Record<string, unknown>).version_number ? ` v${(e as unknown as Record<string, unknown>).version_number}` : ""}${e.title ? " — " + e.title : ""}`;
       renderActions(actionsEl, dialogRoot, e, reload);
-      body.innerHTML = detailHtml(e);
+      // Lấy danh sách bước đang chờ duyệt bỏ qua (để hiển thị pill + chặn bắt đầu).
+      let pendingSkipStepIds = new Set<string>();
+      try {
+        const { items } = await api.listSkipRequests(execId);
+        pendingSkipStepIds = new Set(items.map((r) => String((r as Record<string, unknown>).step_id)));
+      } catch { /* bỏ qua */ }
+      body.innerHTML = detailHtml(e, pendingSkipStepIds);
       // Tải và hiển thị yêu cầu xin bỏ qua đang chờ.
       try {
         const { items } = await api.listSkipRequests(execId);
@@ -1139,7 +1145,7 @@ async function openAssignDialog(
   });
 }
 
-function detailHtml(e: ExecutionDetail): string {
+function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Set()): string {
   const p = e.progress;
   const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
   const active = e.status === "IN_PROGRESS";
@@ -1185,10 +1191,11 @@ function detailHtml(e: ExecutionDetail): string {
       <div data-exec-list>
       <ol class="step-list">
         ${e.steps.map((st, idx) => {
-          const canStart = active && st.status === "NOT_STARTED";
+          const pendingSkip = pendingSkipStepIds.has(st.id);
+          const canStart = active && st.status === "NOT_STARTED" && !pendingSkip;
           const canFinish = active && st.status === "IN_PROGRESS";
           const skipAllowed = ((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed === true;
-          const canSkip = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") && skipAllowed;
+          const canSkip = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") && skipAllowed && !pendingSkip;
           const canUpload = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS");
           // Yêu cầu ảnh từ completion_req (EXE-007).
           let minPhotos = 0;
@@ -1203,6 +1210,7 @@ function detailHtml(e: ExecutionDetail): string {
                 <strong>${esc(st.code)}</strong> — ${esc(st.title)}
                 ${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}
                 ${skipAllowed ? ' <span class="pill blue">⏭️ Được bỏ qua</span>' : ""}
+                ${pendingSkip ? ' <span class="pill amber">🙏 Chờ duyệt bỏ qua</span>' : ""}
                 <span class="pill ${st.status === "PASSED" ? "green" : st.status === "SKIPPED" ? "gray" : st.status === "IN_PROGRESS" ? "blue" : "gray"}">${esc(STEP_STATUS_LABELS[st.status] ?? st.status)}</span>
                 ${minPhotos > 0 ? ` <span class="pill orange" title="Yêu cầu ít nhất ${minPhotos} ảnh">📷 ${minPhotos} ảnh</span>` : ""}
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? ` <span class="pill amber" title="Lý do: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")}&#10;Lúc: ${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")}">🔄 Làm lại ${esc(String((st as unknown as Record<string, unknown>).redo_count))} lần</span>` : ""}
@@ -1266,7 +1274,7 @@ function detailHtml(e: ExecutionDetail): string {
       </ol>
       </div>
       <div data-exec-diagram hidden>
-        ${renderExecDiagram(e.steps)}
+        ${renderExecDiagram(e.steps, pendingSkipStepIds)}
       </div>
     </section>
     <section class="card">
@@ -1279,7 +1287,7 @@ function detailHtml(e: ExecutionDetail): string {
 }
 
 /** Sơ đồ tuyến tính cho lượt thực hiện — màu theo trạng thái bước. */
-function renderExecDiagram(steps: import("../api.js").ExecutionStep[]): string {
+function renderExecDiagram(steps: import("../api.js").ExecutionStep[], pendingSkipStepIds: Set<string> = new Set()): string {
   const cls: Record<string, string> = {
     NOT_STARTED: "",
     IN_PROGRESS: "doing",
@@ -1303,6 +1311,7 @@ function renderExecDiagram(steps: import("../api.js").ExecutionStep[]): string {
         const assignees = (sx.assignees as { display_name: string }[] ?? []);
         const evCount = (sx.evidence_count as number) ?? 0;
         const skipAllowed = (sx.skip_policy as { allowed?: boolean } | null)?.allowed === true;
+        const pendingSkip = pendingSkipStepIds.has(st.id);
         return `
         ${idx > 0 ? `<div class="flow-arrow" aria-hidden="true">↓</div>` : ""}
         <div class="flow-node exec ${cls[st.status] ?? ""}" data-goto-step="${esc(st.id)}" title="Bấm để xem chi tiết bước">
@@ -1310,6 +1319,7 @@ function renderExecDiagram(steps: import("../api.js").ExecutionStep[]): string {
             <span class="flow-num">${idx + 1}</span>
             <strong>${esc(st.code)}</strong>
             ${skipAllowed ? ' <span class="pill blue">⏭️ Được bỏ qua</span>' : ""}
+            ${pendingSkip ? ' <span class="pill amber">🙏 Chờ duyệt</span>' : ""}
             <span class="pill ${st.status === "PASSED" ? "green" : st.status === "IN_PROGRESS" ? "blue" : "gray"}">${esc(label[st.status] ?? st.status)}</span>
           </div>
           <div class="flow-title">${esc(st.title)}</div>

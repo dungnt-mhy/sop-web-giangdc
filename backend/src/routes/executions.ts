@@ -1029,6 +1029,13 @@ export async function handleStartStep(ctx: Ctx, execId: string, stepId: string):
   if (step.status !== "NOT_STARTED") {
     return apiError("VALIDATION_ERROR", "Bước đã được bắt đầu.", ctx.requestId);
   }
+  // Chặn bắt đầu khi đang có yêu cầu xin bỏ qua chờ duyệt.
+  const pendingSkip = await db.prepare(
+    `SELECT id FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING' LIMIT 1`
+  ).bind(execId, stepId).first();
+  if (pendingSkip) {
+    return apiError("VALIDATION_ERROR", "Bước đang chờ duyệt yêu cầu bỏ qua — không thể bắt đầu.", ctx.requestId);
+  }
   // AC-04: bước trước phải PASSED hoặc SKIPPED hợp lệ.
   if (step.sort_order > 1) {
     const prev = await db
