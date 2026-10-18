@@ -273,7 +273,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .filter-bar .input { flex: 1; max-width: 420px; }
 .info-list { margin: 0; display: grid; gap: 8px; }
 .info-row { display: grid; grid-template-columns: 180px 1fr; gap: 12px; }
-.info-row dt { color: var(--muted); font-size: 13.5px; }
+.info-row dt { color: var(--navy-3); font-size: 13.5px; font-weight: 600; }
 .info-row dd { margin: 0; font-size: 14.5px; }
 .head-actions { display: flex; gap: 8px; }
 .link.back { display: inline-block; margin-bottom: 6px; font-size: 14px; }
@@ -602,7 +602,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .step-details summary { cursor: pointer; font-weight: 600; color: #374151; }
 .step-details .detail-list { margin: 8px 0 0; }
 .step-details .detail-list div { margin-bottom: 6px; }
-.step-details .detail-list dt { font-weight: 600; font-size: 0.9em; color: #6b7280; }
+.step-details .detail-list dt { font-weight: 600; font-size: 0.9em; color: var(--navy-3); }
 .step-details .detail-list dd { margin: 2px 0 0; }
 .step-details .warning dt { color: #d97706; }
 .step-details .warning dd { color: #92400e; background: #fef3c7; padding: 6px 8px; border-radius: 4px; }
