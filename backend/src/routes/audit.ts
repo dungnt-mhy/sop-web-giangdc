@@ -84,6 +84,7 @@ export async function handleSeedTestData(ctx: Ctx): Promise<Response> {
   }
   const db = ctx.env.sop_demo_db;
 
+  try {
   // Lấy processes có version ACTIVE.
   const procs = await db.prepare(
     `SELECT p.id, p.code, p.name FROM processes p
@@ -161,4 +162,9 @@ export async function handleSeedTestData(ctx: Ctx): Promise<Response> {
   }
 
   return ok({ created });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("[seed] error:", detail);
+    return apiError("VALIDATION_ERROR", `Seed lỗi: ${detail}`, ctx.requestId);
+  }
 }
