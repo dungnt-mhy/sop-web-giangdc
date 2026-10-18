@@ -497,6 +497,23 @@ export async function handleRequestReactivation(ctx: Ctx, versionId: string): Pr
     object_id: versionId,
     request_id: ctx.requestId,
   });
+  // Thông báo cho người có quyền duyệt.
+  const proc = await db.prepare(`SELECT code, name FROM processes WHERE id = ?`).bind(v.process_id).first<{ code: string; name: string }>();
+  const approvers = await db.prepare(
+    `SELECT DISTINCT u.id FROM users u
+     JOIN user_roles ur ON ur.user_id = u.id
+     JOIN role_permissions rp ON rp.role_id = ur.role
+     WHERE (rp.permission = 'processes.approve' OR rp.permission = '*') AND u.id != ? AND u.status = 'active'`
+  ).bind(me.user.id).all<{ id: string }>();
+  const approverIds = (approvers.results ?? []).map((r) => r.id);
+  if (approverIds.length > 0) {
+    await notifyUsers(db, approverIds, {
+      type: "VERSION_REACTIVATION_REQUESTED",
+      title: `Yêu cầu kích hoạt lại ${proc?.code ?? ""} v${v.version_number}`,
+      message: `${me.user.display_name} đã yêu cầu kích hoạt lại phiên bản v${v.version_number} của ${proc?.name ?? ""}.`,
+      link: `#/processes/${v.process_id}`,
+    });
+  }
   return ok({ requested: true });
 }
 
@@ -523,6 +540,17 @@ export async function handleApproveReactivation(ctx: Ctx, versionId: string): Pr
     object_id: versionId,
     request_id: ctx.requestId,
   });
+  // Thông báo cho người yêu cầu.
+  const reqId = (v as unknown as Record<string, unknown>).reactivation_requested_by as string | null;
+  if (reqId && reqId !== me.user.id) {
+    const proc = await db.prepare(`SELECT code, name FROM processes WHERE id = ?`).bind(v.process_id).first<{ code: string; name: string }>();
+    await notifyUsers(db, [reqId], {
+      type: "VERSION_REACTIVATION_APPROVED",
+      title: `Yêu cầu kích hoạt lại được duyệt`,
+      message: `${me.user.display_name} đã duyệt kích hoạt lại v${v.version_number} của ${proc?.name ?? ""}.`,
+      link: `#/processes/${v.process_id}`,
+    });
+  }
   // Kích hoạt: gọi transitionVersion với RETIRED -> ACTIVE.
   return transitionVersion(ctx, versionId, ["RETIRED"], "ACTIVE", "processes.approve", "PROCESS_VERSION_ACTIVATED");
 }
@@ -555,6 +583,17 @@ export async function handleRejectReactivation(ctx: Ctx, versionId: string): Pro
     request_id: ctx.requestId,
     diff: { reason },
   });
+  // Thông báo cho người yêu cầu.
+  const requesterId = (v as unknown as Record<string, unknown>).reactivation_requested_by as string | null;
+  if (requesterId && requesterId !== me.user.id) {
+    const proc = await db.prepare(`SELECT code, name FROM processes WHERE id = ?`).bind(v.process_id).first<{ code: string; name: string }>();
+    await notifyUsers(db, [requesterId], {
+      type: "VERSION_REACTIVATION_REJECTED",
+      title: `Yêu cầu kích hoạt lại bị từ chối`,
+      message: `${me.user.display_name} đã từ chối kích hoạt lại v${v.version_number} của ${proc?.name ?? ""}. Lý do: ${reason}`,
+      link: `#/processes/${v.process_id}`,
+    });
+  }
   return ok({ rejected: true });
 }
 

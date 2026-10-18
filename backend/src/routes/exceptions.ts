@@ -214,6 +214,16 @@ export async function handleResolveException(ctx: Ctx, exceptionId: string) {
     object_id: exceptionId,
     request_id: ctx.requestId,
   });
+  // Thông báo cho người báo cáo.
+  const reporterId = (ex as unknown as Record<string, unknown>).reported_by as string | null;
+  if (reporterId && reporterId !== me.user.id) {
+    await notifyUsers(db, [reporterId], {
+      type: "EXCEPTION_RESOLVED",
+      title: `Ngoại lệ đã được khắc phục`,
+      message: `${me.user.display_name} đã khắc phục ngoại lệ "${ex.title}".`,
+      link: `#/exceptions`,
+    });
+  }
   const updated = await db.prepare(`SELECT * FROM exceptions WHERE id = ?`).bind(exceptionId).first<ExceptionRow>();
   return ok(toPublic(updated!));
 }
