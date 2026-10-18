@@ -125,6 +125,10 @@ import {
   handleDashboardDaily,
   handleDashboardOverview,
   handleDashboardSummary,
+  handleStatsByPerson,
+  handleStatsByProcess,
+  handleStatsByShift,
+  handleStatsByUnit,
 } from "./routes/dashboard";
 import {
   handleCloseException,
@@ -459,6 +463,18 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   }
   if (path === "/dashboard/daily" && method === "GET") {
     return handleDashboardDaily(ctx);
+  }
+  if (path === "/dashboard/by-unit" && method === "GET") {
+    return handleStatsByUnit(ctx);
+  }
+  if (path === "/dashboard/by-person" && method === "GET") {
+    return handleStatsByPerson(ctx);
+  }
+  if (path === "/dashboard/by-process" && method === "GET") {
+    return handleStatsByProcess(ctx);
+  }
+  if (path === "/dashboard/by-shift" && method === "GET") {
+    return handleStatsByShift(ctx);
   }
   if (path === "/dashboard/executions" && method === "GET") {
     return handleDashboardExecutions(ctx);

@@ -19,6 +19,7 @@ var ASSETS = [
   "./dist/views/executions.js",
   "./dist/views/dashboard.js",
   "./dist/views/management.js",
+  "./dist/views/stats.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
 ];

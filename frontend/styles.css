@@ -704,3 +704,24 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .notif-msg { font-size: 13px; color: var(--text); margin-bottom: 4px; }
 .notif-time { font-size: 12px; }
 .mono { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); word-break: break-all; }
+
+/* Biểu đồ thống kê. */
+.chart-bars { display: grid; gap: 8px; padding: 8px 0; }
+.chart-row { display: grid; grid-template-columns: 180px 1fr 48px; gap: 10px; align-items: center; }
+.chart-label { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-bar-wrap { background: #f1f5f9; border-radius: 6px; height: 22px; overflow: hidden; }
+.chart-bar { height: 100%; border-radius: 6px; transition: width 0.4s ease; min-width: 2px; }
+.chart-val { font-size: 13px; font-weight: 700; text-align: right; }
+.donut-wrap { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.donut { width: 140px; height: 140px; }
+.donut-legend { display: grid; gap: 8px; }
+.donut-legend-item { font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.donut-legend-item .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card { background: #fff; border: 1px solid #e8edf3; border-radius: 12px; padding: 16px; text-align: center; box-shadow: var(--shadow); }
+.stat-num { font-size: 28px; font-weight: 800; color: var(--navy); }
+.stat-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+@media (max-width: 640px) {
+  .chart-row { grid-template-columns: 110px 1fr 40px; gap: 6px; }
+  .chart-label { font-size: 12px; }
+}

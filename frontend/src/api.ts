@@ -619,6 +619,18 @@ export const api = {
   listAuditEventTypes(): Promise<{ items: string[] }> {
     return req("GET", `/audit/event-types`);
   },
+  statsByUnit(params: string): Promise<{ items: Record<string, unknown>[] }> {
+    return req("GET", `/dashboard/by-unit${params ? "?" + params : ""}`);
+  },
+  statsByPerson(params: string): Promise<{ items: Record<string, unknown>[] }> {
+    return req("GET", `/dashboard/by-person${params ? "?" + params : ""}`);
+  },
+  statsByProcess(params: string): Promise<{ items: Record<string, unknown>[] }> {
+    return req("GET", `/dashboard/by-process${params ? "?" + params : ""}`);
+  },
+  statsByShift(params: string): Promise<{ items: Record<string, unknown>[] }> {
+    return req("GET", `/dashboard/by-shift${params ? "?" + params : ""}`);
+  },
 };
 
 /** true nếu ApiError là lỗi chưa đăng nhập. */

@@ -410,3 +410,137 @@ export async function handleDashboardExportCsv(ctx: Ctx) {
     },
   });
 }
+
+/** GET /dashboard/by-unit — thống kê theo đơn vị. Query: ?from=&to=&unit_id= */
+export async function handleStatsByUnit(ctx: Ctx) {
+  const me = await requirePermission(ctx, "reports.view");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+  const url = new URL(ctx.request.url);
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  const unitId = url.searchParams.get("unit_id");
+
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
+  if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
+  if (unitId) { conds.push(`ou.id = ?`); params.push(unitId); }
+  const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
+
+  const rows = await db.prepare(
+    `SELECT ou.id AS unit_id, ou.name AS unit_name, ou.type AS unit_type,
+            COUNT(DISTINCT e.id) AS total,
+            SUM(CASE WHEN e.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN e.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
+            SUM(CASE WHEN e.status = 'CREATED' THEN 1 ELSE 0 END) AS created,
+            SUM(CASE WHEN e.status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelled,
+            SUM(CASE WHEN e.status = 'PENDING_CONFIRMATION' THEN 1 ELSE 0 END) AS pending
+     FROM org_units ou
+     LEFT JOIN process_org_units pou ON pou.org_unit_id = ou.id
+     LEFT JOIN executions e ON e.process_id = pou.process_id
+     ${where}
+     GROUP BY ou.id, ou.name, ou.type
+     ORDER BY total DESC`
+  ).bind(...params).all<Record<string, unknown>>();
+  return ok({ items: rows.results ?? [] });
+}
+
+/** GET /dashboard/by-person — thống kê theo người thực hiện. Query: ?from=&to=&user_id= */
+export async function handleStatsByPerson(ctx: Ctx) {
+  const me = await requirePermission(ctx, "reports.view");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+  const url = new URL(ctx.request.url);
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  const userId = url.searchParams.get("user_id");
+
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
+  if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
+  if (userId) { conds.push(`u.id = ?`); params.push(userId); }
+  const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
+
+  const rows = await db.prepare(
+    `SELECT u.id AS user_id, u.display_name, u.username,
+            COUNT(DISTINCT e.id) AS total,
+            SUM(CASE WHEN e.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN e.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
+            SUM(CASE WHEN e.status = 'PENDING_CONFIRMATION' THEN 1 ELSE 0 END) AS pending,
+            AVG(CASE WHEN e.status = 'COMPLETED' AND e.started_at AND e.completed_at
+                THEN (julianday(e.completed_at) - julianday(e.started_at)) * 24 ELSE NULL END) AS avg_hours
+     FROM users u
+     LEFT JOIN executions e ON e.assignee_id = u.id
+     ${where}
+     GROUP BY u.id, u.display_name, u.username
+     HAVING total > 0
+     ORDER BY total DESC`
+  ).bind(...params).all<Record<string, unknown>>();
+  return ok({ items: rows.results ?? [] });
+}
+
+/** GET /dashboard/by-process — thống kê theo quy trình. Query: ?from=&to=&process_id= */
+export async function handleStatsByProcess(ctx: Ctx) {
+  const me = await requirePermission(ctx, "reports.view");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+  const url = new URL(ctx.request.url);
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  const processId = url.searchParams.get("process_id");
+
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
+  if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
+  if (processId) { conds.push(`p.id = ?`); params.push(processId); }
+  const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
+
+  const rows = await db.prepare(
+    `SELECT p.id AS process_id, p.code AS process_code, p.name AS process_name,
+            COUNT(DISTINCT e.id) AS total,
+            SUM(CASE WHEN e.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN e.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
+            SUM(CASE WHEN e.status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelled,
+            COUNT(DISTINCT ex.id) AS exception_count
+     FROM processes p
+     LEFT JOIN executions e ON e.process_id = p.id
+     LEFT JOIN exceptions ex ON ex.execution_id = e.id
+     ${where}
+     GROUP BY p.id, p.code, p.name
+     HAVING total > 0
+     ORDER BY total DESC`
+  ).bind(...params).all<Record<string, unknown>>();
+  return ok({ items: rows.results ?? [] });
+}
+
+/** GET /dashboard/by-shift — thống kê theo ca làm việc. Query: ?from=&to= */
+export async function handleStatsByShift(ctx: Ctx) {
+  const me = await requirePermission(ctx, "reports.view");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+  const url = new URL(ctx.request.url);
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+
+  const conds: string[] = [`e.shift IS NOT NULL`];
+  const params: unknown[] = [];
+  if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
+  if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
+  const where = `WHERE ${conds.join(" AND ")}`;
+
+  const rows = await db.prepare(
+    `SELECT e.shift,
+            COUNT(*) AS total,
+            SUM(CASE WHEN e.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN e.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
+            SUM(CASE WHEN e.status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelled
+     FROM executions e
+     ${where}
+     GROUP BY e.shift
+     ORDER BY total DESC`
+  ).bind(...params).all<Record<string, unknown>>();
+  return ok({ items: rows.results ?? [] });
+}
