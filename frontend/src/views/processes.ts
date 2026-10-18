@@ -179,6 +179,8 @@ function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], proces
             <div class="beauty-code">${esc(st.code)}${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}${((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) ? ' <span class="pill blue">⏭️ Được bỏ qua</span>' : ""}</div>
             <div class="beauty-title">${esc(st.title)}</div>
             ${st.role ? `<div class="beauty-role">👤 ${esc(st.role)}</div>` : ""}
+            ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="beauty-role">👤 Thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
+            ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? `<div class="beauty-role">👁️ Giám sát: ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
             ${st.target_duration_min ? `<div class="beauty-time">⏱ ~${st.target_duration_min} phút</div>` : ""}
             ${hasDetails ? `<button class="beauty-expand" data-expand>Chi tiết ▾</button>
             <div class="beauty-details" hidden>
@@ -188,6 +190,8 @@ function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], proces
               ${detailRow("📖 Hướng dẫn", st.instruction)}
               ${detailRow("Đầu ra / bàn giao", st.output_desc)}
               ${detailRow("Ghi chú", st.note)}
+              ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? detailRow("👤 Vai trò thực hiện", ((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => p.name).join(", ")) : ""}
+              ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? detailRow("👁️ Vai trò giám sát", ((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => p.name).join(", ")) : ""}
               ${((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) ? detailRow("⏭️ Bỏ qua", "✅ Cho phép bỏ qua bước này") : ""}
               ${detailRow("⚠️ Cảnh báo", st.warning)}
             </div>` : ""}
@@ -631,7 +635,7 @@ async function toggleSteps(
         <ol class="step-list">
           ${items.map((st, idx) => {
             const skipAllowed = ((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) === true;
-            const hasDetails = st.prerequisite || st.input_desc || st.expected_result || st.output_desc || st.note || st.warning || skipAllowed || st.target_duration_min;
+            const hasDetails = st.prerequisite || st.input_desc || st.instruction || st.expected_result || st.output_desc || st.note || st.warning || skipAllowed || st.target_duration_min;
             const dRow = (label: string, val: string | null): string =>
               val ? `<div class="step-detail-row"><span class="step-dlabel">${label}:</span> ${esc(val)}</div>` : "";
             return `
@@ -666,8 +670,8 @@ async function toggleSteps(
                   ${(() => { try { const cr = st.completion_req as Record<string, unknown> | null; const v = cr?.["min_photos"]; return typeof v === "number" && v > 0 ? dRow("Số ảnh tối thiểu", `${v} ảnh`) : ""; } catch { return ""; } })()}
                   ${skipAllowed ? `<div class="step-detail-row"><span class="step-dlabel">⏭️ Bỏ qua:</span> ✅ Cho phép bỏ qua bước này</div>` : ""}
                   ${dRow("⚠️ Cảnh báo", st.warning)}
+                  ${st.instruction ? `<div class="step-guide"><div class="step-guide-title">📖 Hướng dẫn thực hiện</div><div class="step-guide-body">${esc(st.instruction)}</div></div>` : ""}
                 </div>` : ""}
-              ${st.instruction ? `<div class="step-guide"><div class="step-guide-title">📖 Hướng dẫn thực hiện</div><div class="step-guide-body">${esc(st.instruction)}</div></div>` : ""}
             </li>`;
           }).join("")}
         </ol>
