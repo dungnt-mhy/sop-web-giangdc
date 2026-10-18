@@ -57,9 +57,9 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
     </div>
     <div class="table-wrap"><table class="tbl clickable-rows" id="exec-table">
       <thead><tr>
-        <th>Mã lượt</th><th>Quy trình</th><th>Ngày thực hiện</th><th>Tiến độ</th><th>Trạng thái</th>
+        <th>Mã lượt</th><th>Quy trình</th><th>Ngày tạo</th><th>Ngày thực hiện</th><th>Tiến độ</th><th>Trạng thái</th>
       </tr></thead>
-      <tbody><tr><td colspan="5" class="empty">Đang tải…</td></tr></tbody>
+      <tbody><tr><td colspan="6" class="empty">Đang tải…</td></tr></tbody>
     </table></div>
     <div id="exec-dialog-root"></div>`;
 
@@ -78,10 +78,17 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
       tbody.innerHTML = items.map((e) => {
         const p = e.progress;
         const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+        // Ngày tạo: kèm giờ.
+        const createdAt = e.created_at ? e.created_at.slice(0, 16).replace("T", " ").split(" ").map((s, i) => i === 0 ? s.split("-").reverse().join("/") : s).join(" ") : "—";
+        // Ngày thực hiện: thời gian nhấn Bắt đầu (kèm giờ); chưa bắt đầu thì hiện ngày dự kiến.
+        const execAt = e.started_at
+          ? e.started_at.slice(0, 16).replace("T", " ").split(" ").map((s, i) => i === 0 ? s.split("-").reverse().join("/") : s).join(" ")
+          : (e.execution_date ? e.execution_date.split("-").reverse().join("/") + (e.execution_time ? ` ${e.execution_time}` : "") + ' <span class="muted small">(dự kiến)</span>' : "—");
         return `<tr data-id="${esc(e.id)}">
           <td><strong>${esc(e.code)}</strong>${e.title ? `<div class="muted small">${esc(e.title)}</div>` : ""}</td>
           <td>${esc(e.process_name ?? "—")}</td>
-          <td>${esc(e.execution_date ?? "—")}</td>
+          <td class="muted small">${createdAt}</td>
+          <td>${execAt}</td>
           <td><div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
             <span class="muted small">${p?.done ?? 0}/${p?.total ?? 0}</span></td>
           <td>${execPill(e.status)}</td>
@@ -850,7 +857,8 @@ function detailHtml(e: ExecutionDetail): string {
       <dl class="info-list">
         <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}</dd></div>
         <div class="info-row"><dt>Quy trình</dt><dd>${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})</dd></div>
-        <div class="info-row"><dt>Ngày thực hiện</dt><dd>${esc(e.execution_date ?? "—")}${e.execution_time ? ` · ${esc(e.execution_time)}` : ""}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>
+        <div class="info-row"><dt>Ngày thực hiện (dự kiến)</dt><dd>${esc(e.execution_date ?? "—")}${e.execution_time ? ` · ${esc(e.execution_time)}` : ""}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>
+        ${e.started_at ? `<div class="info-row"><dt>Bắt đầu lúc</dt><dd>${esc(e.started_at.slice(0, 16).replace("T", " ").split(" ").map((s, i) => i === 0 ? s.split("-").reverse().join("/") : s).join(" "))}</dd></div>` : ""}
         <div class="info-row"><dt>Người tạo</dt><dd>${esc(e.creator_name ?? "—")}${(e as unknown as Record<string, unknown>).creator_position_name ? ` <span class="muted small">— ${esc((e as unknown as Record<string, unknown>).creator_position_name as string)}</span>` : ""}</dd></div>
         <div class="info-row"><dt>Người thực hiện chính</dt><dd>${esc(e.assignee_name ?? "—")}</dd></div>
         ${e.supervisor_name ? `<div class="info-row"><dt>Người giám sát</dt><dd>${esc(e.supervisor_name)}</dd></div>` : ""}
