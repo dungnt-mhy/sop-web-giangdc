@@ -744,6 +744,26 @@ async function transitionExecution(
   // Gửi thông báo theo trạng thái đích.
   const execCode = e.code;
   const execLink = `#/executions/${id}`;
+  if (to === "IN_PROGRESS" && e.status === "CREATED") {
+    // Bắt đầu lượt → thông báo cho giám sát và người phê duyệt.
+    const supRows = await db.prepare(`SELECT user_id FROM execution_supervisors WHERE execution_id = ?`).bind(id).all<{ user_id: string }>();
+    const aprRows = await db.prepare(`SELECT user_id FROM execution_approvers WHERE execution_id = ?`).bind(id).all<{ user_id: string }>();
+    const notifyIds = [
+      ...(supRows.results ?? []).map((r) => r.user_id),
+      ...(aprRows.results ?? []).map((r) => r.user_id),
+      e.supervisor_id as string | null,
+      (e as unknown as Record<string, unknown>).approver_id as string | null,
+    ].filter((x): x is string => !!x && x !== me.user.id);
+    const uniqueIds = [...new Set(notifyIds)];
+    if (uniqueIds.length > 0) {
+      await notifyUsers(db, uniqueIds, {
+        type: "EXECUTION_STARTED",
+        title: `Lượt ${execCode} đã bắt đầu`,
+        message: `${me.user.display_name} đã bắt đầu thực hiện lượt ${execCode}.`,
+        link: execLink,
+      });
+    }
+  }
   if (to === "PENDING_CONFIRMATION") {
     // Báo hoàn thành → thông báo cho người phê duyệt/giám sát.
     const approverId = (e as unknown as Record<string, unknown>).approver_id as string | null;
