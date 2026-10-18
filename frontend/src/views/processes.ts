@@ -47,9 +47,9 @@ export async function renderProcesses(root: HTMLElement, canManage: boolean): Pr
     </div>
     <div class="table-wrap"><table class="tbl" id="proc-table">
       <thead><tr>
-        <th>Mã</th><th>Tên quy trình</th><th>Nhóm</th><th>Phiên bản hiệu lực</th><th>Thao tác</th>
+        <th>Mã</th><th>Tên quy trình</th><th>Nhóm</th><th>Phiên bản hiệu lực</th><th>Ngày tạo</th><th>Người tạo</th><th>Thao tác</th>
       </tr></thead>
-      <tbody><tr><td colspan="5" class="empty">Đang tải…</td></tr></tbody>
+      <tbody><tr><td colspan="7" class="empty">Đang tải…</td></tr></tbody>
     </table></div>
     <div id="proc-dialog-root"></div>`;
 
@@ -58,11 +58,11 @@ export async function renderProcesses(root: HTMLElement, canManage: boolean): Pr
   const inputQ = root.querySelector<HTMLInputElement>("#flt-q")!;
 
   async function reload(): Promise<void> {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">Đang tải…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">Đang tải…</td></tr>`;
     try {
       const { items } = await api.listProcesses({ q: inputQ.value.trim() || undefined });
       if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty">Chưa có quy trình nào.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="empty">Chưa có quy trình nào.</td></tr>`;
         return;
       }
       tbody.innerHTML = items.map(rowHtml).join("");
@@ -200,11 +200,15 @@ function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], proces
 
 function rowHtml(p: SopProcess): string {
   const av = p.active_version;
+  const creator = (p as unknown as Record<string, unknown>).creator_name as string | null;
+  const createdAt = p.created_at ? p.created_at.slice(0, 10).split("-").reverse().join("/") : "—";
   return `<tr data-id="${esc(p.id)}">
     <td><strong>${esc(p.code)}</strong></td>
     <td>${esc(p.name)}${p.group_name ? `<div class="muted small">${esc(p.group_name)}</div>` : ""}</td>
     <td>${p.group_name ? esc(p.group_name) : '<span class="muted">—</span>'}</td>
     <td>${av ? `v${av.version_number} ${statusPill(av.status)}` : '<span class="muted">Chưa có</span>'}</td>
+    <td class="muted small">${esc(createdAt)}</td>
+    <td>${creator ? esc(creator) : '<span class="muted">—</span>'}</td>
     <td class="actions"><button class="link" data-act="view"><span>Chi tiết</span></button></td>
   </tr>`;
 }

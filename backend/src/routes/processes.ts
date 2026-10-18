@@ -113,7 +113,12 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
   for (const p of rows.results) {
     const av = await getActiveVersion(db, p.id);
     if (status && (!av || av.status !== status)) continue;
-    items.push(toPublicProcess(p, av));
+    let creatorName: string | null = null;
+    if (p.created_by) {
+      const u = await db.prepare(`SELECT display_name FROM users WHERE id = ?`).bind(p.created_by).first<{ display_name: string }>();
+      creatorName = u?.display_name ?? null;
+    }
+    items.push({ ...toPublicProcess(p, av), creator_name: creatorName });
   }
   return ok({ items, total: items.length });
 }

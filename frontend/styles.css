@@ -626,3 +626,14 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .camera-btn { background: #3b82f6; color: #fff; border-color: #3b82f6; }
 .camera-btn:hover { background: #2563eb; }
 .evidence-audit { font-size: 11px; color: #6b7280; margin-top: 2px; line-height: 1.4; }
+
+/* Form tạo quy trình trên mobile. */
+@media (max-width: 640px) {
+  .dialog { padding: 18px 16px; border-radius: 12px; }
+  .dialog-backdrop { padding: 16px 10px; }
+  #proc-form label { font-size: 15px; margin-bottom: 12px; display: block; }
+  #proc-form .input { font-size: 16px; padding: 10px 12px; }
+  #proc-form textarea.input { min-height: 64px; }
+  .dialog-actions { flex-direction: column-reverse; gap: 8px; }
+  .dialog-actions .btn { width: 100%; padding: 12px; font-size: 15px; }
+}
