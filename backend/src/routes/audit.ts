@@ -105,14 +105,14 @@ export async function handleSeedTestData(ctx: Ctx): Promise<Response> {
   }
 
   // Lấy version ACTIVE và steps cho từng process.
-  const procData: { proc: { id: string; code: string; name: string }; versionId: string; steps: { id: string }[] }[] = [];
+  const procData: { proc: { id: string; code: string; name: string }; versionId: string; steps: { code: string; title: string }[] }[] = [];
   for (const p of procList) {
     const v = await db.prepare(
       `SELECT id FROM process_versions WHERE process_id = ? AND status = 'ACTIVE' LIMIT 1`
     ).bind(p.id).first<{ id: string }>();
     if (!v) continue;
-    const st = await db.prepare(`SELECT id FROM process_steps WHERE version_id = ? ORDER BY sort_order`)
-      .bind(v.id).all<{ id: string }>();
+    const st = await db.prepare(`SELECT code, title FROM process_steps WHERE version_id = ? ORDER BY sort_order`)
+      .bind(v.id).all<{ code: string; title: string }>();
     procData.push({ proc: p, versionId: v.id, steps: st.results ?? [] });
   }
 
@@ -152,11 +152,11 @@ export async function handleSeedTestData(ctx: Ctx): Promise<Response> {
 
     // Tạo steps snapshot đơn giản.
     for (let si = 0; si < pd.steps.length; si++) {
-      const stepStatus = status === "COMPLETED" ? "DONE" : status === "IN_PROGRESS" && si < 2 ? "DONE" : "NOT_STARTED";
+      const stepStatus = status === "COMPLETED" ? "PASSED" : status === "IN_PROGRESS" && si < 2 ? "PASSED" : "NOT_STARTED";
       await db.prepare(
-        `INSERT INTO execution_steps (id, execution_id, step_id, sort_order, status)
-         VALUES (?, ?, ?, ?, ?)`
-      ).bind(newId(), execId, pd.steps[si].id, si, stepStatus).run();
+        `INSERT INTO execution_steps (id, execution_id, sort_order, code, title, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).bind(newId(), execId, si, pd.steps[si].code, pd.steps[si].title, stepStatus, createdAt).run();
     }
     created++;
   }
