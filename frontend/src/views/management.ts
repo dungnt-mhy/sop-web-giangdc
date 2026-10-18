@@ -733,15 +733,15 @@ export async function renderAudit(root: HTMLElement): Promise<void> {
       }
       listEl.innerHTML = `
         <p class="muted small">Tổng ${total} sự kiện (hiện 50 mới nhất).</p>
-        <div class="table-wrap"><table class="table">
-          <thead><tr><th>Thời gian</th><th>Người thực hiện</th><th>Hành động</th><th>Mã sự kiện</th><th>Đối tượng</th></tr></thead>
+        <div class="table-wrap"><table class="table audit-table">
+          <thead><tr><th>Thời gian</th><th>Người thực hiện</th><th>Hành động</th><th class="hide-mobile">Mã sự kiện</th><th>Đối tượng</th></tr></thead>
           <tbody>
             ${items.map((a) => `
               <tr>
                 <td class="muted small">${esc(a.occurred_at)}</td>
                 <td>${esc(a.actor_name ?? "—")}</td>
                 <td><strong>${esc(auditLabel(a.event_type))}</strong></td>
-                <td><span class="pill gray" title="${esc(a.event_type)}">${esc(a.event_type)}</span></td>
+                <td class="hide-mobile"><span class="pill gray" title="${esc(a.event_type)}">${esc(a.event_type)}</span></td>
                 <td class="muted small">${esc(a.object_type ?? "—")}${a.object_id ? ` · ${esc(a.object_id.slice(0, 8))}…` : ""}</td>
               </tr>`).join("")}
           </tbody>

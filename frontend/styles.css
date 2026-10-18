@@ -287,6 +287,10 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   .filter-bar .btn { font-size: 14px; padding: 8px 10px; }
   .filter-bar #audit-from,
   .filter-bar #audit-to { flex: 1 1 100%; }
+  /* Bảng audit trên mobile: ẩn cột mã sự kiện cho gọn. */
+  .hide-mobile { display: none !important; }
+  .audit-table { font-size: 13px; }
+  .audit-table th, .audit-table td { padding: 8px 6px; white-space: normal; }
 }
 
 /* Danh sách bước (Task 1.5). */
