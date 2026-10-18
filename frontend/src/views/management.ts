@@ -726,7 +726,7 @@ export async function renderAudit(root: HTMLElement): Promise<void> {
                 <td>${esc(a.actor_name ?? "—")}</td>
                 <td><strong>${esc(auditLabel(a.event_type))}</strong></td>
                 <td><span class="pill gray" title="${esc(a.event_type)}">${esc(a.event_type)}</span></td>
-                <td class="muted small">${esc(objectLabel(a.object_type))}${a.object_id ? `<br/><span class="mono small">${esc(a.object_id)}</span>` : ""}</td>
+                <td class="muted small">${esc(a.object_type ?? "—")}${a.object_id ? ` · ${esc(a.object_id.slice(0, 8))}…` : ""}</td>
               </tr>`).join("")}
           </tbody>
         </table></div>`;
