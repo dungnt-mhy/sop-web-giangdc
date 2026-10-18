@@ -228,6 +228,7 @@ export async function handleListAllEvidence(ctx: Ctx) {
 
   let sql = `
     SELECT ev.*, e.code as execution_code, es.code as step_code, es.title as step_title,
+           es.status as step_status,
            u.display_name as uploader_name, es.execution_id
     FROM evidence ev
     LEFT JOIN execution_steps es ON es.id = ev.execution_step_id

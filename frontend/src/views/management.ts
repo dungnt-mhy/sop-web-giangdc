@@ -335,6 +335,13 @@ export async function renderExceptions(root: HTMLElement): Promise<void> {
 
 /** Trang quản lý bằng chứng (#/evidence). */
 export async function renderEvidence(root: HTMLElement): Promise<void> {
+  const STEP_STATUS_LABELS: Record<string, string> = {
+    NOT_STARTED: "Chưa bắt đầu",
+    IN_PROGRESS: "Đang làm",
+    PASSED: "Đạt",
+    FAILED: "Không đạt",
+    SKIPPED: "Bỏ qua",
+  };
   root.innerHTML = `
     <div class="page-head">
       <div><h2>Quản lý bằng chứng</h2>
@@ -386,6 +393,9 @@ export async function renderEvidence(root: HTMLElement): Promise<void> {
       if (viewMode === "grid") {
         listEl.innerHTML = `<div class="evidence-manage-grid">` + items.map((ev: Record<string, unknown>) => {
           const isPhoto = ev.kind === "PHOTO";
+          const stepStatus = String(ev.step_status ?? "");
+          const statusLabel = STEP_STATUS_LABELS[stepStatus] ?? stepStatus;
+          const statusCls = stepStatus === "PASSED" ? "green" : stepStatus === "IN_PROGRESS" ? "blue" : "gray";
           return `
           <div class="evidence-manage-item">
             ${isPhoto
@@ -396,24 +406,30 @@ export async function renderEvidence(root: HTMLElement): Promise<void> {
               <div class="muted small">${isPhoto ? "Ảnh" : "Tệp"} · ${formatBytes(Number(ev.size_bytes))}</div>
               <div class="muted small">Lượt: <a href="#/executions/${esc(String(ev.execution_id))}">${esc(String(ev.execution_code ?? "—"))}</a>
                 ${ev.step_code ? ` · ${esc(String(ev.step_code))}` : ""}</div>
-              <div class="muted small">${esc(String(ev.uploader_name ?? "—"))} · ${esc(String(ev.created_at).slice(0, 16).replace("T", " "))}</div>
+              <div class="muted small"><span class="pill ${statusCls}">${esc(statusLabel)}</span></div>
+              <div class="muted small">👤 ${esc(String(ev.uploader_name ?? "—"))} · 🕐 ${esc(String(ev.created_at).slice(0, 16).replace("T", " "))}</div>
               <a class="link small" href="${esc(api.evidenceDownloadUrl(String(ev.id)))}" target="_blank" rel="noopener">Xem / Tải</a>
             </div>
           </div>`;
         }).join("") + `</div>`;
       } else {
         listEl.innerHTML = `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Tên tệp</th><th>Loại</th><th>Dung lượng</th><th>Lượt</th><th>Người tải</th><th>Thời gian</th><th></th></tr></thead>
-          <tbody>${items.map((ev: Record<string, unknown>) => `
+          <thead><tr><th>Tên tệp</th><th>Loại</th><th>Dung lượng</th><th>Lượt</th><th>Trạng thái bước</th><th>Người tải</th><th>Thời gian</th><th></th></tr></thead>
+          <tbody>${items.map((ev: Record<string, unknown>) => {
+            const stepStatus = String(ev.step_status ?? "");
+            const statusLabel = STEP_STATUS_LABELS[stepStatus] ?? stepStatus;
+            const statusCls = stepStatus === "PASSED" ? "green" : stepStatus === "IN_PROGRESS" ? "blue" : "gray";
+            return `
             <tr>
               <td><strong>${esc(String(ev.original_name))}</strong></td>
               <td>${ev.kind === "PHOTO" ? "Ảnh" : "Tệp"}</td>
               <td>${formatBytes(Number(ev.size_bytes))}</td>
               <td><a href="#/executions/${esc(String(ev.execution_id))}">${esc(String(ev.execution_code ?? "—"))}</a></td>
+              <td><span class="pill ${statusCls}">${esc(statusLabel)}</span></td>
               <td>${esc(String(ev.uploader_name ?? "—"))}</td>
               <td class="muted small">${esc(String(ev.created_at).slice(0, 16).replace("T", " "))}</td>
               <td><a class="link small" href="${esc(api.evidenceDownloadUrl(String(ev.id)))}" target="_blank" rel="noopener">Xem</a></td>
-            </tr>`).join("")}
+            </tr>`;}).join("")}
           </tbody></table></div>`;
       }
     } catch (e) {

@@ -470,6 +470,7 @@ function renderEvidenceGrid(
             : `<div class="evidence-file">📄 ${esc(ev.original_name)}</div>`}
         </a>
         <div class="evidence-meta">${esc(formatBytes(ev.size_bytes))}</div>
+        <div class="evidence-audit">👤 ${esc(ev.uploader_name ?? "—")}<br/>🕐 ${esc(formatDateTime(ev.created_at))}</div>
         ${canDelete ? `<button class="evidence-del" data-ev-del title="Xóa">✕</button>` : ""}
       </div>`
     )
@@ -541,6 +542,17 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function formatDateTime(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
 /** Dialog xác nhận hoàn thành bước — cảnh báo không sửa được sau khi chốt. */
@@ -911,7 +923,7 @@ function detailHtml(e: ExecutionDetail): string {
                 <span class="evidence-title">📷 Bằng chứng <span class="evidence-count" data-ev-count></span></span>
                 ${canUpload ? `<span class="evidence-upload-group">
                   <label class="btn sm evidence-upload-btn camera-btn">
-                    📸 Chụp ảnh
+                    📸 Chụp
                     <input type="file" accept="image/*" capture="environment" hidden data-ev-input data-ev-kind="photo" />
                   </label>
                   <label class="btn sm evidence-upload-btn">
