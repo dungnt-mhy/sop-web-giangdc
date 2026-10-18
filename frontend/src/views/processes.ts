@@ -381,7 +381,8 @@ export async function renderProcessDetail(
               } catch (e) {
                 toast(`Lỗi: ${msg(e)}`);
               }
-            }
+            },
+            "Kích hoạt lại"
           );
           return;
         }
@@ -401,7 +402,8 @@ export async function renderProcessDetail(
             } catch (e) {
               toast(`Lỗi: ${msg(e)}`);
             }
-          }
+          },
+          "Ngừng"
         );
         return;
       }
@@ -716,7 +718,8 @@ function openConfirmDialog(
   dialogRoot: HTMLElement,
   title: string,
   message: string,
-  onConfirm: () => void
+  onConfirm: () => void,
+  confirmLabel = "Xác nhận"
 ): void {
   dialogRoot.innerHTML = `
     <div class="dialog-scrim"></div>
@@ -725,7 +728,7 @@ function openConfirmDialog(
       <p>${esc(message)}</p>
       <div class="dialog-actions">
         <button type="button" class="btn" id="cf-cancel">Huỷ</button>
-        <button type="button" class="btn danger" id="cf-ok">Xóa</button>
+        <button type="button" class="btn danger" id="cf-ok">${esc(confirmLabel)}</button>
       </div>
     </div>`;
   const close = () => {
