@@ -755,7 +755,7 @@ function openRejectDialog(dialogRoot: HTMLElement, label: string, vid: string, r
       <h3>❌ Từ chối kích hoạt lại ${esc(label)}?</h3>
       <form id="reject-form">
         <label>Lý do từ chối <span class="req">*</span>
-          <textarea class="input" name="reason" required maxlength="500" rows="3"
+          <textarea class="input" name="reason" maxlength="500" rows="3"
             placeholder="VD: Phiên bản mới đang chạy ổn định, chưa cần quay về bản cũ…"></textarea></label>
         <p class="form-error" id="reject-error" role="alert" hidden></p>
         <div class="dialog-actions">
