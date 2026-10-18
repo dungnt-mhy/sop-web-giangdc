@@ -208,9 +208,13 @@ export async function handleGetProcess(ctx: Ctx, id: string): Promise<Response> 
     .bind(id)
     .all<VersionRow>();
   const av = await getActiveVersion(db, id);
+  const ouRows = await db.prepare(
+    `SELECT ou.id, ou.name FROM process_org_units pou JOIN org_units ou ON ou.id = pou.org_unit_id WHERE pou.process_id = ? ORDER BY ou.name ASC`
+  ).bind(id).all<{ id: string; name: string }>();
   return ok({
     ...toPublicProcess(p, av),
     versions: versions.results.map(toPublicVersion),
+    org_units: ouRows.results ?? [],
   });
 }
 

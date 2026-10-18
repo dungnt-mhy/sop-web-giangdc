@@ -406,6 +406,9 @@ function detailHtml(p: import("../api.js").SopProcessDetail): string {
         ${info("Điều kiện bắt đầu", p.start_condition)}
         ${info("Điều kiện kết thúc", p.end_condition)}
         ${info("Đơn vị áp dụng", p.applying_unit)}
+        ${(p as unknown as Record<string, unknown>).org_units && ((p as unknown as { org_units: { name: string }[] }).org_units.length > 0)
+          ? `<div class="info-row"><dt>Đơn vị áp dụng (danh sách)</dt><dd>${(p as unknown as { org_units: { name: string }[] }).org_units.map((u) => `<span class="pill blue">${esc(u.name)}</span>`).join(" ")}</dd></div>`
+          : ""}
         ${info("Kích hoạt xem xét lại", p.review_trigger)}
         ${info("Nhóm", p.group_name)}
       </dl>

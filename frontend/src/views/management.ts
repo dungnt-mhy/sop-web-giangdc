@@ -532,8 +532,8 @@ export async function renderEvidence(root: HTMLElement): Promise<void> {
             <div class="evidence-manage-info">
               <strong class="evidence-manage-name">${esc(String(ev.original_name))}</strong>
               <div class="muted small">${isPhoto ? "Ảnh" : "Tệp"} · ${formatBytes(Number(ev.size_bytes))}</div>
-              <div class="muted small">Lượt: <a href="#/executions/${esc(String(ev.execution_id))}">${esc(String(ev.execution_code ?? "—"))}</a>
-                ${ev.step_code ? ` · ${esc(String(ev.step_code))}` : ""} <span class="pill ${statusCls}">${esc(statusLabel)}</span></div>
+              <div class="muted small" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">Lượt: <a href="#/executions/${esc(String(ev.execution_id))}">${esc(String(ev.execution_code ?? "—"))}</a>
+                ${ev.step_code ? ` · ${esc(String(ev.step_code))}` : ""} <span class="pill ${statusCls}" style="white-space:nowrap">${esc(statusLabel)}</span></div>
               <div class="muted small">👤 ${esc(String(ev.uploader_name ?? "—"))} · 🕐 ${esc(String(ev.created_at).slice(0, 16).replace("T", " "))}</div>
               <a class="link small" href="${esc(api.evidenceDownloadUrl(String(ev.id)))}" target="_blank" rel="noopener">Xem / Tải</a>
             </div>
