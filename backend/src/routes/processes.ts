@@ -404,7 +404,8 @@ async function transitionVersion(
     const approvers = await db.prepare(
       `SELECT DISTINCT u.id FROM users u
        JOIN user_roles ur ON ur.user_id = u.id
-       JOIN role_permissions rp ON rp.role_id = ur.role_id
+       JOIN roles r ON r.code = ur.role
+       JOIN role_permissions rp ON rp.role_id = r.id
        WHERE (rp.permission = 'processes.approve' OR rp.permission = '*') AND u.id != ? AND u.status = 'active'`
     ).bind(me.user.id).all<{ id: string }>();
     const ids = (approvers.results ?? []).map((r) => r.id);
@@ -502,7 +503,8 @@ export async function handleRequestReactivation(ctx: Ctx, versionId: string): Pr
   const approvers = await db.prepare(
     `SELECT DISTINCT u.id FROM users u
      JOIN user_roles ur ON ur.user_id = u.id
-     JOIN role_permissions rp ON rp.role_id = ur.role
+     JOIN roles r ON r.code = ur.role
+     JOIN role_permissions rp ON rp.role_id = r.id
      WHERE (rp.permission = 'processes.approve' OR rp.permission = '*') AND u.id != ? AND u.status = 'active'`
   ).bind(me.user.id).all<{ id: string }>();
   const approverIds = (approvers.results ?? []).map((r) => r.id);
