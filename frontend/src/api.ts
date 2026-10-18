@@ -442,6 +442,12 @@ export const api = {
   completeExecution(id: string): Promise<Execution> {
     return req("POST", `/executions/${encodeURIComponent(id)}:complete`);
   },
+  reportComplete(id: string): Promise<Execution> {
+    return req("POST", `/executions/${encodeURIComponent(id)}:report-complete`);
+  },
+  confirmComplete(id: string): Promise<Execution> {
+    return req("POST", `/executions/${encodeURIComponent(id)}:confirm-complete`);
+  },
   startStep(execId: string, stepId: string): Promise<ExecutionStep> {
     return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:start`);
   },

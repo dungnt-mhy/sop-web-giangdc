@@ -8,6 +8,7 @@ const EXEC_STATUS_LABELS: Record<string, string> = {
   CREATED: "Mới tạo",
   IN_PROGRESS: "Đang thực hiện",
   PAUSED: "Tạm dừng",
+  PENDING_CONFIRMATION: "Chờ xác nhận",
   COMPLETED: "Hoàn thành",
   CANCELLED: "Đã hủy",
 };
@@ -16,6 +17,7 @@ const EXEC_STATUS_PILL: Record<string, string> = {
   CREATED: "gray",
   IN_PROGRESS: "blue",
   PAUSED: "amber",
+  PENDING_CONFIRMATION: "amber",
   COMPLETED: "green",
   CANCELLED: "red",
 };
@@ -50,6 +52,7 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
         <option value="CREATED">Mới tạo</option>
         <option value="IN_PROGRESS">Đang thực hiện</option>
         <option value="PAUSED">Tạm dừng</option>
+        <option value="PENDING_CONFIRMATION">Chờ xác nhận</option>
         <option value="COMPLETED">Hoàn thành</option>
         <option value="CANCELLED">Đã hủy</option>
       </select>
@@ -398,9 +401,13 @@ function renderActions(
     btns.push(`<button class="btn primary" data-ea="start">Bắt đầu</button>`);
   }
   if (e.status === "IN_PROGRESS") {
-    btns.push(`<button class="btn" data-ea="pause">Tạm dừng</button>`);
-    btns.push(`<button class="btn primary" data-ea="complete">Hoàn thành lượt</button>`);
-    btns.push(`<button class="btn danger" data-ea="cancel">Hủy lượt</button>`);
+    btns.push(`<button class="btn" data-ea="pause">⏸️ Tạm dừng</button>`);
+    btns.push(`<button class="btn primary" data-ea="report-complete">📢 Báo hoàn thành</button>`);
+    btns.push(`<button class="btn danger" data-ea="cancel">🗑️ Hủy lượt</button>`);
+  }
+  if (e.status === "PENDING_CONFIRMATION") {
+    btns.push(`<button class="btn primary" data-ea="confirm-complete">✅ Xác nhận hoàn thành</button>`);
+    btns.push(`<button class="btn danger" data-ea="cancel">🗑️ Hủy lượt</button>`);
   }
   if (e.status === "PAUSED") {
     btns.push(`<button class="btn primary" data-ea="resume">Tiếp tục</button>`);
@@ -422,9 +429,12 @@ function renderActions(
       } else if (act === "resume") {
         await api.resumeExecution(e.id);
         toast("Đã tiếp tục.");
-      } else if (act === "complete") {
-        await api.completeExecution(e.id);
-        toast("Đã hoàn thành lượt.");
+      } else if (act === "report-complete") {
+        await api.reportComplete(e.id);
+        toast("Đã báo hoàn thành. Chờ người phê duyệt xác nhận.");
+      } else if (act === "confirm-complete") {
+        await api.confirmComplete(e.id);
+        toast("Đã xác nhận hoàn thành lượt.");
       } else if (act === "cancel") {
         const reason = prompt("Lý do hủy lượt (bắt buộc):");
         if (!reason?.trim()) {

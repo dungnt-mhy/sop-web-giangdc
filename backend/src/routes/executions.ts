@@ -490,8 +490,8 @@ async function transitionExecution(
     updates.push("started_at = ?");
     binds.push(now);
   }
-  if (to === "COMPLETED") {
-    // EXE-009: chỉ hoàn thành khi mọi bước bắt buộc đã PASSED/SKIPPED hợp lệ.
+  if (to === "PENDING_CONFIRMATION") {
+    // EXE-009: chỉ báo hoàn thành khi mọi bước bắt buộc đã PASSED/SKIPPED hợp lệ.
     const incomplete = await db
       .prepare(
         `SELECT COUNT(*) AS c FROM execution_steps
@@ -502,24 +502,26 @@ async function transitionExecution(
     if ((incomplete?.c ?? 0) > 0) {
       return apiError("VALIDATION_ERROR", "Còn bước bắt buộc chưa hoàn thành.", ctx.requestId);
     }
+  }
+  if (to === "COMPLETED") {
     updates.push("completed_at = ?");
     binds.push(now);
-    // Kiểm tra quyền phê duyệt hoàn thành.
+    // Kiểm tra quyền xác nhận hoàn thành (chỉ khi từ PENDING_CONFIRMATION).
     const approverId = (e as unknown as Record<string, unknown>).approver_id as string | null;
     const supervisorId = e.supervisor_id as string | null;
     const isAdmin = me.permissions.includes("*") || me.permissions.includes("executions.manage");
     let canApprove = false;
     if (approverId) {
-      // Đã chỉ định người phê duyệt: chỉ người đó hoặc admin mới duyệt được.
+      // Đã chỉ định người phê duyệt: chỉ người đó hoặc admin mới xác nhận được.
       canApprove = me.user.id === approverId || isAdmin;
       if (!canApprove) {
-        return apiError("FORBIDDEN", "Chỉ người phê duyệt được chỉ định mới có thể hoàn thành lượt này.", ctx.requestId);
+        return apiError("FORBIDDEN", "Chỉ người phê duyệt được chỉ định mới có thể xác nhận hoàn thành.", ctx.requestId);
       }
     } else {
-      // Không chỉ định: người giám sát hoặc người có quyền quản lý lượt mới duyệt được.
+      // Không chỉ định: người giám sát hoặc người có quyền quản lý lượt mới xác nhận được.
       canApprove = me.user.id === supervisorId || isAdmin;
       if (!canApprove) {
-        return apiError("FORBIDDEN", "Chỉ người giám sát hoặc quản lý mới có thể hoàn thành lượt này.", ctx.requestId);
+        return apiError("FORBIDDEN", "Chỉ người giám sát hoặc quản lý mới có thể xác nhận hoàn thành.", ctx.requestId);
       }
     }
     updates.push("approved_by = ?");
@@ -559,12 +561,18 @@ export const handleResumeExecution = (ctx: Ctx, id: string) =>
 export async function handleCancelExecution(ctx: Ctx, id: string): Promise<Response> {
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
   const reason = typeof body?.cancel_reason === "string" ? body.cancel_reason : "";
-  return transitionExecution(ctx, id, ["CREATED", "IN_PROGRESS", "PAUSED"], "CANCELLED", null, "EXECUTION_CANCELLED", {
+  return transitionExecution(ctx, id, ["CREATED", "IN_PROGRESS", "PAUSED", "PENDING_CONFIRMATION"], "CANCELLED", null, "EXECUTION_CANCELLED", {
     cancel_reason: reason,
   });
 }
-export const handleCompleteExecution = (ctx: Ctx, id: string) =>
-  transitionExecution(ctx, id, ["IN_PROGRESS"], "COMPLETED", null, "EXECUTION_COMPLETED");
+// POST .../{id}:report-complete — IN_PROGRESS -> PENDING_CONFIRMATION (Báo hoàn thành).
+// Người thực hiện báo đã làm xong, chờ người phê duyệt xác nhận.
+export const handleReportComplete = (ctx: Ctx, id: string) =>
+  transitionExecution(ctx, id, ["IN_PROGRESS"], "PENDING_CONFIRMATION", null, "EXECUTION_REPORTED_COMPLETE");
+// POST .../{id}:confirm-complete — PENDING_CONFIRMATION -> COMPLETED (Xác nhận hoàn thành).
+// Chỉ người phê duyệt/giám sát/quản lý được xác nhận (logic kiểm tra trong transitionExecution).
+export const handleConfirmComplete = (ctx: Ctx, id: string) =>
+  transitionExecution(ctx, id, ["PENDING_CONFIRMATION"], "COMPLETED", null, "EXECUTION_COMPLETED");
 
 // POST .../{id}/steps/{sid}:start — bắt đầu bước (AC-04: kiểm tra bước trước).
 export async function handleStartStep(ctx: Ctx, execId: string, stepId: string): Promise<Response> {

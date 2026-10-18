@@ -61,13 +61,14 @@ import {
 } from "./routes/steps";
 import {
   handleCancelExecution,
-  handleCompleteExecution,
+  handleConfirmComplete,
   handleCompleteStep,
   handleCreateExecution,
   handleGetExecution,
   handleListExecutions,
   handleListStepAssignees,
   handlePauseExecution,
+  handleReportComplete,
   handleResumeExecution,
   handleSetStepAssignees,
   handleSkipStep,
@@ -360,7 +361,9 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
       if (action === "pause") return handlePauseExecution(ctx, eid);
       if (action === "resume") return handleResumeExecution(ctx, eid);
       if (action === "cancel") return handleCancelExecution(ctx, eid);
-      if (action === "complete") return handleCompleteExecution(ctx, eid);
+      if (action === "report-complete") return handleReportComplete(ctx, eid);
+      if (action === "confirm-complete") return handleConfirmComplete(ctx, eid);
+      if (action === "complete") return handleReportComplete(ctx, eid); // tương thích cũ
     }
   }
   const esm = /^\/executions\/[^/:]+\/steps\/([^/:]+)(?::(start|complete|skip))$/.exec(path);
