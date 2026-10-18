@@ -619,6 +619,48 @@ function formatBytes(n: number): string {
   return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+/** Dịch mã sự kiện audit sang tiếng Việt dễ hiểu. */
+const AUDIT_LABELS: Record<string, string> = {
+  // Auth
+  AUTH_LOGIN: "Đăng nhập", AUTH_LOGOUT: "Đăng xuất", AUTH_LOGIN_FAIL: "Đăng nhập thất bại",
+  AUTH_PASSWORD_CHANGED: "Đổi mật khẩu", AUTH_PASSWORD_RESET: "Đặt lại mật khẩu",
+  // User
+  USER_CREATED: "Tạo tài khoản", USER_UPDATED: "Sửa tài khoản", USER_DELETED: "Xóa tài khoản",
+  USER_LOCKED: "Khóa tài khoản", USER_UNLOCKED: "Mở khóa tài khoản",
+  // Process
+  PROCESS_CREATED: "Tạo quy trình", PROCESS_UPDATED: "Sửa quy trình",
+  PROCESS_VERSION_CREATED: "Tạo phiên bản", PROCESS_VERSION_SUBMITTED: "Gửi duyệt phiên bản",
+  PROCESS_VERSION_APPROVED: "Duyệt phiên bản", PROCESS_VERSION_RETURNED: "Trả về sửa",
+  PROCESS_VERSION_ACTIVATED: "Kích hoạt phiên bản", PROCESS_VERSION_RETIRED: "Ngừng phiên bản",
+  PROCESS_VERSION_REACTIVATION_REQUESTED: "Yêu cầu kích hoạt lại",
+  PROCESS_VERSION_REACTIVATION_APPROVED: "Duyệt kích hoạt lại",
+  PROCESS_VERSION_REACTIVATION_REJECTED: "Từ chối kích hoạt lại",
+  // Step
+  STEP_CREATED: "Thêm bước", STEP_UPDATED: "Sửa bước", STEP_DELETED: "Xóa bước", STEP_REORDERED: "Sắp xếp bước",
+  // Execution
+  EXECUTION_CREATED: "Tạo lượt công việc", EXECUTION_UPDATED: "Sửa lượt công việc",
+  EXECUTION_STARTED: "Bắt đầu lượt", EXECUTION_PAUSED: "Tạm dừng lượt", EXECUTION_RESUMED: "Tiếp tục lượt",
+  EXECUTION_CANCELLED: "Hủy lượt", EXECUTION_REPORTED_COMPLETE: "Báo hoàn thành lượt",
+  EXECUTION_COMPLETED: "Xác nhận hoàn thành lượt",
+  EXECUTION_CONFIRM_REJECTED_REDO: "Từ chối — yêu cầu làm lại",
+  EXECUTION_CONFIRM_REJECTED_CANCEL: "Từ chối — hủy lượt",
+  EXECUTION_STEP_STARTED: "Bắt đầu bước", EXECUTION_STEP_COMPLETED: "Hoàn thành bước",
+  EXECUTION_STEP_SKIPPED: "Bỏ qua bước",
+  // Evidence
+  EVIDENCE_UPLOADED: "Tải bằng chứng", EVIDENCE_DELETED: "Xóa bằng chứng",
+  // Exception
+  EXCEPTION_CREATED: "Báo ngoại lệ", EXCEPTION_ASSIGNED: "Giao xử lý ngoại lệ",
+  EXCEPTION_RESOLVED: "Khắc phục ngoại lệ", EXCEPTION_CLOSED: "Đóng ngoại lệ",
+  // Org
+  ORG_UNIT_CREATED: "Tạo đơn vị", ORG_UNIT_UPDATED: "Sửa đơn vị", ORG_UNIT_DELETED: "Xóa đơn vị",
+  POSITION_CREATED: "Tạo chức vụ", POSITION_UPDATED: "Sửa chức vụ", POSITION_DELETED: "Xóa chức vụ",
+  ROLE_CREATED: "Tạo vai trò", ROLE_UPDATED: "Sửa vai trò", ROLE_DELETED: "Xóa vai trò",
+};
+
+function auditLabel(code: string): string {
+  return AUDIT_LABELS[code] ?? code;
+}
+
 /** Trang nhật ký audit (#/audit) — xem lịch sử thao tác. */
 export async function renderAudit(root: HTMLElement): Promise<void> {
   root.innerHTML = `
@@ -640,7 +682,7 @@ export async function renderAudit(root: HTMLElement): Promise<void> {
   try {
     const { items } = await api.listAuditEventTypes();
     typeEl.innerHTML = `<option value="">— Tất cả loại —</option>` +
-      items.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+      items.map((t) => `<option value="${esc(t)}">${esc(auditLabel(t))}</option>`).join("");
   } catch { /* ignore */ }
 
   async function reload(): Promise<void> {
@@ -657,13 +699,14 @@ export async function renderAudit(root: HTMLElement): Promise<void> {
       listEl.innerHTML = `
         <p class="muted small">Tổng ${total} sự kiện (hiện 50 mới nhất).</p>
         <div class="table-wrap"><table class="table">
-          <thead><tr><th>Thời gian</th><th>Người thực hiện</th><th>Sự kiện</th><th>Đối tượng</th></tr></thead>
+          <thead><tr><th>Thời gian</th><th>Người thực hiện</th><th>Hành động</th><th>Mã sự kiện</th><th>Đối tượng</th></tr></thead>
           <tbody>
             ${items.map((a) => `
               <tr>
                 <td class="muted small">${esc(a.occurred_at)}</td>
                 <td>${esc(a.actor_name ?? "—")}</td>
-                <td><span class="pill gray">${esc(a.event_type)}</span></td>
+                <td><strong>${esc(auditLabel(a.event_type))}</strong></td>
+                <td><span class="pill gray" title="${esc(a.event_type)}">${esc(a.event_type)}</span></td>
                 <td class="muted small">${esc(a.object_type ?? "—")}${a.object_id ? ` · ${esc(a.object_id.slice(0, 8))}…` : ""}</td>
               </tr>`).join("")}
           </tbody>

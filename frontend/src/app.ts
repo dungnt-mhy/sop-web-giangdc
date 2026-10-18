@@ -66,7 +66,6 @@ function renderShell(): void {
     { hash: "#/processes", label: "Quy trình" },
     { hash: "#/exceptions", label: "Ngoại lệ", perm: "exceptions.handle" },
     { hash: "#/evidence", label: "Bằng chứng", perm: "executions.view" },
-    { hash: "#/audit", label: "Nhật ký", perm: "audit.view" },
     {
       hash: "#/users", label: "Quản lý người dùng", perm: "users.manage",
       children: [
@@ -76,6 +75,7 @@ function renderShell(): void {
         { hash: "#/org-units", label: "Đơn vị", perm: "users.manage" },
       ],
     },
+    { hash: "#/audit", label: "Nhật ký", perm: "audit.view" },
   ];
   const visibleItems = navItems.filter((i) => !i.perm || can(i.perm));
   $("#sidebar-nav").innerHTML = visibleItems
