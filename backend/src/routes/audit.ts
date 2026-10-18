@@ -51,3 +51,24 @@ export async function handleAuditEventTypes(ctx: Ctx): Promise<Response> {
   ).all<{ event_type: string }>();
   return ok({ items: (rows.results ?? []).map((r) => r.event_type) });
 }
+
+/** POST /api/v1/admin/clear-test-data — XOÁ TRẮNG dữ liệu test (chỉ admin). TẠM THỜI. */
+export async function handleClearTestData(ctx: Ctx): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as unknown as { user: { id: string }; permissions: string[] };
+  // Chỉ admin tuyệt đối.
+  if (!me.permissions.includes("*")) {
+    return apiError("FORBIDDEN", "Chỉ admin mới được xoá dữ liệu.", ctx.requestId);
+  }
+  const db = ctx.env.sop_demo_db;
+  // Xoá theo thứ tự FK.
+  const tables = [
+    "execution_step_assignees", "execution_step_positions", "execution_steps",
+    "evidence", "exceptions", "notifications", "executions",
+  ];
+  for (const t of tables) {
+    await db.prepare(`DELETE FROM ${t}`).run();
+  }
+  return ok({ cleared: tables });
+}

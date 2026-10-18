@@ -98,6 +98,7 @@ import {
 } from "./routes/roles";
 import {
   handleAuditEventTypes,
+  handleClearTestData,
   handleListAudit,
 } from "./routes/audit";
 import {
@@ -274,6 +275,8 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   // --- Audit log ---
   if (path === "/audit" && method === "GET") return handleListAudit(ctx);
   if (path === "/audit/event-types" && method === "GET") return handleAuditEventTypes(ctx);
+  // TẠM THỜI: xoá dữ liệu test.
+  if (path === "/admin/clear-test-data" && method === "POST") return handleClearTestData(ctx);
 
   // --- Users (quyền users.manage) ---
   if (path === "/users/active" && method === "GET") {
