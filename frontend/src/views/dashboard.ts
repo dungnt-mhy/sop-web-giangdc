@@ -267,45 +267,29 @@ function renderFullDashboard(root: HTMLElement, s: any, o: any): void {
     <!-- WORKLOAD -->
     <section class="card">
       <div class="card-head"><h3>📊 Khối lượng công việc theo người</h3>
-      <span class="muted small" id="wl-count"></span></div>
+      <span class="muted small" id="wl-count">${(o.workload as any[]).length} người</span></div>
       ${(o.workload as any[]).length === 0 ? `<p class="empty">Chưa có dữ liệu.</p>` : `
       <div class="table-wrap"><table class="tbl" id="wl-table">
         <thead><tr><th>Người thực hiện</th><th>Tổng lượt</th><th>Hoàn thành</th><th>Đang làm</th><th>Tiến độ</th></tr></thead>
         <tbody id="wl-body">
+          ${(o.workload as any[]).slice(0, 10).map((w: any) => {
+            const pctDone = w.total > 0 ? Math.round((w.done / w.total) * 100) : 0;
+            return `<tr>
+              <td><strong>${esc(w.display_name)}</strong> <span class="muted small">(${esc(w.username)})</span></td>
+              <td>${w.total}</td>
+              <td><span class="pill green">${w.done}</span></td>
+              <td><span class="pill blue">${w.active}</span></td>
+              <td><div class="progress"><div class="progress-bar" style="width:${pctDone}%"></div></div> ${pctDone}%</td>
+            </tr>`;
+          }).join("")}
         </tbody>
       </table></div>
+      ${(o.workload as any[]).length > 10 ? `
       <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
         <button class="btn sm" id="wl-prev">‹ Trước</button>
-        <span class="muted small" id="wl-page" style="align-self:center"></span>
+        <span class="muted small" id="wl-page" style="align-self:center">Trang 1 / ${Math.ceil((o.workload as any[]).length / 10)}</span>
         <button class="btn sm" id="wl-next">Sau ›</button>
-      </div>
-      <script>
-      (function(){
-        const data = ${(JSON.stringify(o.workload))};
-        const perPage = 10;
-        let page = 0;
-        const pages = Math.max(1, Math.ceil(data.length / perPage));
-        const body = document.getElementById('wl-body');
-        const pgEl = document.getElementById('wl-page');
-        const cntEl = document.getElementById('wl-count');
-        function render(){
-          const start = page * perPage;
-          const slice = data.slice(start, start + perPage);
-          body.innerHTML = slice.map((w) => {
-            const pctDone = w.total > 0 ? Math.round((w.done / w.total) * 100) : 0;
-            return '<tr><td><strong>' + w.display_name.replace(/</g,'&lt;') + '</strong> <span class="muted small">(' + w.username.replace(/</g,'&lt;') + ')</span></td>'
-              + '<td>' + w.total + '</td><td><span class="pill green">' + w.done + '</span></td>'
-              + '<td><span class="pill blue">' + w.active + '</span></td>'
-              + '<td><div class="progress"><div class="progress-bar" style="width:' + pctDone + '%"></div></div> ' + pctDone + '%</td></tr>';
-          }).join('');
-          pgEl.textContent = 'Trang ' + (page + 1) + ' / ' + pages;
-          cntEl.textContent = data.length + ' người';
-        }
-        document.getElementById('wl-prev').onclick = () => { if (page > 0) { page--; render(); } };
-        document.getElementById('wl-next').onclick = () => { if (page < pages - 1) { page++; render(); } };
-        render();
-      })();
-      </script>`}
+      </div>` : ``}`}
     </section>
 
     <!-- KPI CHI TIẾT -->
@@ -381,6 +365,32 @@ function renderFullDashboard(root: HTMLElement, s: any, o: any): void {
 
   root.querySelector("#db-daily-apply")!.addEventListener("click", loadDaily);
   loadDaily();
+
+  // Phân trang bảng workload.
+  const workload = o.workload as any[];
+  if (workload.length > 10) {
+    let wlPage = 0;
+    const perPage = 10;
+    const pages = Math.ceil(workload.length / perPage);
+    const body = root.querySelector<HTMLElement>("#wl-body")!;
+    const pgEl = root.querySelector<HTMLElement>("#wl-page")!;
+    const renderWl = () => {
+      const slice = workload.slice(wlPage * perPage, wlPage * perPage + perPage);
+      body.innerHTML = slice.map((w: any) => {
+        const pctDone = w.total > 0 ? Math.round((w.done / w.total) * 100) : 0;
+        return `<tr>
+          <td><strong>${esc(w.display_name)}</strong> <span class="muted small">(${esc(w.username)})</span></td>
+          <td>${w.total}</td>
+          <td><span class="pill green">${w.done}</span></td>
+          <td><span class="pill blue">${w.active}</span></td>
+          <td><div class="progress"><div class="progress-bar" style="width:${pctDone}%"></div></div> ${pctDone}%</td>
+        </tr>`;
+      }).join("");
+      pgEl.textContent = `Trang ${wlPage + 1} / ${pages}`;
+    };
+    root.querySelector("#wl-prev")!.addEventListener("click", () => { if (wlPage > 0) { wlPage--; renderWl(); } });
+    root.querySelector("#wl-next")!.addEventListener("click", () => { if (wlPage < pages - 1) { wlPage++; renderWl(); } });
+  }
 }
 
 function renderDaily(el: HTMLElement, data: {
