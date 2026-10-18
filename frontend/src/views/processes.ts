@@ -203,15 +203,15 @@ function rowHtml(p: SopProcess): string {
   const latest = (p as unknown as Record<string, unknown>).latest_version as { version_number: number; status: string } | null;
   const creator = (p as unknown as Record<string, unknown>).creator_name as string | null;
   const createdAt = p.created_at ? p.created_at.slice(0, 10).split("-").reverse().join("/") : "—";
-  // Hiện trạng thái của phiên bản mới nhất (nháp, chờ duyệt...), kèm phiên bản hiệu lực nếu khác.
+  // Ưu tiên hiện phiên bản đang hiệu lực; bản mới nhất (nháp/chờ duyệt) chỉ là thông tin phụ.
   let verCell: string;
-  if (latest) {
-    verCell = `v${latest.version_number} ${statusPill(latest.status)}`;
-    if (av && av.version_number !== latest.version_number) {
-      verCell += `<div class="muted small">Hiệu lực: v${av.version_number}</div>`;
-    }
-  } else if (av) {
+  if (av) {
     verCell = `v${av.version_number} ${statusPill(av.status)}`;
+    if (latest && latest.version_number !== av.version_number) {
+      verCell += `<div class="muted small">Mới nhất: v${latest.version_number} ${statusPill(latest.status)}</div>`;
+    }
+  } else if (latest) {
+    verCell = `v${latest.version_number} ${statusPill(latest.status)}`;
   } else {
     verCell = '<span class="muted">Chưa có</span>';
   }
