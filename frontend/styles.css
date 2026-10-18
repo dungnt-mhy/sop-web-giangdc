@@ -570,6 +570,8 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   .step-head { flex-wrap: wrap; }
   .step-actions { flex-wrap: wrap; width: 100%; margin-top: 8px; }
   .step-actions .btn { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
+  .flow-node-head { flex-wrap: wrap; }
+  .flow-node .pill { font-size: 12px; padding: 3px 10px; }
 }
 
 /* Dashboard (Task 1.8: §9.6). */
