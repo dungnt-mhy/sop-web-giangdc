@@ -634,8 +634,8 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   #proc-form label { font-size: 15px; margin-bottom: 12px; display: block; }
   #proc-form .input { font-size: 16px; padding: 10px 12px; }
   #proc-form textarea.input { min-height: 64px; }
-  .dialog-actions { flex-direction: column-reverse; gap: 8px; }
-  .dialog-actions .btn { width: 100%; padding: 12px; font-size: 15px; }
+  .dialog-actions { display: flex; flex-direction: row; gap: 10px; }
+  .dialog-actions .btn { flex: 1; padding: 12px; font-size: 15px; }
 }
 
 /* Đảm bảo mọi ô nhập trong form đều block, full-width (kể cả input không có type). */
