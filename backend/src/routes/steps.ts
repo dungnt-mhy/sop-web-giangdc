@@ -358,7 +358,8 @@ export async function handleDeleteStep(ctx: Ctx, versionId: string, stepId: stri
     );
     await db.batch(phase1);
     const phase2 = remaining.results.map((r, idx) =>
-      db.prepare(`UPDATE process_steps SET sort_order = ? WHERE id = ?`).bind(idx + 1, r.id)
+      db.prepare(`UPDATE process_steps SET sort_order = ?, code = ? WHERE id = ?`)
+        .bind(idx + 1, `B${String(idx + 1).padStart(2, "0")}`, r.id)
     );
     await db.batch(phase2);
   }
@@ -400,12 +401,13 @@ export async function handleReorderSteps(ctx: Ctx, versionId: string): Promise<R
   }
   const now = nowIso();
   // Cập nhật 2 pha để tránh vi phạm UNIQUE(version_id, sort_order):
-  // pha 1 chuyển tất cả về số âm (không trùng), pha 2 chuyển về thứ tự mới.
+  // pha 1 chuyển tất cả về số âm (không trùng), pha 2 chuyển về thứ tự mới + cập nhật mã B01, B02...
   const phase1 = ids.map((id, idx) =>
     db.prepare(`UPDATE process_steps SET sort_order = ? WHERE id = ?`).bind(-(idx + 1), id)
   );
   const phase2 = ids.map((id, idx) =>
-    db.prepare(`UPDATE process_steps SET sort_order = ?, updated_at = ? WHERE id = ?`).bind(idx + 1, now, id)
+    db.prepare(`UPDATE process_steps SET sort_order = ?, code = ?, updated_at = ? WHERE id = ?`)
+      .bind(idx + 1, `B${String(idx + 1).padStart(2, "0")}`, now, id)
   );
   await db.batch([...phase1, ...phase2]);
   await audit(db, {
