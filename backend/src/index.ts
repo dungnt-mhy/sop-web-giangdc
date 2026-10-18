@@ -294,7 +294,7 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     }
   }
   const vm =
-    /^\/processes\/[^/:]+\/versions\/([^/:]+)(?::(submit|approve|return|activate|retire))?$/.exec(path);
+    /^\/processes\/[^/:]+\/versions\/([^/:]+)(?::(submit|approve|return|activate|retire|request-reactivation|approve-reactivation|reject-reactivation))?$/.exec(path);
   if (vm) {
     const vid = decodeURIComponent(vm[1]);
     const action = vm[2];
