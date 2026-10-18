@@ -68,6 +68,7 @@ import {
   handleListExecutions,
   handleListStepAssignees,
   handlePauseExecution,
+  handleRejectConfirmation,
   handleReportComplete,
   handleResumeExecution,
   handleSetStepAssignees,
@@ -347,7 +348,7 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     if (method === "GET") return handleListExecutions(ctx);
     if (method === "POST") return handleCreateExecution(ctx);
   }
-  const em = /^\/executions\/([^/:]+)((?::(start|pause|resume|cancel|complete|report-complete|confirm-complete))?)$/.exec(path);
+  const em = /^\/executions\/([^/:]+)((?::(start|pause|resume|cancel|complete|report-complete|confirm-complete|reject-confirmation))?)$/.exec(path);
   if (em) {
     const eid = decodeURIComponent(em[1]);
     const action = em[3];
@@ -363,6 +364,7 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
       if (action === "cancel") return handleCancelExecution(ctx, eid);
       if (action === "report-complete") return handleReportComplete(ctx, eid);
       if (action === "confirm-complete") return handleConfirmComplete(ctx, eid);
+      if (action === "reject-confirmation") return handleRejectConfirmation(ctx, eid);
       if (action === "complete") return handleReportComplete(ctx, eid); // tương thích cũ
     }
   }

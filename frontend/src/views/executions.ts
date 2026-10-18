@@ -407,6 +407,7 @@ function renderActions(
   }
   if (e.status === "PENDING_CONFIRMATION") {
     btns.push(`<button class="btn primary" data-ea="confirm-complete">✅ Xác nhận hoàn thành</button>`);
+    btns.push(`<button class="btn danger" data-ea="reject-confirmation">❌ Từ chối</button>`);
     btns.push(`<button class="btn danger" data-ea="cancel">🗑️ Hủy lượt</button>`);
   }
   if (e.status === "PAUSED") {
@@ -435,6 +436,10 @@ function renderActions(
       } else if (act === "confirm-complete") {
         await api.confirmComplete(e.id);
         toast("Đã xác nhận hoàn thành lượt.");
+      } else if (act === "reject-confirmation") {
+        restore();
+        openRejectConfirmDialog(dialogRoot, e, async () => { await reload(); });
+        return;
       } else if (act === "cancel") {
         const reason = prompt("Lý do hủy lượt (bắt buộc):");
         if (!reason?.trim()) {
@@ -601,6 +606,82 @@ function openCompleteConfirm(
   dialogRoot.querySelector("#cc-ok")!.addEventListener("click", () => {
     close();
     onConfirm();
+  });
+}
+
+/** Dialog từ chối xác nhận hoàn thành — 2 phương án: hủy lượt hoặc yêu cầu làm lại bước. */
+function openRejectConfirmDialog(
+  dialogRoot: HTMLElement,
+  e: import("../api.js").Execution,
+  onDone: () => Promise<void>
+): void {
+  // Lấy danh sách bước để chọn làm lại.
+  api.getExecution(e.id).then((detail) => {
+    const steps = (detail as unknown as { steps: { id: string; code: string; title: string }[] }).steps ?? [];
+    dialogRoot.innerHTML = `
+      <div class="dialog-backdrop" data-close>
+        <div class="dialog" role="dialog" aria-modal="true" aria-label="Từ chối xác nhận">
+          <h3>❌ Từ chối xác nhận hoàn thành?</h3>
+          <form id="rej-form">
+            <label><input type="radio" name="raction" value="redo" checked /> 🔄 Yêu cầu làm lại bước</label>
+            <label><input type="radio" name="raction" value="cancel" /> 🗑️ Hủy bỏ cả lượt</label>
+            <div id="rej-steps" style="margin:10px 0;max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px;">
+              ${steps.map((s) => `
+                <label class="check"><input type="checkbox" name="step_ids" value="${esc(s.id)}" />
+                  ${esc(s.code)} — ${esc(s.title)}</label>`).join("")}
+            </div>
+            <label>Lý do từ chối <span class="req">*</span>
+              <textarea class="input" name="reason" maxlength="500" rows="3"
+                placeholder="VD: Bước 3 ảnh chưa rõ, cần chụp lại…"></textarea></label>
+            <p class="form-error" id="rej-error" role="alert" hidden></p>
+            <div class="dialog-actions">
+              <button type="button" class="btn" id="rej-cancel">Huỷ</button>
+              <button type="submit" class="btn danger">Từ chối</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    const close = () => { dialogRoot.innerHTML = ""; };
+    dialogRoot.querySelector("#rej-cancel")!.addEventListener("click", close);
+    dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+      if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+    });
+    // Ẩn/hiện chọn bước theo phương án.
+    const stepsBox = dialogRoot.querySelector<HTMLElement>("#rej-steps")!;
+    dialogRoot.querySelectorAll<HTMLInputElement>('input[name="raction"]').forEach((r) => {
+      r.addEventListener("change", () => {
+        stepsBox.style.display = dialogRoot.querySelector<HTMLInputElement>('input[name="raction"]:checked')!.value === "redo" ? "" : "none";
+      });
+    });
+    dialogRoot.querySelector<HTMLFormElement>("#rej-form")!.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(ev.target as HTMLFormElement);
+      const action = String(fd.get("raction") ?? "redo") as "cancel" | "redo";
+      const reason = String(fd.get("reason") ?? "").trim();
+      const errEl = dialogRoot.querySelector<HTMLElement>("#rej-error")!;
+      if (!reason) {
+        errEl.textContent = "Vui lòng nhập lý do từ chối.";
+        errEl.hidden = false;
+        return;
+      }
+      const stepIds = fd.getAll("step_ids").map(String).filter(Boolean);
+      if (action === "redo" && stepIds.length === 0) {
+        errEl.textContent = "Vui lòng chọn ít nhất 1 bước cần làm lại.";
+        errEl.hidden = false;
+        return;
+      }
+      try {
+        await api.rejectConfirmation(e.id, { action, reason, step_ids: stepIds });
+        toast(action === "cancel" ? "Đã hủy lượt." : `Đã yêu cầu làm lại ${stepIds.length} bước.`);
+        close();
+        await onDone();
+      } catch (err) {
+        errEl.textContent = msg(err);
+        errEl.hidden = false;
+      }
+    });
+  }).catch((err) => {
+    toast(`Lỗi: ${msg(err)}`);
   });
 }
 
@@ -909,6 +990,7 @@ function detailHtml(e: ExecutionDetail): string {
                 ${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}
                 <span class="pill ${st.status === "PASSED" ? "green" : st.status === "SKIPPED" ? "gray" : st.status === "IN_PROGRESS" ? "blue" : "gray"}">${esc(STEP_STATUS_LABELS[st.status] ?? st.status)}</span>
                 ${minPhotos > 0 ? ` <span class="pill orange" title="Yêu cầu ít nhất ${minPhotos} ảnh">📷 ${minPhotos} ảnh</span>` : ""}
+                ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? ` <span class="pill amber" title="${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")}">🔄 Làm lại ${esc(String((st as unknown as Record<string, unknown>).redo_count))} lần</span>` : ""}
                 ${st.role ? `<div class="muted small">Vai trò: ${esc(st.role)}</div>` : ""}
                 ${st.skip_reason ? `<div class="muted small">Lý do bỏ qua: ${esc(st.skip_reason)}</div>` : ""}
                 ${st.note ? `<div class="muted small">Ghi chú: ${esc(st.note)}</div>` : ""}

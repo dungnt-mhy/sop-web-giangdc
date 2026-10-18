@@ -107,6 +107,9 @@ function toPublicStep(s: ExecStepRow) {
     completed_at: s.completed_at,
     note: s.note,
     skip_reason: s.skip_reason,
+    redo_count: (s as unknown as Record<string, unknown>).redo_count ?? 0,
+    redo_reason: (s as unknown as Record<string, unknown>).redo_reason ?? null,
+    redo_at: (s as unknown as Record<string, unknown>).redo_at ?? null,
   };
 }
 
@@ -573,6 +576,94 @@ export const handleReportComplete = (ctx: Ctx, id: string) =>
 // Chỉ người phê duyệt/giám sát/quản lý được xác nhận (logic kiểm tra trong transitionExecution).
 export const handleConfirmComplete = (ctx: Ctx, id: string) =>
   transitionExecution(ctx, id, ["PENDING_CONFIRMATION"], "COMPLETED", null, "EXECUTION_COMPLETED");
+
+// POST .../{id}:reject-confirmation — Từ chối xác nhận hoàn thành.
+// Body: { action: "cancel", reason } → hủy cả lượt
+//    hoặc { action: "redo", step_ids: [...], reason } → yêu cầu làm lại các bước đã chọn.
+export async function handleRejectConfirmation(ctx: Ctx, id: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const action = typeof body?.action === "string" ? body.action : "";
+  const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+  if (!["cancel", "redo"].includes(action)) {
+    return apiError("VALIDATION_ERROR", "Hành động không hợp lệ.", ctx.requestId);
+  }
+  if (!reason) {
+    return apiError("VALIDATION_ERROR", "Từ chối bắt buộc phải có lý do.", ctx.requestId);
+  }
+
+  const e = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
+  if (!e) return apiError("NOT_FOUND", "Không tìm thấy lượt thực hiện.", ctx.requestId);
+  if (e.status !== "PENDING_CONFIRMATION") {
+    return apiError("VALIDATION_ERROR", "Chỉ từ chối được khi lượt đang chờ xác nhận.", ctx.requestId);
+  }
+  // Chỉ người có quyền xác nhận mới được từ chối (dùng logic giống confirm).
+  const approverId = (e as unknown as Record<string, unknown>).approver_id as string | null;
+  const supervisorId = e.supervisor_id as string | null;
+  const isAdmin = me.permissions.includes("*") || me.permissions.includes("executions.manage");
+  const canReject = approverId
+    ? (me.user.id === approverId || isAdmin)
+    : (me.user.id === supervisorId || isAdmin);
+  if (!canReject) {
+    return apiError("FORBIDDEN", "Bạn không có quyền từ chối xác nhận lượt này.", ctx.requestId);
+  }
+
+  const now = nowIso();
+  if (action === "cancel") {
+    // Phương án 1: hủy cả lượt.
+    await db.prepare(`UPDATE executions SET status = 'CANCELLED', cancel_reason = ?, updated_at = ? WHERE id = ?`)
+      .bind(`Từ chối xác nhận: ${reason}`, now, id).run();
+    await audit(db, {
+      event_type: "EXECUTION_CONFIRM_REJECTED_CANCEL",
+      actor_id: me.user.id,
+      object_type: "execution",
+      object_id: id,
+      request_id: ctx.requestId,
+      diff: { reason },
+    });
+  } else {
+    // Phương án 2: yêu cầu làm lại các bước đã chọn.
+    const stepIds = Array.isArray(body?.step_ids)
+      ? (body.step_ids as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
+      : [];
+    if (stepIds.length === 0) {
+      return apiError("VALIDATION_ERROR", "Vui lòng chọn ít nhất 1 bước cần làm lại.", ctx.requestId);
+    }
+    // Kiểm tra các bước thuộc lượt này.
+    const placeholders = stepIds.map(() => "?").join(",");
+    const steps = await db.prepare(
+      `SELECT id FROM execution_steps WHERE id IN (${placeholders}) AND execution_id = ?`
+    ).bind(...stepIds, id).all<{ id: string }>();
+    if ((steps.results ?? []).length !== stepIds.length) {
+      return apiError("VALIDATION_ERROR", "Có bước không thuộc lượt này.", ctx.requestId);
+    }
+    // Reset các bước về PENDING + lưu vết làm lại.
+    const stmts = stepIds.map((sid) =>
+      db.prepare(
+        `UPDATE execution_steps SET status = 'PENDING', redo_count = redo_count + 1, redo_reason = ?, redo_by = ?, redo_at = ?, updated_at = ? WHERE id = ?`
+      ).bind(reason, me.user.id, now, now, sid)
+    );
+    // Lượt quay về IN_PROGRESS để làm lại.
+    stmts.push(
+      db.prepare(`UPDATE executions SET status = 'IN_PROGRESS', updated_at = ? WHERE id = ?`).bind(now, id)
+    );
+    await db.batch(stmts);
+    await audit(db, {
+      event_type: "EXECUTION_CONFIRM_REJECTED_REDO",
+      actor_id: me.user.id,
+      object_type: "execution",
+      object_id: id,
+      request_id: ctx.requestId,
+      diff: { reason, step_ids: stepIds },
+    });
+  }
+  const updated = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
+  const progress = await getProgress(db, id);
+  return ok(toPublicExec(updated!, undefined, progress));
+}
 
 // POST .../{id}/steps/{sid}:start — bắt đầu bước (AC-04: kiểm tra bước trước).
 export async function handleStartStep(ctx: Ctx, execId: string, stepId: string): Promise<Response> {

@@ -448,6 +448,9 @@ export const api = {
   confirmComplete(id: string): Promise<Execution> {
     return req("POST", `/executions/${encodeURIComponent(id)}:confirm-complete`);
   },
+  rejectConfirmation(id: string, input: { action: "cancel" | "redo"; reason: string; step_ids?: string[] }): Promise<Execution> {
+    return req("POST", `/executions/${encodeURIComponent(id)}:reject-confirmation`, input);
+  },
   startStep(execId: string, stepId: string): Promise<ExecutionStep> {
     return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:start`);
   },
