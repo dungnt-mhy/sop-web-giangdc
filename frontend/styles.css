@@ -623,8 +623,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .flow-meta.small { font-size: 12px; }
 .flash-highlight { animation: flash 2s; }
 @keyframes flash { 0%, 100% { background: transparent; } 20%, 60% { background: #fef3c7; } }
-.camera-btn { background: #3b82f6; color: #fff; border-color: #3b82f6; }
-.camera-btn:hover { background: #2563eb; }
+.camera-btn { background: transparent; }
 .evidence-audit { font-size: 11px; color: #6b7280; margin-top: 2px; line-height: 1.4; }
 
 /* Form tạo quy trình trên mobile. */
