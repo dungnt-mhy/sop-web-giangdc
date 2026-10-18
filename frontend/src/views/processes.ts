@@ -365,7 +365,28 @@ export async function renderProcessDetail(
       if (act === "submit") await api.submitVersion(vid);
       else if (act === "approve") await api.approveVersion(vid);
       else if (act === "return") await api.returnVersion(vid);
-      else if (act === "activate") await api.activateVersion(vid);
+      else if (act === "activate") {
+        // Kích hoạt lại bản đã ngừng: cảnh báo sẽ ngừng bản đang hoạt động.
+        if (v?.status === "RETIRED") {
+          restore();
+          openConfirmDialog(
+            dialogRoot,
+            `Kích hoạt lại phiên bản ${label}?`,
+            "Phiên bản đang hoạt động sẽ tự động chuyển thành Ngừng. Chỉ 1 phiên bản hoạt động tại 1 thời điểm.",
+            async () => {
+              try {
+                await api.activateVersion(vid);
+                toast(`Đã kích hoạt lại phiên bản ${label}.`);
+                await reload();
+              } catch (e) {
+                toast(`Lỗi: ${msg(e)}`);
+              }
+            }
+          );
+          return;
+        }
+        await api.activateVersion(vid);
+      }
       else if (act === "retire") {
         restore();
         openConfirmDialog(
@@ -469,9 +490,13 @@ function renderVersionButtons(body: HTMLElement, canManage: boolean, canApprove:
     }
     if ((status === "APPROVED" || status === "SCHEDULED") && canApprove) {
       btns.push(`<button class="link" data-v="activate"><span>Kích hoạt</span></button>`);
+      btns.push(`<button class="link danger" data-v="retire"><span>Hủy</span></button>`);
     }
     if ((status === "ACTIVE" || status === "SUPERSEDED") && canApprove) {
       btns.push(`<button class="link danger" data-v="retire"><span>Ngừng</span></button>`);
+    }
+    if (status === "RETIRED" && canApprove) {
+      btns.push(`<button class="link" data-v="activate"><span>Kích hoạt lại</span></button>`);
     }
     cell.innerHTML = btns.join("") || '<span class="muted">—</span>';
   }

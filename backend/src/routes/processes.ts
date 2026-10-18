@@ -348,12 +348,15 @@ async function transitionVersion(
       binds.push(extra.effective_from);
     }
   } else if (to === "ACTIVE") {
-    // Kích hoạt: chuyển ACTIVE cũ thành SUPERSEDED trong cùng giao dịch (§7.1).
+    // Kích hoạt: chỉ 1 bản ACTIVE tại 1 thời điểm.
+    // - Kích hoạt bản mới (APPROVED/SCHEDULED): bản ACTIVE cũ → SUPERSEDED.
+    // - Kích hoạt lại bản cũ (RETIRED): bản ACTIVE cũ → RETIRED.
     const oldActive = await getActiveVersion(db, v.process_id);
     const stmts: D1PreparedStatement[] = [];
     if (oldActive && oldActive.id !== v.id) {
+      const oldStatus = v.status === "RETIRED" ? "RETIRED" : "SUPERSEDED";
       stmts.push(
-        db.prepare(`UPDATE process_versions SET status = 'SUPERSEDED', updated_at = ? WHERE id = ?`).bind(now, oldActive.id)
+        db.prepare(`UPDATE process_versions SET status = ?, updated_at = ? WHERE id = ?`).bind(oldStatus, now, oldActive.id)
       );
     }
     updates.push("activated_at = ?", "activated_by = ?");
@@ -419,12 +422,13 @@ export async function handleReturnVersion(ctx: Ctx, versionId: string): Promise<
   return transitionVersion(ctx, versionId, ["IN_REVIEW"], "DRAFT", "processes.approve", "PROCESS_VERSION_RETURNED");
 }
 
-// POST .../versions/{vId}:activate — APPROVED/SCHEDULED -> ACTIVE.
+// POST .../versions/{vId}:activate — APPROVED/SCHEDULED/RETIRED -> ACTIVE.
+// Kích hoạt lại bản đã ngừng: bản đang ACTIVE sẽ tự chuyển thành RETIRED (không chạy song song).
 export async function handleActivateVersion(ctx: Ctx, versionId: string): Promise<Response> {
-  return transitionVersion(ctx, versionId, ["APPROVED", "SCHEDULED"], "ACTIVE", "processes.approve", "PROCESS_VERSION_ACTIVATED");
+  return transitionVersion(ctx, versionId, ["APPROVED", "SCHEDULED", "RETIRED"], "ACTIVE", "processes.approve", "PROCESS_VERSION_ACTIVATED");
 }
 
-// POST .../versions/{vId}:retire — ACTIVE/SUPERSEDED -> RETIRED.
+// POST .../versions/{vId}:retire — ACTIVE/SUPERSEDED/APPROVED -> RETIRED.
 export async function handleRetireVersion(ctx: Ctx, versionId: string): Promise<Response> {
-  return transitionVersion(ctx, versionId, ["ACTIVE", "SUPERSEDED"], "RETIRED", "processes.approve", "PROCESS_VERSION_RETIRED");
+  return transitionVersion(ctx, versionId, ["ACTIVE", "SUPERSEDED", "APPROVED"], "RETIRED", "processes.approve", "PROCESS_VERSION_RETIRED");
 }
