@@ -661,6 +661,25 @@ function auditLabel(code: string): string {
   return AUDIT_LABELS[code] ?? code;
 }
 
+/** Dịch loại đối tượng sang tiếng Việt. */
+const OBJECT_LABELS: Record<string, string> = {
+  execution: "Lượt công việc",
+  process: "Quy trình",
+  process_version: "Phiên bản quy trình",
+  execution_step: "Bước công việc",
+  exception: "Ngoại lệ",
+  evidence: "Bằng chứng",
+  user: "Tài khoản",
+  role: "Vai trò",
+  position: "Chức vụ",
+  org_unit: "Đơn vị",
+};
+
+function objectLabel(type: string | null): string {
+  if (!type) return "—";
+  return OBJECT_LABELS[type] ?? type;
+}
+
 /** Trang nhật ký audit (#/audit) — xem lịch sử thao tác. */
 export async function renderAudit(root: HTMLElement): Promise<void> {
   root.innerHTML = `
@@ -707,7 +726,7 @@ export async function renderAudit(root: HTMLElement): Promise<void> {
                 <td>${esc(a.actor_name ?? "—")}</td>
                 <td><strong>${esc(auditLabel(a.event_type))}</strong></td>
                 <td><span class="pill gray" title="${esc(a.event_type)}">${esc(a.event_type)}</span></td>
-                <td class="muted small">${esc(a.object_type ?? "—")}${a.object_id ? ` · ${esc(a.object_id.slice(0, 8))}…` : ""}</td>
+                <td class="muted small">${esc(objectLabel(a.object_type))}</td>
               </tr>`).join("")}
           </tbody>
         </table></div>`;
