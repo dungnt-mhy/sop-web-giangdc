@@ -894,10 +894,11 @@ function openStepDialog(
         <label class="check"><input type="checkbox" name="allow_skip" id="step-allow-skip"
           ${(step?.skip_policy as unknown as { allowed?: boolean } | null)?.allowed ? "checked" : ""} />
           Cho phép bỏ qua bước này</label>
-        <label>Chức vụ được bỏ qua
-          <select class="input" name="skip_positions" id="step-skip-positions" multiple size="4">
-          </select>
-          <span class="hint">Chạm để chọn/bỏ chọn từng vai trò (giữ Ctrl trên máy tính để chọn nhiều). Để trống = ai cũng được bỏ qua.</span></label>
+        <label>⏭️ Vai trò được bỏ qua
+          <div class="roles-grid" id="step-skip-positions">
+            <span class="muted small">Đang tải…</span>
+          </div>
+          <span class="hint">Chọn chức vụ được phép bỏ qua bước này. Để trống = ai cũng được bỏ qua.</span></label>
         <label>Cảnh báo <input class="input" name="warning" maxlength="500" value="${val(step?.warning)}"
           placeholder="VD: Cẩn thận hàng dễ vỡ" /></label>
         <p class="form-error" id="step-error" role="alert" hidden></p>
@@ -921,7 +922,7 @@ function openStepDialog(
   const supGrid = dialogRoot.querySelector<HTMLElement>("#step-supervisors")!;
   const existingPosIds = new Set(((step as unknown as Record<string, unknown>)?.positions as { id: string }[] ?? []).map((p) => p.id));
   const existingSupIds = new Set(((step as unknown as Record<string, unknown>)?.supervisors as { id: string }[] ?? []).map((p) => p.id));
-  const skipSel = dialogRoot.querySelector<HTMLSelectElement>("#step-skip-positions")!;
+  const skipSel = dialogRoot.querySelector<HTMLElement>("#step-skip-positions")!;
   const existingSkip = (step?.skip_policy as unknown as { allowed?: boolean; allowed_positions?: string[] } | null);
   const existingSkipPosIds = new Set(existingSkip?.allowed_positions ?? []);
   api.listPositions().then(({ items }) => {
@@ -932,7 +933,8 @@ function openStepDialog(
       <label class="check"><input type="checkbox" name="supervisor_ids" value="${esc(p.id)}"
         ${existingSupIds.has(p.id) ? "checked" : ""} /> ${esc(p.name)}</label>`).join("") || `<span class="muted small">Chưa có chức vụ nào.</span>`;
     skipSel.innerHTML = items.map((p) => `
-      <option value="${esc(p.id)}" ${existingSkipPosIds.has(p.id) ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+      <label class="check"><input type="checkbox" name="skip_position_ids" value="${esc(p.id)}"
+        ${existingSkipPosIds.has(p.id) ? "checked" : ""} /> ${esc(p.name)}</label>`).join("") || `<span class="muted small">Chưa có chức vụ nào.</span>`;
   }).catch(() => { posGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; supGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; });
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -954,7 +956,7 @@ function openStepDialog(
     // PRC-007: cho phép bỏ qua.
     const allowSkip = fd.get("allow_skip") === "on";
     if (allowSkip) {
-      const skipPosIds = Array.from(form.querySelectorAll<HTMLOptionElement>("#step-skip-positions option:checked")).map((o) => o.value);
+      const skipPosIds = fd.getAll("skip_position_ids").map(String).filter((x) => x);
       input.skip_policy = JSON.stringify({ allowed: true, allowed_positions: skipPosIds });
     } else {
       input.skip_policy = null;
