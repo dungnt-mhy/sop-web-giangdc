@@ -435,7 +435,7 @@ export async function renderStatsDaily(root: HTMLElement): Promise<void> {
           <div class="stat-card"><div class="stat-num">${pct(td, tc)}</div><div class="stat-label">Tỉ lệ xong</div></div>
         </div>
         <div class="card"><h3>Biểu đồ theo ngày</h3>${verticalBarChart(days)}</div>
-        <div class="card"><h3>Chi tiết từng ngày</h3>
+        <div class="card"><div class="card-head"><h3>Chi tiết từng ngày</h3><button class="btn sm" data-export>📥 Xuất Excel</button></div>
           <div class="table-wrap"><table class="table">
             <thead><tr><th>Ngày</th><th>Tạo mới</th><th>Hoàn thành</th><th>Tỉ lệ</th></tr></thead>
             <tbody>
