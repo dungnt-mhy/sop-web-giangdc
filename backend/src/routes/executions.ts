@@ -641,10 +641,10 @@ export async function handleRejectConfirmation(ctx: Ctx, id: string): Promise<Re
       if ((steps.results ?? []).length !== stepIds.length) {
         return apiError("VALIDATION_ERROR", "Có bước không thuộc lượt này.", ctx.requestId);
       }
-      // Reset các bước về PENDING + lưu vết làm lại.
+      // Reset các bước về NOT_STARTED + lưu vết làm lại.
       for (const sid of stepIds) {
         await db.prepare(
-          `UPDATE execution_steps SET status = 'PENDING', redo_count = redo_count + 1, redo_reason = ?, redo_by = ?, redo_at = ?, updated_at = ? WHERE id = ?`
+          `UPDATE execution_steps SET status = 'NOT_STARTED', redo_count = redo_count + 1, redo_reason = ?, redo_by = ?, redo_at = ?, updated_at = ? WHERE id = ?`
         ).bind(reason, me.user.id, now, now, sid).run();
       }
       // Lượt quay về IN_PROGRESS để làm lại.
