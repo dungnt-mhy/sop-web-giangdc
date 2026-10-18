@@ -1,6 +1,7 @@
 import type { Ctx } from "./context";
 import { ok, apiError } from "../errors.js";
 import { requirePermission } from "./auth";
+import { newId } from "../db.js";
 
 // GET /api/v1/audit — xem nhật ký audit (cần quyền audit.view).
 export async function handleListAudit(ctx: Ctx): Promise<Response> {
@@ -131,7 +132,7 @@ export async function handleSeedTestData(ctx: Ctx): Promise<Response> {
     const status = statuses[i % statuses.length];
     const shift = shifts[i % shifts.length];
 
-    const execId = crypto.randomUUID();
+    const execId = newId();
     const code = `EXE-${datePart}-${String(created + 1).padStart(3, "0")}`;
     const createdAt = `${dateStr}T${String(8 + (i % 10)).padStart(2, "0")}:00:00.000Z`;
     const startedAt = status !== "CREATED" ? createdAt : null;
@@ -154,7 +155,7 @@ export async function handleSeedTestData(ctx: Ctx): Promise<Response> {
       await db.prepare(
         `INSERT INTO execution_steps (id, execution_id, step_id, sort_order, status)
          VALUES (?, ?, ?, ?, ?)`
-      ).bind(crypto.randomUUID(), execId, pd.steps[si].id, si, stepStatus).run();
+      ).bind(newId(), execId, pd.steps[si].id, si, stepStatus).run();
     }
     created++;
   }
