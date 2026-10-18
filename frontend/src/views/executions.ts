@@ -28,6 +28,7 @@ const STEP_STATUS_LABELS: Record<string, string> = {
   PASSED: "Đạt",
   FAILED: "Không đạt",
   SKIPPED: "Bỏ qua",
+  CANCELLED: "Đã hủy",
 };
 
 function execPill(status: string): string {
@@ -60,9 +61,9 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
     </div>
     <div class="table-wrap"><table class="tbl clickable-rows" id="exec-table">
       <thead><tr>
-        <th>Mã lượt</th><th>Quy trình</th><th>Ngày tạo</th><th>Ngày thực hiện</th><th>Tiến độ</th><th>Trạng thái</th>
+        <th>Mã lượt</th><th>Quy trình</th><th>Thời gian tạo</th><th>Thời gian bắt đầu (thực tế)</th><th>Thời gian hoàn thành (thực tế)</th><th>Tiến độ</th><th>Trạng thái</th>
       </tr></thead>
-      <tbody><tr><td colspan="6" class="empty">Đang tải…</td></tr></tbody>
+      <tbody><tr><td colspan="7" class="empty">Đang tải…</td></tr></tbody>
     </table></div>
     <div id="exec-dialog-root"></div>`;
 
@@ -75,23 +76,27 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
     try {
       const { items } = await api.listExecutions({ mine: true, status: selStatus.value || undefined });
       if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty">Chưa có lượt nào được giao cho bạn.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="empty">Chưa có lượt nào được giao cho bạn.</td></tr>`;
         return;
       }
       tbody.innerHTML = items.map((e) => {
         const p = e.progress;
         const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
-        // Ngày tạo: kèm giờ.
-        const createdAt = e.created_at ? e.created_at.slice(0, 16).replace("T", " ").split(" ").map((s, i) => i === 0 ? s.split("-").reverse().join("/") : s).join(" ") : "—";
-        // Ngày thực hiện: thời gian nhấn Bắt đầu (kèm giờ); chưa bắt đầu thì hiện ngày dự kiến.
-        const execAt = e.started_at
-          ? e.started_at.slice(0, 16).replace("T", " ").split(" ").map((s, i) => i === 0 ? s.split("-").reverse().join("/") : s).join(" ")
-          : (e.execution_date ? e.execution_date.split("-").reverse().join("/") + (e.execution_time ? ` ${e.execution_time}` : "") + ' <span class="muted small">(dự kiến)</span>' : "—");
+        const fmtDt = (s: string | null | undefined) => s ? s.slice(0, 16).replace("T", " ").split(" ").map((x, i) => i === 0 ? x.split("-").reverse().join("/") : x).join(" ") : "—";
+        // Thời gian tạo: kèm giờ.
+        const createdAt = fmtDt(e.created_at);
+        // Thời gian bắt đầu (thực tế): thời gian nhấn Bắt đầu; chưa bắt đầu thì hiện dự kiến.
+        const ex = e as unknown as Record<string, unknown>;
+        const startedAt = e.started_at ? fmtDt(e.started_at)
+          : (ex.expected_start_at ? fmtDt(ex.expected_start_at as string) + ' <span class="muted small">(dự kiến)</span>' : "—");
+        // Thời gian hoàn thành (thực tế).
+        const completedAt = fmtDt(e.completed_at);
         return `<tr data-id="${esc(e.id)}">
           <td><strong>${esc(e.code)}</strong>${e.title ? `<div class="muted small">${esc(e.title)}</div>` : ""}</td>
           <td>${esc(e.process_name ?? "—")}</td>
           <td class="muted small">${createdAt}</td>
-          <td>${execAt}</td>
+          <td>${startedAt}</td>
+          <td class="muted small">${completedAt}</td>
           <td><div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
             <span class="muted small">${p?.done ?? 0}/${p?.total ?? 0}</span></td>
           <td>${execPill(e.status)}${(e.redo_steps ?? 0) > 0 ? ` <span class="pill amber" title="Bị từ chối: ${esc(e.last_redo_reason ?? "")}&#10;Người từ chối: ${esc(e.last_redo_by_name ?? "")}&#10;Lúc: ${esc(e.last_redo_at ?? "")}&#10;Số bước làm lại: ${e.redo_steps}">🔄 Trả lại (${e.redo_steps})</span>` : ""}</td>
@@ -132,10 +137,12 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
           <span class="hint">Chỉ hiện quy trình có phiên bản đang hiệu lực.</span></label>
         <label>Tiêu đề lượt <input class="input" name="title" maxlength="200"
           placeholder="VD: Xuất hàng đợt sáng 17/10" /></label>
-        <label>Ngày thực hiện <span class="req">*</span>
-          <input class="input" type="date" name="execution_date" id="exec-date" required /></label>
-        <label>Giờ thực hiện <input class="input" type="time" name="execution_time" id="exec-time" />
-          <span class="hint">Ca làm việc sẽ tự xác định theo giờ.</span></label>
+        <label>Thời gian bắt đầu (dự kiến) <span class="req">*</span>
+          <input class="input" type="datetime-local" name="expected_start_at" id="exec-start" required />
+          <span class="hint">Có thể tạo trước, thực hiện sau.</span></label>
+        <label>Thời gian hoàn thành (dự kiến)
+          <input class="input" type="datetime-local" name="expected_end_at" id="exec-end" />
+          <span class="hint">Ca làm việc sẽ tự xác định theo giờ bắt đầu.</span></label>
         <label>Người thực hiện chính
           <select class="input" name="assignee_id" id="exec-assignee">
             <option value="">Tôi (mặc định)</option>
@@ -212,13 +219,11 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
       renderChecks(aprList, aprUsers);
     }, 300);
   });
-  // Mặc định ngày và giờ là hiện tại.
-  const dateInput = dialogRoot.querySelector<HTMLInputElement>("#exec-date")!;
-  const timeInput = dialogRoot.querySelector<HTMLInputElement>("#exec-time")!;
+  // Mặc định thời gian bắt đầu là hiện tại.
+  const startInput = dialogRoot.querySelector<HTMLInputElement>("#exec-start")!;
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
-  dateInput.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  timeInput.value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  startInput.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   api.listProcesses({ status: "ACTIVE" }).then(({ items }) => {
     const available = items.filter((p) => p.active_version);
     if (available.length === 0) {
@@ -248,15 +253,15 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
     const input: Record<string, unknown> = { process_id };
     const title = String(fd.get("title") ?? "").trim();
     if (title) input.title = title;
-    const execution_date = String(fd.get("execution_date") ?? "").trim();
-    if (!execution_date) {
-      errEl.textContent = "Vui lòng chọn ngày thực hiện.";
+    const expected_start_at = String(fd.get("expected_start_at") ?? "").trim();
+    if (!expected_start_at) {
+      errEl.textContent = "Vui lòng chọn thời gian bắt đầu (dự kiến).";
       errEl.hidden = false;
       return;
     }
-    input.execution_date = execution_date;
-    const execution_time = String(fd.get("execution_time") ?? "").trim();
-    if (execution_time) input.execution_time = execution_time;
+    input.expected_start_at = expected_start_at;
+    const expected_end_at = String(fd.get("expected_end_at") ?? "").trim();
+    if (expected_end_at) input.expected_end_at = expected_end_at;
     const shift = String(fd.get("shift") ?? "").trim();
     if (shift) input.shift = shift;
     const assignee_id = String(fd.get("assignee_id") ?? "").trim();
@@ -267,7 +272,7 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
     if (approver_ids.length > 0) (input as Record<string, unknown>).approver_ids = approver_ids;
     setLoading(submitBtn, true, "Đang tạo…");
     try {
-      const created = await api.createExecution(input as { process_id: string; title?: string; execution_date: string; execution_time?: string; shift?: string; assignee_id?: string; supervisor_id?: string; creator_id: string });
+      const created = await api.createExecution(input as { process_id: string; title?: string; expected_start_at: string; expected_end_at?: string; assignee_id?: string; supervisor_ids?: string[]; approver_ids?: string[] });
       toast(`Đã tạo lượt ${created.code}.`);
       close();
       onDone();
@@ -697,13 +702,13 @@ function openEditExecutionDialog(
             <label>Tiêu đề
               <input class="input" name="title" maxlength="200" value="${esc((d.title as string) ?? "")}"
                 placeholder="VD: Xuất hàng đợt sáng" /></label>
-            <label>Ngày thực hiện <span class="req">*</span>
-              <input class="input" type="date" name="execution_date" required
-                value="${esc((d.execution_date as string) ?? "")}" /></label>
-            <label>Giờ thực hiện
-              <input class="input" type="time" name="execution_time"
-                value="${esc((d.execution_time as string) ?? "")}" />
-              <span class="hint">Ca làm việc sẽ tự cập nhật theo giờ.</span></label>
+            <label>Thời gian bắt đầu (dự kiến) <span class="req">*</span>
+              <input class="input" type="datetime-local" name="expected_start_at" required
+                value="${esc(((d.expected_start_at as string) ?? "").slice(0, 16))}" /></label>
+            <label>Thời gian hoàn thành (dự kiến)
+              <input class="input" type="datetime-local" name="expected_end_at"
+                value="${esc(((d.expected_end_at as string) ?? "").slice(0, 16))}" />
+              <span class="hint">Ca làm việc sẽ tự cập nhật theo giờ bắt đầu.</span></label>
             <p class="muted small">Người thực hiện, giám sát, phê duyệt: sửa ở màn hình phân công sau khi tạo. Chỉ sửa được khi lượt còn ở trạng thái "Mới tạo".</p>
             <p class="form-error" id="edit-exec-error" role="alert" hidden></p>
             <div class="dialog-actions">
@@ -725,8 +730,8 @@ function openEditExecutionDialog(
       try {
         await api.updateExecution(e.id, {
           title: String(fd.get("title") ?? "").trim() || null,
-          execution_date: String(fd.get("execution_date") ?? ""),
-          execution_time: String(fd.get("execution_time") ?? "") || null,
+          expected_start_at: String(fd.get("expected_start_at") ?? ""),
+          expected_end_at: String(fd.get("expected_end_at") ?? "") || null,
         });
         toast("Đã lưu thay đổi.");
         close();
@@ -1149,6 +1154,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
   const p = e.progress;
   const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
   const active = e.status === "IN_PROGRESS";
+  const fmtDt = (s: string | null | undefined) => s ? s.slice(0, 16).replace("T", " ").split(" ").map((x, i) => i === 0 ? x.split("-").reverse().join("/") : x).join(" ") : "—";
   return `
     <section class="card">
       <h3>Thông tin lượt công việc</h3>
@@ -1167,8 +1173,10 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
           </div>
         </dd></div>` : ""}
         <div class="info-row"><dt>Quy trình</dt><dd>${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})${(e as unknown as Record<string, unknown>).version_number ? ` · Phiên bản v${(e as unknown as Record<string, unknown>).version_number}` : ""}</dd></div>
-        <div class="info-row"><dt>Ngày thực hiện (dự kiến)</dt><dd>${esc(e.execution_date ?? "—")}${e.execution_time ? ` · ${esc(e.execution_time)}` : ""}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>
-        ${e.started_at ? `<div class="info-row"><dt>Bắt đầu lúc</dt><dd>${esc(e.started_at.slice(0, 16).replace("T", " ").split(" ").map((s, i) => i === 0 ? s.split("-").reverse().join("/") : s).join(" "))}</dd></div>` : ""}
+        ${(e as unknown as Record<string, unknown>).expected_start_at ? `<div class="info-row"><dt>Thời gian bắt đầu (dự kiến)</dt><dd>${fmtDt((e as unknown as Record<string, unknown>).expected_start_at as string)}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>` : ""}
+        ${(e as unknown as Record<string, unknown>).expected_end_at ? `<div class="info-row"><dt>Thời gian hoàn thành (dự kiến)</dt><dd>${fmtDt((e as unknown as Record<string, unknown>).expected_end_at as string)}</dd></div>` : ""}
+        ${e.started_at ? `<div class="info-row"><dt>Thời gian bắt đầu (thực tế)</dt><dd>${fmtDt(e.started_at)}</dd></div>` : ""}
+        ${e.completed_at ? `<div class="info-row"><dt>Thời gian hoàn thành (thực tế)</dt><dd>${fmtDt(e.completed_at)}</dd></div>` : ""}
         <div class="info-row"><dt>Người tạo</dt><dd>${esc(e.creator_name ?? "—")}${(e as unknown as Record<string, unknown>).creator_position_name ? ` <span class="muted small">— ${esc((e as unknown as Record<string, unknown>).creator_position_name as string)}</span>` : ""}</dd></div>
         <div class="info-row"><dt>Người thực hiện chính</dt><dd>${esc(e.assignee_name ?? "—")}</dd></div>
         ${e.supervisor_name ? `<div class="info-row"><dt>Người giám sát</dt><dd>${esc(e.supervisor_name)}</dd></div>` : ""}

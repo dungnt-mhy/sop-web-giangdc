@@ -72,6 +72,8 @@ function toPublicExec(e: ExecutionRow, processName?: string, progress?: { total:
     execution_date: e.execution_date,
     execution_time: e.execution_time,
     shift: e.shift,
+    expected_start_at: (e as unknown as Record<string, unknown>).expected_start_at as string | null ?? null,
+    expected_end_at: (e as unknown as Record<string, unknown>).expected_end_at as string | null ?? null,
     supervisor_id: e.supervisor_id,
     creator_id: (e as unknown as Record<string, unknown>).creator_id as string | null ?? null,
     cancel_reason: e.cancel_reason,
@@ -310,14 +312,18 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
     ? body.assignee_id.trim()
     : me.user.id;
   const dueAt = typeof body?.due_at === "string" ? body.due_at.trim() || null : null;
-  // Ngày thực hiện là bắt buộc (yêu cầu khách hàng).
-  const executionDate = typeof body?.execution_date === "string" ? body.execution_date.trim() : "";
-  if (!executionDate || !/^\d{4}-\d{2}-\d{2}$/.test(executionDate)) {
-    return apiError("VALIDATION_ERROR", "Thiếu ngày thực hiện (định dạng YYYY-MM-DD).", ctx.requestId);
+  // Thời gian bắt đầu (dự kiến) — bắt buộc, định dạng YYYY-MM-DDTHH:mm.
+  const expectedStartAt = typeof body?.expected_start_at === "string" ? body.expected_start_at.trim() : "";
+  if (!expectedStartAt || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(expectedStartAt)) {
+    return apiError("VALIDATION_ERROR", "Thiếu thời gian bắt đầu (dự kiến).", ctx.requestId);
   }
-  const executionTime = typeof body?.execution_time === "string" && /^\d{2}:\d{2}$/.test(body.execution_time.trim())
-    ? body.execution_time.trim()
+  // Thời gian hoàn thành (dự kiến) — tùy chọn.
+  const expectedEndAt = typeof body?.expected_end_at === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(body.expected_end_at.trim())
+    ? body.expected_end_at.trim()
     : null;
+  // Giữ tương thích: suy execution_date/execution_time từ expected_start_at.
+  const executionDate = expectedStartAt.slice(0, 10);
+  const executionTime = expectedStartAt.slice(11, 16);
   // Tự suy ca làm việc từ giờ (không cho chọn tay nữa).
   const shift = deriveShift(executionTime);
   // Người giám sát: chọn nhiều (mảng) hoặc 1 (chuỗi) để tương thích.
@@ -347,9 +353,9 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
 
   const stmts: D1PreparedStatement[] = [
     db.prepare(
-      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, supervisor_id, creator_id, approver_id, due_at, execution_date, execution_time, shift, created_at, created_by)
-       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorIds[0] ?? null, creatorId, approverIds[0] ?? null, dueAt, executionDate, executionTime, shift, now, me.user.id),
+      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, supervisor_id, creator_id, approver_id, due_at, execution_date, execution_time, shift, expected_start_at, expected_end_at, created_at, created_by)
+       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorIds[0] ?? null, creatorId, approverIds[0] ?? null, dueAt, executionDate, executionTime, shift, expectedStartAt, expectedEndAt, now, me.user.id),
   ];
   // Lưu nhiều giám sát / phê duyệt.
   for (const sid of supervisorIds) {
@@ -598,19 +604,22 @@ export async function handleUpdateExecution(ctx: Ctx, id: string): Promise<Respo
     }
     setIf("assignee_id", v ?? me.user.id);
   }
-  if ("execution_date" in (body ?? {})) {
-    const v = typeof body?.execution_date === "string" ? body.execution_date.trim() : "";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
-      return apiError("VALIDATION_ERROR", "Ngày thực hiện không hợp lệ (YYYY-MM-DD).", ctx.requestId);
+  if ("expected_start_at" in (body ?? {})) {
+    const v = typeof body?.expected_start_at === "string" ? body.expected_start_at.trim() : "";
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) {
+      return apiError("VALIDATION_ERROR", "Thời gian bắt đầu (dự kiến) không hợp lệ.", ctx.requestId);
     }
-    setIf("execution_date", v);
+    setIf("expected_start_at", v);
+    // Giữ đồng bộ execution_date/execution_time/shift.
+    setIf("execution_date", v.slice(0, 10));
+    const t = v.slice(11, 16);
+    setIf("execution_time", t);
+    setIf("shift", deriveShift(t));
   }
-  if ("execution_time" in (body ?? {})) {
-    const v = typeof body?.execution_time === "string" && /^\d{2}:\d{2}$/.test(body.execution_time.trim())
-      ? body.execution_time.trim() : null;
-    setIf("execution_time", v);
-    // Tự suy ca từ giờ.
-    setIf("shift", deriveShift(v));
+  if ("expected_end_at" in (body ?? {})) {
+    const v = typeof body?.expected_end_at === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(body.expected_end_at.trim())
+      ? body.expected_end_at.trim() : null;
+    setIf("expected_end_at", v);
   }
   if ("supervisor_id" in (body ?? {})) {
     const v = typeof body?.supervisor_id === "string" && body.supervisor_id.trim() ? body.supervisor_id.trim() : null;
@@ -802,6 +811,10 @@ async function transitionExecution(
     }
     updates.push("cancel_reason = ?");
     binds.push(reason);
+    // Hủy tất cả các bước chưa hoàn thành.
+    await db.prepare(
+      `UPDATE execution_steps SET status = 'CANCELLED', updated_at = ? WHERE execution_id = ? AND status IN ('NOT_STARTED', 'IN_PROGRESS')`
+    ).bind(now, id).run();
   }
   binds.push(id);
   await db.prepare(`UPDATE executions SET ${updates.join(", ")} WHERE id = ?`).bind(...binds).run();
