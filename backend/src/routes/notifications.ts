@@ -4,6 +4,8 @@ import { newId, nowIso } from "../db.js";
 
 const FROM_EMAIL = "Dungnt.connect@gmail.com";
 const FROM_NAME = "SOP Demo";
+// TẠM ĐÓNG BĂNG gửi email theo yêu cầu (2026-10-18).
+const EMAIL_ENABLED = false;
 
 export interface CreateNotificationInput {
   user_id: string;
@@ -54,8 +56,8 @@ export async function createNotification(
       input.link ?? null,
       nowIso()
     ).run();
-    // Gửi email nếu user có email (trừ khi tắt explicitly).
-    if (input.sendEmail !== false) {
+    // Gửi email nếu user có email (trừ khi tắt explicitly). Đang đóng băng.
+    if (EMAIL_ENABLED && input.sendEmail !== false) {
       const u = await db.prepare(`SELECT email FROM users WHERE id = ?`).bind(input.user_id).first<{ email: string | null }>();
       if (u?.email) {
         const linkHtml = input.link ? `<p><a href="https://sop-api.dungnt-storage.workers.dev/${input.link}">Xem chi tiết</a></p>` : "";
