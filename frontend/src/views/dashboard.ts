@@ -41,7 +41,7 @@ export async function renderDashboard(root: HTMLElement): Promise<void> {
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h2>📊 Dashboard tổng quan</h2>
+        <h2>📊 Thống kê tổng quan</h2>
         <p class="page-sub">Thống kê toàn bộ hoạt động: lượt công việc, ngoại lệ, bằng chứng, người dùng.</p>
       </div>
       <div class="dashboard-filters">

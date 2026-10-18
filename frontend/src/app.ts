@@ -60,10 +60,10 @@ function renderShell(): void {
   const name = session.user.display_name || session.user.username;
   type NavItem = { hash: string; label: string; perm?: string; children?: NavItem[] };
   const navItems: NavItem[] = [
-    { hash: "#/home", label: "Trang chủ" },
+    { hash: "#/home", label: "Tổng quan" },
+    { hash: "#/dashboard", label: "Thống kê", perm: "reports.view" },
     { hash: "#/my-work", label: "Công việc của tôi", perm: "executions.perform" },
     { hash: "#/processes", label: "Quy trình" },
-    { hash: "#/dashboard", label: "Báo cáo", perm: "reports.view" },
     { hash: "#/exceptions", label: "Ngoại lệ", perm: "exceptions.handle" },
     { hash: "#/evidence", label: "Bằng chứng", perm: "executions.view" },
     {
