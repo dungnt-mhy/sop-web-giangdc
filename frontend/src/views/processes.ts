@@ -222,13 +222,18 @@ function openProcessDialog(dialogRoot: HTMLElement, onDone: () => void): void {
       <form id="proc-form" novalidate>
         <label>Mã quy trình <span class="req">*</span>
           <input class="input" name="code" required maxlength="32" placeholder="VD: XUAT-HANG-DL" style="text-transform:uppercase" />
-          <span class="hint">2–32 ký tự: chữ, số, dấu . _ -</span></label>
+          <span class="hint">Mã ngắn gọn, viết hoa, không dấu. 2–32 ký tự: chữ, số, dấu . _ -</span></label>
         <label>Tên quy trình <span class="req">*</span>
-          <input class="input" name="name" required maxlength="200" placeholder="VD: Xuất hàng đến đại lý" /></label>
-        <label>Nhóm <input class="input" name="group_name" maxlength="100" placeholder="VD: Kho vận" /></label>
-        <label>Mục đích <textarea class="input" name="purpose" rows="2"></textarea></label>
-        <label>Phạm vi áp dụng <textarea class="input" name="scope" rows="2"></textarea></label>
-        <label>Đơn vị áp dụng <input class="input" name="applying_unit" maxlength="200" /></label>
+          <input class="input" name="name" required maxlength="200" placeholder="VD: Xuất hàng đến đại lý" />
+          <span class="hint">Tên đầy đủ, dễ hiểu. VD: Nhập hàng từ nhà cung cấp, Kiểm kê kho tháng</span></label>
+        <label>Nhóm <input class="input" name="group_name" maxlength="100" placeholder="VD: Kho vận" />
+          <span class="hint">Phân loại quy trình. VD: Kho vận, Sản xuất, Hành chính</span></label>
+        <label>Mục đích <textarea class="input" name="purpose" rows="2" placeholder="VD: Đảm bảo hàng xuất đúng, đủ, kịp thời đến đại lý"></textarea>
+          <span class="hint">Tại sao cần quy trình này? Kết quả mong muốn là gì?</span></label>
+        <label>Phạm vi áp dụng <textarea class="input" name="scope" rows="2" placeholder="VD: Áp dụng cho tất cả đơn hàng xuất kho tại kho chính"></textarea>
+          <span class="hint">Áp dụng cho đối tượng, địa điểm, thời gian nào?</span></label>
+        <label>Đơn vị áp dụng <input class="input" name="applying_unit" maxlength="200" placeholder="VD: Kho chính, Chi nhánh Hà Nội" />
+          <span class="hint">Bộ phận, kho, chi nhánh nào thực hiện quy trình này?</span></label>
         <p class="form-error" id="proc-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button type="button" class="btn" id="proc-cancel">Huỷ</button>
