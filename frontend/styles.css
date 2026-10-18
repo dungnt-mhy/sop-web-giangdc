@@ -436,10 +436,20 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .tbl td.actions { white-space: nowrap; }
 
 /* ---------- Dialog ---------- */
-.dialog-backdrop {
+.dialog-backdrop,
+.dialog-scrim {
   position: fixed; inset: 0; background: rgba(11, 31, 54, 0.55);
   display: flex; align-items: flex-start; justify-content: center;
   padding: 24px 16px; z-index: 100; overflow-y: auto;
+}
+/* Dialog dạng popup khi dùng chung với dialog-scrim (sibling). */
+.dialog-scrim + .dialog {
+  position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 101; max-height: calc(100vh - 48px); overflow-y: auto;
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .dialog-scrim + .dialog { top: 12px; max-height: calc(100vh - 24px); width: calc(100% - 20px); }
 }
 .dialog { background: #fff; border-radius: 16px; padding: 24px; width: 100%; max-width: 480px; box-shadow: var(--shadow); }
 .dialog h3 { margin-bottom: 16px; }
