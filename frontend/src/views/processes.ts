@@ -642,7 +642,8 @@ async function toggleSteps(
                   ${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}
                   ${((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) ? ' <span class="pill blue">⏭️ Được bỏ qua</span>' : ""}
                   ${st.role ? `<div class="muted small">Vai trò: ${esc(st.role)}</div>` : ""}
-                  ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="muted small">Vai trò người thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
+                  ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👤 Thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
+                  ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👁️ Kiểm duyệt/Giám sát: ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
                 </div>
                 ${editable ? `<div class="step-actions">
                   <button class="link sm" data-step-act="up" title="Lên" ${idx === 0 ? "disabled" : ""}>↑</button>
@@ -856,6 +857,11 @@ function openStepDialog(
               <span class="muted small">Đang tải…</span>
             </div>
             <span class="hint">Chọn một hoặc nhiều chức vụ. Khi phân công sẽ ưu tiên người có chức vụ phù hợp.</span></label>
+          <label>Vai trò người kiểm duyệt/giám sát
+            <div class="roles-grid" id="step-supervisors">
+              <span class="muted small">Đang tải…</span>
+            </div>
+            <span class="hint">Chức vụ giám sát việc thực hiện bước này.</span></label>
         </div>
         <label>Tiêu đề hành động <span class="req">*</span>
           <input class="input" name="title" required maxlength="200" value="${val(step?.title)}"
@@ -916,7 +922,9 @@ function openStepDialog(
   const submitBtn = dialogRoot.querySelector<HTMLButtonElement>("#step-submit")!;
   // Tải danh sách chức vụ (checkbox nhiều chọn).
   const posGrid = dialogRoot.querySelector<HTMLElement>("#step-positions")!;
+  const supGrid = dialogRoot.querySelector<HTMLElement>("#step-supervisors")!;
   const existingPosIds = new Set(((step as unknown as Record<string, unknown>)?.positions as { id: string }[] ?? []).map((p) => p.id));
+  const existingSupIds = new Set(((step as unknown as Record<string, unknown>)?.supervisors as { id: string }[] ?? []).map((p) => p.id));
   const skipSel = dialogRoot.querySelector<HTMLSelectElement>("#step-skip-positions")!;
   const skipAprSel = dialogRoot.querySelector<HTMLSelectElement>("#step-skip-approvers")!;
   const existingSkip = (step?.skip_policy as unknown as { allowed?: boolean; allowed_positions?: string[]; approver_ids?: string[] } | null);
@@ -926,9 +934,12 @@ function openStepDialog(
     posGrid.innerHTML = items.map((p) => `
       <label class="check"><input type="checkbox" name="position_ids" value="${esc(p.id)}"
         ${existingPosIds.has(p.id) ? "checked" : ""} /> ${esc(p.name)}</label>`).join("") || `<span class="muted small">Chưa có chức vụ nào.</span>`;
+    supGrid.innerHTML = items.map((p) => `
+      <label class="check"><input type="checkbox" name="supervisor_ids" value="${esc(p.id)}"
+        ${existingSupIds.has(p.id) ? "checked" : ""} /> ${esc(p.name)}</label>`).join("") || `<span class="muted small">Chưa có chức vụ nào.</span>`;
     skipSel.innerHTML = items.map((p) => `
       <option value="${esc(p.id)}" ${existingSkipPosIds.has(p.id) ? "selected" : ""}>${esc(p.name)}</option>`).join("");
-  }).catch(() => { posGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; });
+  }).catch(() => { posGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; supGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; });
   api.listActiveUsers().then(({ items }) => {
     skipAprSel.innerHTML = (items ?? []).map((u) => `
       <option value="${esc(u.id)}" ${existingSkipAprIds.has(u.id) ? "selected" : ""}>${esc(u.display_name)} (${esc(u.username)})</option>`).join("");
@@ -948,6 +959,8 @@ function openStepDialog(
     }
     const positionIds = fd.getAll("position_ids").map(String).filter((x) => x);
     if (positionIds.length > 0) input.position_ids = positionIds;
+    const supervisorIds = fd.getAll("supervisor_ids").map(String).filter((x) => x);
+    if (supervisorIds.length > 0) input.supervisor_ids = supervisorIds;
     // PRC-007: cho phép bỏ qua.
     const allowSkip = fd.get("allow_skip") === "on";
     if (allowSkip) {

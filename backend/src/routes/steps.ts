@@ -101,6 +101,7 @@ export async function handleListSteps(ctx: Ctx, versionId: string): Promise<Resp
   // Lấy danh sách chức vụ cho từng bước.
   const stepIds = (rows.results ?? []).map((s) => s.id);
   const posMap = new Map<string, { id: string; name: string }[]>();
+  const supMap = new Map<string, { id: string; name: string }[]>();
   if (stepIds.length > 0) {
     const placeholders = stepIds.map(() => "?").join(",");
     const posRows = await db.prepare(
@@ -112,9 +113,22 @@ export async function handleListSteps(ctx: Ctx, versionId: string): Promise<Resp
       if (!posMap.has(r.step_id)) posMap.set(r.step_id, []);
       posMap.get(r.step_id)!.push({ id: r.id, name: r.name });
     }
+    const supRows = await db.prepare(
+      `SELECT pss.step_id, p.id, p.name FROM process_step_supervisors pss
+       JOIN positions p ON p.id = pss.position_id
+       WHERE pss.step_id IN (${placeholders}) ORDER BY p.name ASC`
+    ).bind(...stepIds).all<{ step_id: string; id: string; name: string }>();
+    for (const r of supRows.results ?? []) {
+      if (!supMap.has(r.step_id)) supMap.set(r.step_id, []);
+      supMap.get(r.step_id)!.push({ id: r.id, name: r.name });
+    }
   }
   return ok({
-    items: (rows.results ?? []).map((s) => ({ ...toPublicStep(s), positions: posMap.get(s.id) ?? [] })),
+    items: (rows.results ?? []).map((s) => ({
+      ...toPublicStep(s),
+      positions: posMap.get(s.id) ?? [],
+      supervisors: supMap.get(s.id) ?? [],
+    })),
     total: (rows.results ?? []).length,
   });
 }
@@ -197,6 +211,13 @@ export async function handleCreateStep(ctx: Ctx, versionId: string): Promise<Res
   for (const pid of positionIds) {
     stmts.push(db.prepare(`INSERT INTO process_step_positions (step_id, position_id) VALUES (?, ?)`).bind(id, pid));
   }
+  // Vai trò người kiểm duyệt/giám sát.
+  const supervisorIds = Array.isArray(body?.supervisor_ids)
+    ? (body.supervisor_ids as unknown[]).filter((x): x is string => typeof x === "string" && x.trim() !== "")
+    : [];
+  for (const pid of supervisorIds) {
+    stmts.push(db.prepare(`INSERT INTO process_step_supervisors (step_id, position_id) VALUES (?, ?)`).bind(id, pid));
+  }
   await db.batch(stmts);
   await audit(db, {
     event_type: "PROCESS_STEP_CREATED",
@@ -275,8 +296,7 @@ export async function handlePatchStep(ctx: Ctx, versionId: string, stepId: strin
   }
   // Cập nhật vai trò người thực hiện (mảng nhiều chức vụ).
   let newPositionIds: string[] | null = null;
-  if (body?.position_ids !== undefined || body?.position_id !== undefined) {
-    if (Array.isArray(body?.position_ids)) {
+  if (body?.position_ids !== undefined || body?.position_id !== undefined) {    if (Array.isArray(body?.position_ids)) {
       newPositionIds = (body.position_ids as unknown[]).filter((x): x is string => typeof x === "string" && x.trim() !== "");
     } else if (typeof body?.position_id === "string" && body.position_id.trim()) {
       newPositionIds = [body.position_id.trim()];
@@ -310,7 +330,7 @@ export async function handlePatchStep(ctx: Ctx, versionId: string, stepId: strin
       diff[f] = val ?? null;
     }
   }
-  if (updates.length === 0 && newPositionIds === null) {
+  if (updates.length === 0 && newPositionIds === null && body?.supervisor_ids === undefined) {
     return apiError("VALIDATION_ERROR", "Không có gì để cập nhật.", ctx.requestId);
   }
   const stmts: D1PreparedStatement[] = [];
@@ -325,6 +345,17 @@ export async function handlePatchStep(ctx: Ctx, versionId: string, stepId: strin
       stmts.push(db.prepare(`INSERT INTO process_step_positions (step_id, position_id) VALUES (?, ?)`).bind(stepId, pid));
     }
     diff.position_ids = newPositionIds;
+  }
+  // Cập nhật vai trò kiểm duyệt/giám sát.
+  if (body?.supervisor_ids !== undefined) {
+    const newSupIds = Array.isArray(body.supervisor_ids)
+      ? (body.supervisor_ids as unknown[]).filter((x): x is string => typeof x === "string" && x.trim() !== "")
+      : [];
+    stmts.push(db.prepare(`DELETE FROM process_step_supervisors WHERE step_id = ?`).bind(stepId));
+    for (const pid of newSupIds) {
+      stmts.push(db.prepare(`INSERT INTO process_step_supervisors (step_id, position_id) VALUES (?, ?)`).bind(stepId, pid));
+    }
+    diff.supervisor_ids = newSupIds;
   }
   await db.batch(stmts);
   await audit(db, {
