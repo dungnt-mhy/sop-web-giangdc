@@ -441,13 +441,9 @@ function renderActions(
         openRejectConfirmDialog(dialogRoot, e, async () => { await reload(); });
         return;
       } else if (act === "cancel") {
-        const reason = prompt("Lý do hủy lượt (bắt buộc):");
-        if (!reason?.trim()) {
-          restore();
-          return;
-        }
-        await api.cancelExecution(e.id, reason.trim());
-        toast("Đã hủy lượt.");
+        restore();
+        openCancelDialog(dialogRoot, e, async () => { await reload(); });
+        return;
       }
       await reload();
     } catch (err) {
@@ -609,6 +605,56 @@ function openCompleteConfirm(
   });
 }
 
+/** Dialog hủy lượt công việc — nhập lý do hủy. */
+function openCancelDialog(
+  dialogRoot: HTMLElement,
+  e: import("../api.js").Execution,
+  onDone: () => Promise<void>
+): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Hủy lượt công việc">
+        <h3>🗑️ Hủy lượt "${esc(e.code)}"?</h3>
+        <p>⚠️ Lượt bị hủy sẽ <strong>không thể tiếp tục</strong>. Hãy nhập lý do hủy bên dưới.</p>
+        <form id="cancel-form">
+          <label>Lý do hủy <span class="req">*</span>
+            <textarea class="input" name="reason" maxlength="500" rows="3"
+              placeholder="VD: Nhập sai quy trình, tạo lại lượt mới…"></textarea></label>
+          <p class="form-error" id="cancel-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" class="btn" id="cancel-no">Không hủy</button>
+            <button type="submit" class="btn danger">Xác nhận hủy</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#cancel-no")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+  dialogRoot.querySelector<HTMLFormElement>("#cancel-form")!.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target as HTMLFormElement);
+    const reason = String(fd.get("reason") ?? "").trim();
+    const errEl = dialogRoot.querySelector<HTMLElement>("#cancel-error")!;
+    if (!reason) {
+      errEl.textContent = "Vui lòng nhập lý do hủy.";
+      errEl.hidden = false;
+      return;
+    }
+    try {
+      await api.cancelExecution(e.id, reason);
+      toast("Đã hủy lượt.");
+      close();
+      await onDone();
+    } catch (err) {
+      errEl.textContent = msg(err);
+      errEl.hidden = false;
+    }
+  });
+}
+
 /** Dialog từ chối xác nhận hoàn thành — 2 phương án: hủy lượt hoặc yêu cầu làm lại bước. */
 function openRejectConfirmDialog(
   dialogRoot: HTMLElement,
@@ -622,9 +668,8 @@ function openRejectConfirmDialog(
       <div class="dialog-backdrop" data-close>
         <div class="dialog" role="dialog" aria-modal="true" aria-label="Từ chối xác nhận">
           <h3>❌ Từ chối xác nhận hoàn thành?</h3>
+          <p class="muted">Chọn các bước cần làm lại bên dưới. Các bước được chọn sẽ quay về trạng thái "Chưa bắt đầu" để thực hiện lại.</p>
           <form id="rej-form">
-            <label><input type="radio" name="raction" value="redo" checked /> 🔄 Yêu cầu làm lại bước</label>
-            <label><input type="radio" name="raction" value="cancel" /> 🗑️ Hủy bỏ cả lượt</label>
             <div id="rej-steps" style="margin:10px 0;max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px;">
               ${steps.map((s) => `
                 <label class="check"><input type="checkbox" name="step_ids" value="${esc(s.id)}" />
@@ -646,17 +691,9 @@ function openRejectConfirmDialog(
     dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
       if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
     });
-    // Ẩn/hiện chọn bước theo phương án.
-    const stepsBox = dialogRoot.querySelector<HTMLElement>("#rej-steps")!;
-    dialogRoot.querySelectorAll<HTMLInputElement>('input[name="raction"]').forEach((r) => {
-      r.addEventListener("change", () => {
-        stepsBox.style.display = dialogRoot.querySelector<HTMLInputElement>('input[name="raction"]:checked')!.value === "redo" ? "" : "none";
-      });
-    });
     dialogRoot.querySelector<HTMLFormElement>("#rej-form")!.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const fd = new FormData(ev.target as HTMLFormElement);
-      const action = String(fd.get("raction") ?? "redo") as "cancel" | "redo";
       const reason = String(fd.get("reason") ?? "").trim();
       const errEl = dialogRoot.querySelector<HTMLElement>("#rej-error")!;
       if (!reason) {
@@ -665,14 +702,14 @@ function openRejectConfirmDialog(
         return;
       }
       const stepIds = fd.getAll("step_ids").map(String).filter(Boolean);
-      if (action === "redo" && stepIds.length === 0) {
+      if (stepIds.length === 0) {
         errEl.textContent = "Vui lòng chọn ít nhất 1 bước cần làm lại.";
         errEl.hidden = false;
         return;
       }
       try {
-        await api.rejectConfirmation(e.id, { action, reason, step_ids: stepIds });
-        toast(action === "cancel" ? "Đã hủy lượt." : `Đã yêu cầu làm lại ${stepIds.length} bước.`);
+        await api.rejectConfirmation(e.id, { action: "redo", reason, step_ids: stepIds });
+        toast(`Đã yêu cầu làm lại ${stepIds.length} bước.`);
         close();
         await onDone();
       } catch (err) {
