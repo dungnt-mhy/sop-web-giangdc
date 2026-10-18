@@ -420,7 +420,7 @@ function renderActions(
   const btns: string[] = [];
   if (e.status === "CREATED") {
     btns.push(`<button class="btn primary" data-ea="start">Bắt đầu</button>`);
-    btns.push(`<button class="btn" data-ea="edit">✏️ Sửa</button>`);
+    btns.push(`<button class="btn warn" data-ea="edit">✏️ Sửa</button>`);
     btns.push(`<button class="btn danger" data-ea="cancel">🗑️ Hủy lượt</button>`);
   }
   if (e.status === "IN_PROGRESS") {
