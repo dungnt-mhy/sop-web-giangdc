@@ -287,6 +287,23 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           if (diagramView) diagramView.hidden = !isDiagram;
         });
       });
+      // Bấm node sơ đồ → chuyển về tab danh sách và cuộn tới bước.
+      body.querySelectorAll<HTMLElement>("[data-goto-step]").forEach((node) => {
+        node.addEventListener("click", () => {
+          const sid = node.dataset.gotoStep!;
+          // Chuyển về tab danh sách.
+          toggleBtns.forEach((x) => x.classList.toggle("active", x.dataset.eview === "list"));
+          if (listView) listView.hidden = false;
+          if (diagramView) diagramView.hidden = true;
+          // Cuộn tới bước và highlight.
+          const li = body.querySelector(`li[data-sid="${sid}"]`);
+          if (li) {
+            li.scrollIntoView({ behavior: "smooth", block: "center" });
+            li.classList.add("flash-highlight");
+            setTimeout(() => li.classList.remove("flash-highlight"), 2000);
+          }
+        });
+      });
       // Tải bằng chứng cho từng bước.
       await loadAllEvidence(body, e.id);
       // Tải phân công cho từng bước.
@@ -941,16 +958,26 @@ function renderExecDiagram(steps: import("../api.js").ExecutionStep[]): string {
   };
   return `
     <div class="flow-diagram" role="img" aria-label="Sơ đồ lượt thực hiện ${steps.length} bước">
-      ${steps.map((st, idx) => `
+      ${steps.map((st, idx) => {
+        const sx = st as unknown as Record<string, unknown>;
+        const positions = (sx.positions as { name: string }[] ?? []);
+        const assignees = (sx.assignees as { display_name: string }[] ?? []);
+        const evCount = (sx.evidence_count as number) ?? 0;
+        return `
         ${idx > 0 ? `<div class="flow-arrow" aria-hidden="true">↓</div>` : ""}
-        <div class="flow-node exec ${cls[st.status] ?? ""}">
+        <div class="flow-node exec ${cls[st.status] ?? ""}" data-goto-step="${esc(st.id)}" title="Bấm để xem chi tiết bước">
           <div class="flow-node-head">
             <span class="flow-num">${idx + 1}</span>
             <strong>${esc(st.code)}</strong>
             <span class="pill ${st.status === "PASSED" ? "green" : st.status === "IN_PROGRESS" ? "blue" : "gray"}">${esc(label[st.status] ?? st.status)}</span>
           </div>
           <div class="flow-title">${esc(st.title)}</div>
-        </div>`).join("")}
+          ${positions.length > 0 ? `<div class="flow-meta">👤 ${positions.map((p) => esc(p.name)).join(", ")}</div>` : ""}
+          ${assignees.length > 0 ? `<div class="flow-meta">✅ ${assignees.map((a) => esc(a.display_name)).join(", ")}</div>` : `<div class="flow-meta muted">Chưa phân công</div>`}
+          ${evCount > 0 ? `<div class="flow-meta">📷 ${evCount} bằng chứng</div>` : ""}
+          ${st.completed_at ? `<div class="flow-meta muted small">Xong: ${esc(st.completed_at.slice(0, 16).replace("T", " "))}</div>` : ""}
+        </div>`;
+      }).join("")}
     </div>`;
 }
 

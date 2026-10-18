@@ -350,6 +350,26 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     }
   }
   const progress = await getProgress(db, id);
+  // Lấy người được phân công và số bằng chứng cho từng bước (cho tab sơ đồ).
+  const assigneeMap = new Map<string, { display_name: string }[]>();
+  const evidenceMap = new Map<string, number>();
+  if (execStepIds.length > 0) {
+    const placeholders = execStepIds.map(() => "?").join(",");
+    const asgRows = await db.prepare(
+      `SELECT esa.execution_step_id, u.display_name
+       FROM execution_step_assignees esa JOIN users u ON u.id = esa.user_id
+       WHERE esa.execution_step_id IN (${placeholders})`
+    ).bind(...execStepIds).all<{ execution_step_id: string; display_name: string }>();
+    for (const r of asgRows.results ?? []) {
+      if (!assigneeMap.has(r.execution_step_id)) assigneeMap.set(r.execution_step_id, []);
+      assigneeMap.get(r.execution_step_id)!.push({ display_name: r.display_name });
+    }
+    const evRows = await db.prepare(
+      `SELECT execution_step_id, COUNT(*) as cnt FROM evidence
+       WHERE execution_step_id IN (${placeholders}) GROUP BY execution_step_id`
+    ).bind(...execStepIds).all<{ execution_step_id: string; cnt: number }>();
+    for (const r of evRows.results ?? []) evidenceMap.set(r.execution_step_id, r.cnt);
+  }
   return ok({
     ...toPublicExec(e, pname?.name, progress),
     process_code: pname?.code ?? null,
@@ -357,7 +377,12 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     creator_name: creatorId ? nameById[creatorId] ?? null : null,
     creator_position_name: creatorPositionName,
     supervisor_name: e.supervisor_id ? nameById[e.supervisor_id] ?? null : null,
-    steps: (steps.results ?? []).map((s) => ({ ...toPublicStep(s), positions: execPosMap.get(s.id) ?? [] })),
+    steps: (steps.results ?? []).map((s) => ({
+      ...toPublicStep(s),
+      positions: execPosMap.get(s.id) ?? [],
+      assignees: assigneeMap.get(s.id) ?? [],
+      evidence_count: evidenceMap.get(s.id) ?? 0,
+    })),
   });
 }
 
