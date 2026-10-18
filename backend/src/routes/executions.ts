@@ -419,6 +419,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     name: string;
     code: string;
   }>();
+  const vrow = await db.prepare(`SELECT version_number FROM process_versions WHERE id = ?`).bind(e.version_id).first<{ version_number: number }>();
   const users = await db.prepare(`SELECT id, display_name, position_id FROM users WHERE id IN (?, ?, ?, ?, ?, ?)`).bind(e.assignee_id, e.created_by, e.supervisor_id, (e as unknown as Record<string, unknown>).creator_id, (e as unknown as Record<string, unknown>).approver_id, (e as unknown as Record<string, unknown>).approved_by).all<{ id: string; display_name: string; position_id: string | null }>();
   const nameById: Record<string, string> = {};
   const posById: Record<string, string | null> = {};
@@ -478,6 +479,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   return ok({
     ...toPublicExec(e, pname?.name, progress, redoInfo),
     process_code: pname?.code ?? null,
+    version_number: vrow?.version_number ?? null,
     assignee_name: e.assignee_id ? nameById[e.assignee_id] ?? null : null,
     creator_name: creatorId ? nameById[creatorId] ?? null : null,
     creator_position_name: creatorPositionName,

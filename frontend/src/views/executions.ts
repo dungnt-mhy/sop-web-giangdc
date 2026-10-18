@@ -303,7 +303,7 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       current = e;
       root.querySelector("#ex-code")!.textContent = e.code;
       root.querySelector("#ex-sub")!.textContent =
-        `${e.process_name ?? ""}${e.title ? " — " + e.title : ""}`;
+        `${e.process_name ?? ""}${(e as unknown as Record<string, unknown>).version_number ? ` v${(e as unknown as Record<string, unknown>).version_number}` : ""}${e.title ? " — " + e.title : ""}`;
       renderActions(actionsEl, dialogRoot, e, reload);
       body.innerHTML = detailHtml(e);
       // Tải và hiển thị yêu cầu xin bỏ qua đang chờ.
@@ -1128,7 +1128,7 @@ function detailHtml(e: ExecutionDetail): string {
               </div>`).join("")}
           </div>
         </dd></div>` : ""}
-        <div class="info-row"><dt>Quy trình</dt><dd>${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})</dd></div>
+        <div class="info-row"><dt>Quy trình</dt><dd>${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})${(e as unknown as Record<string, unknown>).version_number ? ` · Phiên bản v${(e as unknown as Record<string, unknown>).version_number}` : ""}</dd></div>
         <div class="info-row"><dt>Ngày thực hiện (dự kiến)</dt><dd>${esc(e.execution_date ?? "—")}${e.execution_time ? ` · ${esc(e.execution_time)}` : ""}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>
         ${e.started_at ? `<div class="info-row"><dt>Bắt đầu lúc</dt><dd>${esc(e.started_at.slice(0, 16).replace("T", " ").split(" ").map((s, i) => i === 0 ? s.split("-").reverse().join("/") : s).join(" "))}</dd></div>` : ""}
         <div class="info-row"><dt>Người tạo</dt><dd>${esc(e.creator_name ?? "—")}${(e as unknown as Record<string, unknown>).creator_position_name ? ` <span class="muted small">— ${esc((e as unknown as Record<string, unknown>).creator_position_name as string)}</span>` : ""}</dd></div>
