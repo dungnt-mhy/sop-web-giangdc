@@ -333,6 +333,14 @@ async function transitionVersion(
   if (!from.includes(v.status)) {
     return apiError("VALIDATION_ERROR", `Không thể chuyển từ trạng thái ${v.status}.`, ctx.requestId);
   }
+  // Không cho duyệt/kích hoạt/phát hành phiên bản không có bước nào.
+  if (to === "ACTIVE" || to === "APPROVED" || to === "SCHEDULED") {
+    const stepCount = await db.prepare(`SELECT COUNT(*) AS c FROM process_steps WHERE version_id = ?`)
+      .bind(versionId).first<{ c: number }>();
+    if (!stepCount || stepCount.c === 0) {
+      return apiError("VALIDATION_ERROR", "Không thể duyệt/kích hoạt: phiên bản chưa có bước nào. Hãy thêm ít nhất 1 bước trước.", ctx.requestId);
+    }
+  }
 
   const now = nowIso();
   const updates: string[] = [`status = ?`, `updated_at = ?`];
