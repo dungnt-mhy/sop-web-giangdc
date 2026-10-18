@@ -165,7 +165,7 @@ async function openProcessDiagram(dialogRoot: HTMLElement, processId: string): P
 /** Vẽ sơ đồ đẹp — gradient, bóng đổ, hiệu ứng. Mỗi bước có nút mở rộng xem đầy đủ chi tiết. */
 function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], processName: string): string {
   const detailRow = (label: string, val: string | null): string =>
-    val ? `<div class="beauty-detail"><span class="beauty-dlabel">${label}:</span> ${esc(val)}</div>` : "";
+    val ? `<div class="step-detail-row"><span class="step-dlabel">${label}:</span> ${esc(val)}</div>` : "";
   return `
     <div class="beauty-diagram" role="img" aria-label="Sơ đồ quy trình ${esc(processName)}">
       <div class="beauty-start"><span>▶</span> Bắt đầu</div>
@@ -187,13 +187,13 @@ function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], proces
               ${detailRow("Điều kiện tiên quyết", st.prerequisite)}
               ${detailRow("Kết quả mong đợi", st.expected_result)}
               ${detailRow("Đầu vào", st.input_desc)}
-              ${detailRow("📖 Hướng dẫn", st.instruction)}
               ${detailRow("Đầu ra / bàn giao", st.output_desc)}
               ${detailRow("Ghi chú", st.note)}
               ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? detailRow("👤 Vai trò thực hiện", ((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => p.name).join(", ")) : ""}
               ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? detailRow("👁️ Vai trò giám sát", ((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => p.name).join(", ")) : ""}
               ${((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) ? detailRow("⏭️ Bỏ qua", "✅ Cho phép bỏ qua bước này") : ""}
               ${detailRow("⚠️ Cảnh báo", st.warning)}
+              ${st.instruction ? `<div class="step-guide"><div class="step-guide-title">📖 Hướng dẫn thực hiện</div><div class="step-guide-body">${esc(st.instruction)}</div></div>` : ""}
             </div>` : ""}
           </div>
         </div>`;
