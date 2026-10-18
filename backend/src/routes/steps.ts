@@ -132,22 +132,9 @@ export async function handleCreateStep(ctx: Ctx, versionId: string): Promise<Res
   }
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
-  const code = String(body?.code ?? "").trim().toUpperCase();
   const title = String(body?.title ?? "").trim();
-  if (!code || code.length > 32) {
-    return apiError("VALIDATION_ERROR", "Mã bước không được trống và tối đa 32 ký tự.", ctx.requestId);
-  }
   if (!title || title.length > 200) {
     return apiError("VALIDATION_ERROR", "Tiêu đề bước không được trống và tối đa 200 ký tự.", ctx.requestId);
-  }
-  const dup = await db
-    .prepare(`SELECT id FROM process_steps WHERE version_id = ? AND code = ?`)
-    .bind(versionId, code)
-    .first();
-  if (dup) {
-    return apiError("VALIDATION_ERROR", "Mã bước đã tồn tại trong phiên bản này.", ctx.requestId, {
-      field: "code",
-    });
   }
 
   const str = (k: string) => {
@@ -166,6 +153,8 @@ export async function handleCreateStep(ctx: Ctx, versionId: string): Promise<Res
   const now = nowIso();
   const id = newId();
   const order = nextSortOrderFn(await nextSortOrder(db, versionId), body);
+  // Tự sinh mã bước: B01, B02... theo thứ tự.
+  const code = `B${String(order).padStart(2, "0")}`;
   // Vai trò người thực hiện: mảng nhiều chức vụ.
   const positionIds = Array.isArray(body?.position_ids)
     ? (body.position_ids as unknown[]).filter((x): x is string => typeof x === "string" && x.trim() !== "")
