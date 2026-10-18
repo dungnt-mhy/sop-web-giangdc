@@ -338,7 +338,7 @@ async function transitionVersion(
     const stepCount = await db.prepare(`SELECT COUNT(*) AS c FROM process_steps WHERE version_id = ?`)
       .bind(versionId).first<{ c: number }>();
     if (!stepCount || stepCount.c === 0) {
-      return apiError("VALIDATION_ERROR", "Không thể gửi duyệt: phiên bản chưa có bước nào. Hãy thêm ít nhất 1 bước trước.", ctx.requestId);
+      return apiError("VALIDATION_ERROR", "Phiên bản chưa có bước nào. Hãy thêm ít nhất 1 bước trước khi gửi duyệt.", ctx.requestId);
     }
   }
 

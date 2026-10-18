@@ -440,7 +440,13 @@ export async function renderProcessDetail(
       toast(`Đã ${names[act]} phiên bản ${label}.`);
       await reload();
     } catch (e) {
-      toast(`Lỗi: ${msg(e)}`);
+      const message = msg(e);
+      // Thông báo thân thiện (không chữ "Lỗi") cho trường hợp phiên bản chưa có bước.
+      if (message.includes("chưa có bước nào")) {
+        toast(`⚠️ ${message}`);
+      } else {
+        toast(`Lỗi: ${message}`);
+      }
       restore();
     }
   });
