@@ -637,3 +637,13 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   .dialog-actions { flex-direction: column-reverse; gap: 8px; }
   .dialog-actions .btn { width: 100%; padding: 12px; font-size: 15px; }
 }
+
+/* Đảm bảo mọi ô nhập trong form đều block, full-width (kể cả input không có type). */
+.dialog label .input,
+.dialog label input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.dialog label textarea,
+.dialog label select {
+  display: block; width: 100%; margin-top: 6px; box-sizing: border-box;
+}
+.dialog label { display: block; }
+.dialog label .hint { display: block; margin-top: 4px; }
