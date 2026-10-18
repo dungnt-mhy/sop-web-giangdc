@@ -2,15 +2,41 @@ import type { Ctx } from "./context";
 import { ok, apiError } from "../errors.js";
 import { newId, nowIso } from "../db.js";
 
+const FROM_EMAIL = "Dungnt.connect@gmail.com";
+const FROM_NAME = "SOP Demo";
+
 export interface CreateNotificationInput {
   user_id: string;
   type: string;
   title: string;
   message?: string;
   link?: string;
+  /** Gửi email kèm theo (mặc định true nếu user có email). */
+  sendEmail?: boolean;
 }
 
-/** Tạo thông báo trong app cho một user. */
+/** Gửi email qua MailChannels (miễn phí trên Cloudflare Workers). */
+async function sendEmail(to: string, subject: string, htmlBody: string): Promise<void> {
+  try {
+    const resp = await fetch("https://api.mailchannels.net/tx/v1/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: FROM_EMAIL, name: FROM_NAME },
+        subject,
+        content: [{ type: "text/html", value: htmlBody }],
+      }),
+    });
+    if (!resp.ok) {
+      console.error("[email] send failed:", resp.status, await resp.text().catch(() => ""));
+    }
+  } catch (err) {
+    console.error("[email] send error:", err instanceof Error ? err.message : String(err));
+  }
+}
+
+/** Tạo thông báo trong app cho một user (kèm gửi email nếu có). */
 export async function createNotification(
   db: D1Database,
   input: CreateNotificationInput
@@ -28,10 +54,26 @@ export async function createNotification(
       input.link ?? null,
       nowIso()
     ).run();
+    // Gửi email nếu user có email (trừ khi tắt explicitly).
+    if (input.sendEmail !== false) {
+      const u = await db.prepare(`SELECT email FROM users WHERE id = ?`).bind(input.user_id).first<{ email: string | null }>();
+      if (u?.email) {
+        const linkHtml = input.link ? `<p><a href="https://sop-api.dungnt-storage.workers.dev/${input.link}">Xem chi tiết</a></p>` : "";
+        await sendEmail(
+          u.email,
+          `[SOP] ${input.title}`,
+          `<h3>${escapeHtml(input.title)}</h3>${input.message ? `<p>${escapeHtml(input.message)}</p>` : ""}${linkHtml}<p style="color:#888;font-size:12px;">Email tự động từ hệ thống SOP Demo.</p>`
+        );
+      }
+    }
   } catch (err) {
     // Không làm hỏng luồng chính nếu tạo thông báo lỗi.
     console.error("[notification] create failed:", err instanceof Error ? err.message : String(err));
   }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /** Tạo thông báo cho nhiều user. */
