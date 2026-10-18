@@ -383,10 +383,11 @@ export const api = {
     return req("POST", `/users/${encodeURIComponent(id)}:reset-password`, { password });
   },
   // --- Quy trình (Task 1.4) ---
-  listProcesses(params?: { q?: string; group?: string }): Promise<{ items: SopProcess[]; total: number }> {
+  listProcesses(params?: { q?: string; group?: string; status?: string }): Promise<{ items: SopProcess[]; total: number }> {
     const qs = new URLSearchParams();
     if (params?.q) qs.set("q", params.q);
     if (params?.group) qs.set("group", params.group);
+    if (params?.status) qs.set("status", params.status);
     const suffix = qs.toString() ? "?" + qs.toString() : "";
     return req("GET", "/processes" + suffix);
   },

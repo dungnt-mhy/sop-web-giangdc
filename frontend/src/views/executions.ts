@@ -219,7 +219,7 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
   const pad = (n: number) => String(n).padStart(2, "0");
   dateInput.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   timeInput.value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  api.listProcesses().then(({ items }) => {
+  api.listProcesses({ status: "ACTIVE" }).then(({ items }) => {
     const available = items.filter((p) => p.active_version);
     if (available.length === 0) {
       sel.innerHTML = `<option value="">Chưa có quy trình nào hiệu lực</option>`;
