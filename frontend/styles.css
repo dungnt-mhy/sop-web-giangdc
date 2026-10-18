@@ -413,7 +413,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .beauty-expand:hover { background: #f1f5f9; }
 .beauty-details {
   margin-top: 8px; padding: 10px 12px; background: #f8fafc; border-radius: 10px;
-  border: 1px dashed #cbd5e1; font-size: 13px; line-height: 1.5;
+  border: 1px dashed #cbd5e1; font-size: 13px; line-height: 1.5; text-align: left;
 }
 .beauty-detail { margin: 4px 0; color: #334155; }
 .beauty-dlabel { font-weight: 700; color: #475569; }

@@ -1170,6 +1170,7 @@ function detailHtml(e: ExecutionDetail): string {
               <div class="step-title">
                 <strong>${esc(st.code)}</strong> — ${esc(st.title)}
                 ${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}
+                ${skipAllowed ? ' <span class="pill blue">⏭️ Được bỏ qua</span>' : ""}
                 <span class="pill ${st.status === "PASSED" ? "green" : st.status === "SKIPPED" ? "gray" : st.status === "IN_PROGRESS" ? "blue" : "gray"}">${esc(STEP_STATUS_LABELS[st.status] ?? st.status)}</span>
                 ${minPhotos > 0 ? ` <span class="pill orange" title="Yêu cầu ít nhất ${minPhotos} ảnh">📷 ${minPhotos} ảnh</span>` : ""}
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? ` <span class="pill amber" title="Lý do: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")}&#10;Lúc: ${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")}">🔄 Làm lại ${esc(String((st as unknown as Record<string, unknown>).redo_count))} lần</span>` : ""}
@@ -1200,8 +1201,8 @@ function detailHtml(e: ExecutionDetail): string {
                 ${(st as unknown as Record<string, unknown>).target_duration_min ? `<div><dt>Thời gian mục tiêu</dt><dd>${esc(String((st as unknown as Record<string, unknown>).target_duration_min))} phút</dd></div>` : ""}
                 ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div><dt>Vai trò người thực hiện</dt><dd>${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</dd></div>` : ""}
                 ${st.is_required ? "" : `<div><dt>Bắt buộc</dt><dd>Không (bước tùy chọn, được phép bỏ qua)</dd></div>`}
-                ${(st as unknown as Record<string, unknown>).skip_policy ? `<div><dt>Chính sách bỏ qua</dt><dd>${esc((st as unknown as Record<string, unknown>).skip_policy as string)}</dd></div>` : ""}
-                ${(st as unknown as Record<string, unknown>).failure_policy ? `<div><dt>Xử lý khi lỗi</dt><dd>${esc((st as unknown as Record<string, unknown>).failure_policy as string)}</dd></div>` : ""}
+                ${((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed ? `<div><dt>⏭️ Bỏ qua</dt><dd>✅ Cho phép bỏ qua bước này (người giám sát duyệt)</dd></div>` : ""}
+                ${(st as unknown as Record<string, unknown>).failure_policy ? `<div><dt>Xử lý khi lỗi</dt><dd>${esc(typeof (st as unknown as Record<string, unknown>).failure_policy === "string" ? (st as unknown as Record<string, unknown>).failure_policy as string : JSON.stringify((st as unknown as Record<string, unknown>).failure_policy))}</dd></div>` : ""}
                 ${(st as unknown as Record<string, unknown>).warning ? `<div class="warning"><dt>⚠️ Cảnh báo</dt><dd>${esc((st as unknown as Record<string, unknown>).warning as string)}</dd></div>` : ""}
               </dl>
             </details>` : ""}
