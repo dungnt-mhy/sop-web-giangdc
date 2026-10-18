@@ -1090,7 +1090,7 @@ export async function handleSkipStep(ctx: Ctx, execId: string, stepId: string): 
     return apiError("VALIDATION_ERROR", "Bước đã kết thúc.", ctx.requestId);
   }
   // Kiểm tra quyền bỏ qua: bước không bắt buộc HOẶC có skip_policy cho phép.
-  const skipPolicy = step.skip_policy ? JSON.parse(step.skip_policy) as { allowed?: boolean; allowed_positions?: string[]; approver_ids?: string[] } : null;
+  const skipPolicy = step.skip_policy ? JSON.parse(step.skip_policy) as { allowed?: boolean; allowed_positions?: string[] } : null;
   const canSkipByPolicy = skipPolicy?.allowed === true;
   if (step.is_required === 1 && !canSkipByPolicy) {
     return apiError("VALIDATION_ERROR", "Không được bỏ qua bước bắt buộc.", ctx.requestId);
@@ -1100,13 +1100,6 @@ export async function handleSkipStep(ctx: Ctx, execId: string, stepId: string): 
     const mePos = await db.prepare(`SELECT position_id FROM users WHERE id = ?`).bind(me.user.id).first<{ position_id: string | null }>();
     if (!mePos?.position_id || !skipPolicy.allowed_positions.includes(mePos.position_id)) {
       return apiError("FORBIDDEN", "Chức vụ của bạn không được phép bỏ qua bước này.", ctx.requestId);
-    }
-  }
-  // Nếu chỉ định người duyệt bỏ qua → chỉ họ hoặc admin mới được duyệt.
-  if (canSkipByPolicy && skipPolicy?.approver_ids && skipPolicy.approver_ids.length > 0) {
-    const isAdmin = me.permissions.includes("*") || me.permissions.includes("executions.manage");
-    if (!skipPolicy.approver_ids.includes(me.user.id) && !isAdmin) {
-      return apiError("FORBIDDEN", "Chỉ người được chỉ định mới được duyệt bỏ qua bước này.", ctx.requestId);
     }
   }
   // AC-04 cũng áp dụng cho skip: bước trước phải xong.

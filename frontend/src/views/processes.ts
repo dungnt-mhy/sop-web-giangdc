@@ -898,10 +898,6 @@ function openStepDialog(
           <select class="input" name="skip_positions" id="step-skip-positions" multiple size="4">
           </select>
           <span class="hint">Chạm để chọn/bỏ chọn từng vai trò (giữ Ctrl trên máy tính để chọn nhiều). Để trống = ai cũng được bỏ qua.</span></label>
-        <label>Người duyệt bỏ qua
-          <select class="input" name="skip_approvers" id="step-skip-approvers" multiple size="4">
-          </select>
-          <span class="hint">Chọn người được duyệt việc bỏ qua bước này. Để trống = giám sát/quản lý duyệt.</span></label>
         <label>Cảnh báo <input class="input" name="warning" maxlength="500" value="${val(step?.warning)}"
           placeholder="VD: Cẩn thận hàng dễ vỡ" /></label>
         <p class="form-error" id="step-error" role="alert" hidden></p>
@@ -926,10 +922,8 @@ function openStepDialog(
   const existingPosIds = new Set(((step as unknown as Record<string, unknown>)?.positions as { id: string }[] ?? []).map((p) => p.id));
   const existingSupIds = new Set(((step as unknown as Record<string, unknown>)?.supervisors as { id: string }[] ?? []).map((p) => p.id));
   const skipSel = dialogRoot.querySelector<HTMLSelectElement>("#step-skip-positions")!;
-  const skipAprSel = dialogRoot.querySelector<HTMLSelectElement>("#step-skip-approvers")!;
-  const existingSkip = (step?.skip_policy as unknown as { allowed?: boolean; allowed_positions?: string[]; approver_ids?: string[] } | null);
+  const existingSkip = (step?.skip_policy as unknown as { allowed?: boolean; allowed_positions?: string[] } | null);
   const existingSkipPosIds = new Set(existingSkip?.allowed_positions ?? []);
-  const existingSkipAprIds = new Set(existingSkip?.approver_ids ?? []);
   api.listPositions().then(({ items }) => {
     posGrid.innerHTML = items.map((p) => `
       <label class="check"><input type="checkbox" name="position_ids" value="${esc(p.id)}"
@@ -940,10 +934,6 @@ function openStepDialog(
     skipSel.innerHTML = items.map((p) => `
       <option value="${esc(p.id)}" ${existingSkipPosIds.has(p.id) ? "selected" : ""}>${esc(p.name)}</option>`).join("");
   }).catch(() => { posGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; supGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; });
-  api.listActiveUsers().then(({ items }) => {
-    skipAprSel.innerHTML = (items ?? []).map((u) => `
-      <option value="${esc(u.id)}" ${existingSkipAprIds.has(u.id) ? "selected" : ""}>${esc(u.display_name)} (${esc(u.username)})</option>`).join("");
-  }).catch(() => { /* ignore */ });
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     errEl.hidden = true;
@@ -965,8 +955,7 @@ function openStepDialog(
     const allowSkip = fd.get("allow_skip") === "on";
     if (allowSkip) {
       const skipPosIds = Array.from(form.querySelectorAll<HTMLOptionElement>("#step-skip-positions option:checked")).map((o) => o.value);
-      const skipAprIds = Array.from(form.querySelectorAll<HTMLOptionElement>("#step-skip-approvers option:checked")).map((o) => o.value);
-      input.skip_policy = JSON.stringify({ allowed: true, allowed_positions: skipPosIds, approver_ids: skipAprIds });
+      input.skip_policy = JSON.stringify({ allowed: true, allowed_positions: skipPosIds });
     } else {
       input.skip_policy = null;
     }
