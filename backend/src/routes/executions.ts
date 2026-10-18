@@ -279,13 +279,18 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
 
   const now = nowIso();
   const execId = newId();
-  // Tạo mã lượt duy nhất: EXE-YYYYMMDD-XXX
+  // Tạo mã lượt duy nhất: EXE-YYYYMMDD-XXX (dùng MAX để tránh trùng khi có xóa).
   const datePart = now.slice(0, 10).replace(/-/g, "");
-  const countR = await db
-    .prepare(`SELECT COUNT(*) AS c FROM executions WHERE code LIKE ?`)
+  const maxR = await db
+    .prepare(`SELECT code FROM executions WHERE code LIKE ? ORDER BY code DESC LIMIT 1`)
     .bind(`EXE-${datePart}-%`)
-    .first<{ c: number }>();
-  const seq = String((countR?.c ?? 0) + 1).padStart(3, "0");
+    .first<{ code: string }>();
+  let seqNum = 1;
+  if (maxR?.code) {
+    const m = /-(\d+)$/.exec(maxR.code);
+    if (m) seqNum = parseInt(m[1], 10) + 1;
+  }
+  const seq = String(seqNum).padStart(3, "0");
   const code = `EXE-${datePart}-${seq}`;
 
   const title = typeof body?.title === "string" ? body.title.trim() || null : null;
