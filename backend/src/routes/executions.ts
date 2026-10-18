@@ -650,8 +650,9 @@ export async function handleRejectConfirmation(ctx: Ctx, id: string): Promise<Re
       // Lượt quay về IN_PROGRESS để làm lại.
       await db.prepare(`UPDATE executions SET status = 'IN_PROGRESS', updated_at = ? WHERE id = ?`).bind(now, id).run();
     } catch (err) {
-      console.error("[reject-confirmation] redo failed:", err instanceof Error ? err.message : String(err));
-      return apiError("VALIDATION_ERROR", "Yêu cầu không hợp lệ.", ctx.requestId);
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error("[reject-confirmation] redo failed:", detail);
+      return apiError("VALIDATION_ERROR", `Lỗi làm lại: ${detail}`, ctx.requestId);
     }
     await audit(db, {
       event_type: "EXECUTION_CONFIRM_REJECTED_REDO",
