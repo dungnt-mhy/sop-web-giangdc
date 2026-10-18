@@ -13,12 +13,18 @@ export async function handleListAudit(ctx: Ctx): Promise<Response> {
   const eventType = (url.searchParams.get("event_type") ?? "").trim();
   const objectType = (url.searchParams.get("object_type") ?? "").trim();
   const q = (url.searchParams.get("q") ?? "").trim();
+  const fromDate = (url.searchParams.get("from_date") ?? "").trim();
+  const toDate = (url.searchParams.get("to_date") ?? "").trim();
+  const actorId = (url.searchParams.get("actor_id") ?? "").trim();
 
   const conds: string[] = [];
   const binds: unknown[] = [];
   if (eventType) { conds.push("a.event_type = ?"); binds.push(eventType); }
   if (objectType) { conds.push("a.object_type = ?"); binds.push(objectType); }
   if (q) { conds.push("(a.event_type LIKE ? OR u.display_name LIKE ?)"); binds.push(`%${q}%`, `%${q}%`); }
+  if (fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)) { conds.push("date(a.occurred_at) >= ?"); binds.push(fromDate); }
+  if (toDate && /^\d{4}-\d{2}-\d{2}$/.test(toDate)) { conds.push("date(a.occurred_at) <= ?"); binds.push(toDate); }
+  if (actorId) { conds.push("a.actor_id = ?"); binds.push(actorId); }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 
   const rows = await db.prepare(

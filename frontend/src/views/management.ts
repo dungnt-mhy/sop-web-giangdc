@@ -688,8 +688,11 @@ export async function renderAudit(root: HTMLElement): Promise<void> {
       <p class="page-sub">Lịch sử mọi thao tác trong hệ thống (ai làm gì, lúc nào).</p></div>
     </div>
     <div class="filter-bar">
-      <input class="input" id="audit-q" placeholder="Tìm theo loại sự kiện hoặc người thực hiện…" style="max-width:280px;" />
-      <select class="input" id="audit-type" style="max-width:220px;"><option value="">— Tất cả loại —</option></select>
+      <input class="input" id="audit-q" placeholder="Tìm theo loại sự kiện…" style="max-width:200px;" />
+      <select class="input" id="audit-type" style="max-width:200px;"><option value="">— Tất cả loại —</option></select>
+      <select class="input" id="audit-actor" style="max-width:180px;"><option value="">— Mọi người —</option></select>
+      <input class="input" type="date" id="audit-from" style="max-width:150px;" title="Từ ngày" />
+      <input class="input" type="date" id="audit-to" style="max-width:150px;" title="Đến ngày" />
       <button class="btn primary" id="audit-filter">Lọc</button>
     </div>
     <div id="audit-list"><p class="empty">Đang tải…</p></div>`;
@@ -697,6 +700,16 @@ export async function renderAudit(root: HTMLElement): Promise<void> {
   const listEl = root.querySelector<HTMLElement>("#audit-list")!;
   const qEl = root.querySelector<HTMLInputElement>("#audit-q")!;
   const typeEl = root.querySelector<HTMLSelectElement>("#audit-type")!;
+  const actorEl = root.querySelector<HTMLSelectElement>("#audit-actor")!;
+  const fromEl = root.querySelector<HTMLInputElement>("#audit-from")!;
+  const toEl = root.querySelector<HTMLInputElement>("#audit-to")!;
+
+  // Tải danh sách người dùng cho bộ lọc.
+  try {
+    const { items } = await api.listUsers();
+    actorEl.innerHTML = `<option value="">— Mọi người —</option>` +
+      items.map((u) => `<option value="${esc(u.id)}">${esc(u.display_name || u.username)}</option>`).join("");
+  } catch { /* ignore */ }
 
   try {
     const { items } = await api.listAuditEventTypes();
@@ -708,6 +721,9 @@ export async function renderAudit(root: HTMLElement): Promise<void> {
     const params = new URLSearchParams();
     if (qEl.value.trim()) params.set("q", qEl.value.trim());
     if (typeEl.value) params.set("event_type", typeEl.value);
+    if (actorEl.value) params.set("actor_id", actorEl.value);
+    if (fromEl.value) params.set("from_date", fromEl.value);
+    if (toEl.value) params.set("to_date", toEl.value);
     params.set("limit", "50");
     try {
       const { items, total } = await api.listAudit(params.toString());
