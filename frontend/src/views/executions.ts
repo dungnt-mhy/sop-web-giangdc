@@ -423,20 +423,18 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         });
         return;
       } else if (act === "skip") {
-        const reason = prompt(`Lý do bỏ qua bước "${step?.code}":`);
-        if (!reason?.trim()) {
-          restore();
-          return;
-        }
-        await api.skipStep(execId, sid, reason.trim());
+        restore();
+        const reason = await openReasonDialog(dialogRoot, `Lý do bỏ qua bước "${step?.code}"`, "VD: Khách không có nhu cầu, thiết bị hỏng...");
+        if (!reason) return;
+        setLoading(btn, true, "Đang xử lý…");
+        await api.skipStep(execId, sid, reason);
         toast("Đã bỏ qua bước.");
       } else if (act === "request-skip") {
-        const reason = prompt(`Lý do xin bỏ qua bước "${step?.code}":`);
-        if (!reason?.trim()) {
-          restore();
-          return;
-        }
-        await api.requestSkip(execId, sid, reason.trim());
+        restore();
+        const reason = await openReasonDialog(dialogRoot, `Lý do xin bỏ qua bước "${step?.code}"`, "VD: Hết nguyên liệu, chờ xác nhận từ khách...");
+        if (!reason) return;
+        setLoading(btn, true, "Đang gửi…");
+        await api.requestSkip(execId, sid, reason);
         toast("Đã gửi yêu cầu xin bỏ qua. Chờ giám sát duyệt.");
       } else if (act === "assign") {
         restore();
@@ -1036,6 +1034,40 @@ async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void
       el.innerHTML = ``;
     }
   }
+}
+
+/** Dialog nhập lý do (thay cho prompt trình duyệt). Trả về lý do đã trim, hoặc null nếu hủy. */
+function openReasonDialog(dialogRoot: HTMLElement, title: string, placeholder: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    dialogRoot.innerHTML = `
+      <div class="dialog-backdrop">
+        <div class="dialog" role="dialog" aria-modal="true">
+          <h3>${esc(title)}</h3>
+          <label class="field">
+            <span>Lý do <span class="req">*</span></span>
+            <textarea id="reason-text" rows="3" placeholder="${esc(placeholder)}" style="width:100%;resize:vertical;"></textarea>
+          </label>
+          <p class="err" id="reason-err" hidden>Vui lòng nhập lý do.</p>
+          <div class="dialog-actions">
+            <button class="btn" id="reason-cancel">Hủy</button>
+            <button class="btn primary" id="reason-ok">Xác nhận</button>
+          </div>
+        </div>
+      </div>`;
+    const close = (v: string | null) => { dialogRoot.innerHTML = ""; resolve(v); };
+    const ta = dialogRoot.querySelector<HTMLTextAreaElement>("#reason-text")!;
+    const err = dialogRoot.querySelector<HTMLElement>("#reason-err")!;
+    dialogRoot.querySelector("#reason-cancel")!.addEventListener("click", () => close(null));
+    dialogRoot.querySelector(".dialog-backdrop")!.addEventListener("click", (ev) => {
+      if ((ev.target as HTMLElement).classList.contains("dialog-backdrop")) close(null);
+    });
+    dialogRoot.querySelector("#reason-ok")!.addEventListener("click", () => {
+      const v = ta.value.trim();
+      if (!v) { err.hidden = false; ta.focus(); return; }
+      close(v);
+    });
+    setTimeout(() => ta.focus(), 50);
+  });
 }
 
 /** Dialog phân công nhiều người cho bước. */

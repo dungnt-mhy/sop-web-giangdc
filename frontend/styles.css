@@ -567,6 +567,9 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .pill.orange { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
 @media (max-width: 640px) {
   .evidence-section { margin-left: 0; }
+  .step-head { flex-wrap: wrap; }
+  .step-actions { flex-wrap: wrap; width: 100%; margin-top: 8px; }
+  .step-actions .btn { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
 }
 
 /* Dashboard (Task 1.8: §9.6). */
