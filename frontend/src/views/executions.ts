@@ -1024,9 +1024,9 @@ async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void
     try {
       const { items } = await api.listStepAssignees(execId, sid);
       if (items.length === 0) {
-        el.innerHTML = `<span class="muted small">Chưa phân công</span>`;
+        el.innerHTML = `<span class="small" style="color:#2563eb;">Người thực hiện: chưa phân công</span>`;
       } else {
-        el.innerHTML = `<span class="muted small">👥 ` + items.map((u) =>
+        el.innerHTML = `<span class="small" style="color:#2563eb;">Người thực hiện: ` + items.map((u) =>
           esc(u.display_name) + (u.position ? ` (${esc(u.position)})` : "")
         ).join(", ") + `</span>`;
       }
