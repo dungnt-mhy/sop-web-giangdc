@@ -118,7 +118,15 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
       const u = await db.prepare(`SELECT display_name FROM users WHERE id = ?`).bind(p.created_by).first<{ display_name: string }>();
       creatorName = u?.display_name ?? null;
     }
-    items.push({ ...toPublicProcess(p, av), creator_name: creatorName });
+    // Đơn vị áp dụng.
+    const ouRows = await db.prepare(
+      `SELECT ou.id, ou.name FROM process_org_units pou JOIN org_units ou ON ou.id = pou.org_unit_id WHERE pou.process_id = ? ORDER BY ou.name ASC`
+    ).bind(p.id).all<{ id: string; name: string }>();
+    items.push({
+      ...toPublicProcess(p, av),
+      creator_name: creatorName,
+      org_units: ouRows.results ?? [],
+    });
   }
   return ok({ items, total: items.length });
 }
@@ -148,7 +156,7 @@ export async function handleCreateProcess(ctx: Ctx): Promise<Response> {
   const processId = newId();
   const versionId = newId();
   const str = (v: unknown) => (typeof v === "string" ? v.trim() || null : null);
-  await db.batch([
+  const batchStmts = [
     db.prepare(
       `INSERT INTO processes (id, code, name, purpose, scope, applicable_objects, start_condition, end_condition, owner_id, applying_unit, review_trigger, group_name, created_at, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -164,7 +172,17 @@ export async function handleCreateProcess(ctx: Ctx): Promise<Response> {
       `INSERT INTO process_versions (id, process_id, version_number, status, created_at, created_by)
        VALUES (?, ?, 1, 'DRAFT', ?, ?)`
     ).bind(versionId, processId, now, me.user.id),
-  ]);
+  ];
+  // Đơn vị áp dụng (chọn nhiều).
+  const orgUnitIds = Array.isArray(body?.org_unit_ids)
+    ? (body.org_unit_ids as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
+    : [];
+  for (const ouId of orgUnitIds) {
+    batchStmts.push(
+      db.prepare(`INSERT INTO process_org_units (process_id, org_unit_id) VALUES (?, ?)`).bind(processId, ouId)
+    );
+  }
+  await db.batch(batchStmts);
   await audit(db, {
     event_type: "PROCESS_CREATED",
     actor_id: me.user.id,

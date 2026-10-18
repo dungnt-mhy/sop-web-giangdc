@@ -234,6 +234,10 @@ function openProcessDialog(dialogRoot: HTMLElement, onDone: () => void): void {
           <span class="hint">Áp dụng cho đối tượng, địa điểm, thời gian nào?</span></label>
         <label>Đơn vị áp dụng <input class="input" name="applying_unit" maxlength="200" placeholder="VD: Kho chính, Chi nhánh Hà Nội" />
           <span class="hint">Bộ phận, kho, chi nhánh nào thực hiện quy trình này?</span></label>
+        <fieldset class="org-unit-picker">
+          <legend>Đơn vị áp dụng (chọn nhiều)</legend>
+          <div id="proc-org-units"><p class="empty">Đang tải…</p></div>
+        </fieldset>
         <p class="form-error" id="proc-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button type="button" class="btn" id="proc-cancel">Huỷ</button>
@@ -251,6 +255,19 @@ function openProcessDialog(dialogRoot: HTMLElement, onDone: () => void): void {
   const form = dialogRoot.querySelector<HTMLFormElement>("#proc-form")!;
   const errEl = dialogRoot.querySelector<HTMLElement>("#proc-error")!;
   const submitBtn = dialogRoot.querySelector<HTMLButtonElement>("#proc-submit")!;
+
+  // Tải danh sách đơn vị cho checkbox chọn nhiều.
+  const ouBox = dialogRoot.querySelector<HTMLElement>("#proc-org-units")!;
+  api.listOrgUnits().then(({ items }) => {
+    if (items.length === 0) {
+      ouBox.innerHTML = `<p class="empty">Chưa có đơn vị nào. <a href="#/org-units">Thêm đơn vị</a></p>`;
+      return;
+    }
+    ouBox.innerHTML = items.map((u) => `
+      <label class="check"><input type="checkbox" name="org_unit_ids" value="${esc(u.id)}" />
+        ${esc(u.name)} <span class="muted small">(${esc(u.type_label)})</span></label>`).join("");
+  }).catch(() => { ouBox.innerHTML = `<p class="empty">Không tải được danh sách đơn vị.</p>`; });
+
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     errEl.hidden = true;
@@ -260,6 +277,8 @@ function openProcessDialog(dialogRoot: HTMLElement, onDone: () => void): void {
       const s = String(fd.get(k) ?? "").trim();
       if (s) input[k] = s;
     }
+    // Đơn vị áp dụng (chọn nhiều).
+    input.org_unit_ids = fd.getAll("org_unit_ids").map(String).filter(Boolean);
     setLoading(submitBtn, true, "Đang tạo…");
     try {
       await api.createProcess(input);

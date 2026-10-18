@@ -78,6 +78,12 @@ import {
   handleUpdatePosition,
 } from "./routes/positions";
 import {
+  handleCreateOrgUnit,
+  handleDeleteOrgUnit,
+  handleListOrgUnits,
+  handleUpdateOrgUnit,
+} from "./routes/org_units";
+import {
   PERMISSION_CATALOG,
   handleCreateRole,
   handleDeleteRole,
@@ -226,6 +232,16 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     const pid = decodeURIComponent(posM[1]);
     if (method === "PATCH") return handleUpdatePosition(ctx, pid);
     if (method === "DELETE") return handleDeletePosition(ctx, pid);
+  }
+
+  // --- Org units (đơn vị tổ chức) ---
+  if (path === "/org-units" && method === "GET") return handleListOrgUnits(ctx);
+  if (path === "/org-units" && method === "POST") return handleCreateOrgUnit(ctx);
+  const ouM = /^\/org-units\/([^/:]+)$/.exec(path);
+  if (ouM && UUID_RE.test(ouM[1])) {
+    const oid = decodeURIComponent(ouM[1]);
+    if (method === "PATCH") return handleUpdateOrgUnit(ctx, oid);
+    if (method === "DELETE") return handleDeleteOrgUnit(ctx, oid);
   }
 
   // --- Users (quyền users.manage) ---

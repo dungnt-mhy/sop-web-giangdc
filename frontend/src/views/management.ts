@@ -237,6 +237,134 @@ function openPositionDialog(dialogRoot: HTMLElement, existing: { id: string; nam
   });
 }
 
+/** Trang quản lý đơn vị tổ chức (#/org-units). */
+export async function renderOrgUnits(root: HTMLElement): Promise<void> {
+  const TYPE_OPTIONS = [
+    { value: "REGION", label: "Khu vực" },
+    { value: "BRANCH", label: "Chi nhánh" },
+    { value: "STORE", label: "Cửa hàng" },
+    { value: "WAREHOUSE", label: "Kho" },
+  ];
+  root.innerHTML = `
+    <div class="page-head">
+      <div><h2>Đơn vị tổ chức</h2>
+      <p class="page-sub">Quản lý khu vực, chi nhánh, cửa hàng, kho — dùng cho đơn vị áp dụng quy trình.</p></div>
+      <button class="btn primary" id="ou-add">+ Thêm đơn vị</button>
+    </div>
+    <div id="ou-list"><p class="empty">Đang tải…</p></div>
+    <div id="ou-dialog-root"></div>`;
+
+  const listEl = root.querySelector<HTMLElement>("#ou-list")!;
+  const dialogRoot = root.querySelector<HTMLElement>("#ou-dialog-root")!;
+
+  async function reload(): Promise<void> {
+    try {
+      const { items } = await api.listOrgUnits();
+      if (items.length === 0) {
+        listEl.innerHTML = `<p class="empty">Chưa có đơn vị nào.</p>`;
+        return;
+      }
+      listEl.innerHTML = `<div class="table-wrap"><table class="tbl">
+        <thead><tr><th>Tên đơn vị</th><th>Loại</th><th>Trực thuộc</th><th>Mô tả</th><th style="width:120px"></th></tr></thead>
+        <tbody>${items.map((u) => `
+          <tr data-id="${esc(u.id)}">
+            <td><strong>${esc(u.name)}</strong></td>
+            <td><span class="pill blue">${esc(u.type_label)}</span></td>
+            <td class="muted">${u.parent_name ? esc(u.parent_name) : "—"}</td>
+            <td class="muted">${esc(u.description ?? "—")}</td>
+            <td class="actions">
+              <button class="btn sm" data-act="edit">Sửa</button>
+              <button class="btn sm danger" data-act="del">Xoá</button>
+            </td>
+          </tr>`).join("")}
+        </tbody></table></div>`;
+      listEl.querySelectorAll<HTMLButtonElement>("[data-act]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.closest("tr")!.dataset.id!;
+          const item = items.find((x) => x.id === id)!;
+          if (btn.dataset.act === "edit") openOrgUnitDialog(dialogRoot, item, items, TYPE_OPTIONS, reload);
+          else if (btn.dataset.act === "del") {
+            if (confirm(`Xoá đơn vị "${item.name}"?`)) {
+              api.deleteOrgUnit(id).then(() => { toast("Đã xoá."); reload(); })
+                .catch((e) => toast(`Lỗi: ${msg(e)}`));
+            }
+          }
+        });
+      });
+    } catch (e) {
+      listEl.innerHTML = `<p class="empty">Không tải được: ${esc(msg(e))}</p>`;
+    }
+  }
+
+  root.querySelector("#ou-add")!.addEventListener("click", async () => {
+    const { items } = await api.listOrgUnits().catch(() => ({ items: [] }));
+    openOrgUnitDialog(dialogRoot, null, items, TYPE_OPTIONS, reload);
+  });
+  await reload();
+}
+
+function openOrgUnitDialog(
+  dialogRoot: HTMLElement,
+  existing: { id: string; name: string; type: string; parent_id: string | null; description: string | null } | null,
+  allUnits: { id: string; name: string }[],
+  typeOptions: { value: string; label: string }[],
+  onDone: () => void
+): void {
+  const parentOpts = allUnits.filter((u) => !existing || u.id !== existing.id);
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true">
+        <h3>${existing ? "Sửa đơn vị" : "Thêm đơn vị"}</h3>
+        <form id="ou-form">
+          <label>Tên đơn vị <span class="req">*</span>
+            <input class="input" name="name" required maxlength="100" value="${existing ? esc(existing.name) : ""}" placeholder="VD: Chi nhánh Hà Nội, Kho chính…" /></label>
+          <label>Loại đơn vị <span class="req">*</span>
+            <select class="input" name="type">
+              ${typeOptions.map((o) => `<option value="${o.value}" ${existing?.type === o.value ? "selected" : ""}>${o.label}</option>`).join("")}
+            </select></label>
+          <label>Trực thuộc
+            <select class="input" name="parent_id">
+              <option value="">— Không có —</option>
+              ${parentOpts.map((u) => `<option value="${esc(u.id)}" ${existing?.parent_id === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}
+            </select>
+            <span class="hint">VD: Cửa hàng trực thuộc Chi nhánh</span></label>
+          <label>Mô tả <input class="input" name="description" maxlength="255" value="${existing?.description ? esc(existing.description) : ""}" /></label>
+          <p class="form-error" id="ou-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" class="btn" id="ou-cancel">Huỷ</button>
+            <button type="submit" class="btn primary">${existing ? "Lưu" : "Thêm"}</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#ou-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+  dialogRoot.querySelector<HTMLFormElement>("#ou-form")!.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target as HTMLFormElement);
+    const errEl = dialogRoot.querySelector<HTMLElement>("#ou-error")!;
+    const input = {
+      name: String(fd.get("name") ?? "").trim(),
+      type: String(fd.get("type") ?? "BRANCH"),
+      parent_id: String(fd.get("parent_id") ?? "") || null,
+      description: String(fd.get("description") ?? "").trim() || undefined,
+    };
+    try {
+      if (existing) await api.updateOrgUnit(existing.id, input);
+      else await api.createOrgUnit(input);
+      toast(existing ? "Đã lưu." : "Đã thêm đơn vị.");
+      close();
+      onDone();
+    } catch (e) {
+      errEl.textContent = msg(e);
+      errEl.hidden = false;
+    }
+  });
+}
+
 /** Trang quản lý ngoại lệ (#/exceptions). */
 export async function renderExceptions(root: HTMLElement): Promise<void> {
   root.innerHTML = `
@@ -405,8 +533,7 @@ export async function renderEvidence(root: HTMLElement): Promise<void> {
               <strong class="evidence-manage-name">${esc(String(ev.original_name))}</strong>
               <div class="muted small">${isPhoto ? "Ảnh" : "Tệp"} · ${formatBytes(Number(ev.size_bytes))}</div>
               <div class="muted small">Lượt: <a href="#/executions/${esc(String(ev.execution_id))}">${esc(String(ev.execution_code ?? "—"))}</a>
-                ${ev.step_code ? ` · ${esc(String(ev.step_code))}` : ""}</div>
-              <div class="muted small"><span class="pill ${statusCls}">${esc(statusLabel)}</span></div>
+                ${ev.step_code ? ` · ${esc(String(ev.step_code))}` : ""} <span class="pill ${statusCls}">${esc(statusLabel)}</span></div>
               <div class="muted small">👤 ${esc(String(ev.uploader_name ?? "—"))} · 🕐 ${esc(String(ev.created_at).slice(0, 16).replace("T", " "))}</div>
               <a class="link small" href="${esc(api.evidenceDownloadUrl(String(ev.id)))}" target="_blank" rel="noopener">Xem / Tải</a>
             </div>

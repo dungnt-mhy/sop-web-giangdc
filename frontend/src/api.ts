@@ -285,6 +285,22 @@ export const api = {
   deletePosition(id: string): Promise<{ deleted: boolean }> {
     return req("DELETE", `/positions/${encodeURIComponent(id)}`);
   },
+  // --- Đơn vị tổ chức ---
+  listOrgUnits(): Promise<{
+    items: { id: string; name: string; type: string; type_label: string; parent_id: string | null; parent_name: string | null; description: string | null; created_at: string }[];
+    total: number;
+  }> {
+    return req("GET", "/org-units");
+  },
+  createOrgUnit(input: { name: string; type: string; parent_id?: string | null; description?: string }): Promise<unknown> {
+    return req("POST", "/org-units", input);
+  },
+  updateOrgUnit(id: string, input: { name?: string; type?: string; parent_id?: string | null; description?: string }): Promise<unknown> {
+    return req("PATCH", `/org-units/${encodeURIComponent(id)}`, input);
+  },
+  deleteOrgUnit(id: string): Promise<{ deleted: boolean }> {
+    return req("DELETE", `/org-units/${encodeURIComponent(id)}`);
+  },
   // --- Vai trò ứng dụng ---
   listRoles(): Promise<{
     items: { id: string; code: string; name: string; description: string | null; is_system: boolean; permissions: string[] }[];

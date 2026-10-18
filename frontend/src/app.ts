@@ -9,7 +9,7 @@ import { renderExecutionDetail, renderMyWork } from "./views/executions.js";
 import { renderProcessDetail, renderProcesses } from "./views/processes.js";
 import { renderUsers } from "./views/users.js";
 import { renderDashboard } from "./views/dashboard.js";
-import { renderExceptions, renderEvidence, renderPositions, renderRoles } from "./views/management.js";
+import { renderExceptions, renderEvidence, renderOrgUnits, renderPositions, renderRoles } from "./views/management.js";
 
 let session: SessionInfo | null = null;
 
@@ -72,6 +72,7 @@ function renderShell(): void {
         { hash: "#/users", label: "Người dùng", perm: "users.manage" },
         { hash: "#/roles", label: "Vai trò", perm: "users.manage" },
         { hash: "#/positions", label: "Chức vụ", perm: "users.manage" },
+        { hash: "#/org-units", label: "Đơn vị", perm: "users.manage" },
       ],
     },
   ];
@@ -219,6 +220,15 @@ function route(): void {
       return;
     }
     void renderPositions(page);
+    return;
+  }
+  if (hash === "#/org-units") {
+    if (!can("users.manage")) {
+      page.innerHTML = `<div class="card"><h3>Không có quyền</h3>
+        <p class="empty">Tài khoản của bạn không có quyền quản lý đơn vị.</p></div>`;
+      return;
+    }
+    void renderOrgUnits(page);
     return;
   }
   if (hash === "#/roles") {
