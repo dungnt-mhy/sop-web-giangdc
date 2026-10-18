@@ -382,6 +382,15 @@ export const api = {
   retireVersion(versionId: string): Promise<ProcessVersion> {
     return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}:retire`);
   },
+  requestReactivation(versionId: string): Promise<{ requested: boolean }> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}:request-reactivation`);
+  },
+  approveReactivation(versionId: string): Promise<ProcessVersion> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}:approve-reactivation`);
+  },
+  rejectReactivation(versionId: string, reason: string): Promise<{ rejected: boolean }> {
+    return req("POST", `/processes/x/versions/${encodeURIComponent(versionId)}:reject-reactivation`, { reason });
+  },
   // --- Bước công việc (Task 1.5) ---
   listSteps(versionId: string): Promise<{ items: ProcessStep[]; total: number }> {
     return req("GET", `/processes/x/versions/${encodeURIComponent(versionId)}/steps`);

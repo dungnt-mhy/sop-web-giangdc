@@ -37,12 +37,15 @@ import {
 } from "./routes/users";
 import {
   handleActivateVersion,
+  handleApproveReactivation,
   handleApproveVersion,
   handleCreateProcess,
   handleCreateVersion,
   handleGetProcess,
   handleListProcesses,
   handlePatchProcess,
+  handleRejectReactivation,
+  handleRequestReactivation,
   handleRetireVersion,
   handleReturnVersion,
   handleSubmitVersion,
@@ -304,6 +307,9 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
       if (action === "return") return handleReturnVersion(ctx, vid);
       if (action === "activate") return handleActivateVersion(ctx, vid);
       if (action === "retire") return handleRetireVersion(ctx, vid);
+      if (action === "request-reactivation") return handleRequestReactivation(ctx, vid);
+      if (action === "approve-reactivation") return handleApproveReactivation(ctx, vid);
+      if (action === "reject-reactivation") return handleRejectReactivation(ctx, vid);
     }
   }
 

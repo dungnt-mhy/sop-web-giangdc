@@ -422,10 +422,95 @@ export async function handleReturnVersion(ctx: Ctx, versionId: string): Promise<
   return transitionVersion(ctx, versionId, ["IN_REVIEW"], "DRAFT", "processes.approve", "PROCESS_VERSION_RETURNED");
 }
 
-// POST .../versions/{vId}:activate — APPROVED/SCHEDULED/RETIRED -> ACTIVE.
-// Kích hoạt lại bản đã ngừng: bản đang ACTIVE sẽ tự chuyển thành RETIRED (không chạy song song).
+// POST .../versions/{vId}:activate — APPROVED/SCHEDULED -> ACTIVE (kích hoạt trực tiếp).
 export async function handleActivateVersion(ctx: Ctx, versionId: string): Promise<Response> {
-  return transitionVersion(ctx, versionId, ["APPROVED", "SCHEDULED", "RETIRED"], "ACTIVE", "processes.approve", "PROCESS_VERSION_ACTIVATED");
+  return transitionVersion(ctx, versionId, ["APPROVED", "SCHEDULED"], "ACTIVE", "processes.approve", "PROCESS_VERSION_ACTIVATED");
+}
+
+// POST .../versions/{vId}:request-reactivation — RETIRED -> yêu cầu kích hoạt lại (chờ duyệt).
+export async function handleRequestReactivation(ctx: Ctx, versionId: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+  const v = await db.prepare(`SELECT * FROM process_versions WHERE id = ?`).bind(versionId).first<VersionRow>();
+  if (!v) return apiError("NOT_FOUND", "Không tìm thấy phiên bản.", ctx.requestId);
+  if (v.status !== "RETIRED") {
+    return apiError("VALIDATION_ERROR", "Chỉ yêu cầu kích hoạt lại phiên bản đã ngừng.", ctx.requestId);
+  }
+  if ((v as unknown as Record<string, unknown>).reactivation_status === "PENDING") {
+    return apiError("VALIDATION_ERROR", "Đã có yêu cầu kích hoạt lại đang chờ duyệt.", ctx.requestId);
+  }
+  const now = nowIso();
+  await db.prepare(
+    `UPDATE process_versions SET reactivation_status = 'PENDING', reactivation_requested_by = ?, reactivation_requested_at = ?, reactivation_reviewed_by = NULL, reactivation_reviewed_at = NULL, reactivation_reject_reason = NULL, updated_at = ? WHERE id = ?`
+  ).bind(me.user.id, now, now, versionId).run();
+  await audit(db, {
+    event_type: "PROCESS_VERSION_REACTIVATION_REQUESTED",
+    actor_id: me.user.id,
+    object_type: "process_version",
+    object_id: versionId,
+    request_id: ctx.requestId,
+  });
+  return ok({ requested: true });
+}
+
+// POST .../versions/{vId}:approve-reactivation — duyệt yêu cầu kích hoạt lại → ACTIVE.
+export async function handleApproveReactivation(ctx: Ctx, versionId: string): Promise<Response> {
+  const s = requirePermission(ctx, "processes.approve");
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+  const v = await db.prepare(`SELECT * FROM process_versions WHERE id = ?`).bind(versionId).first<VersionRow>();
+  if (!v) return apiError("NOT_FOUND", "Không tìm thấy phiên bản.", ctx.requestId);
+  if (v.status !== "RETIRED" || (v as unknown as Record<string, unknown>).reactivation_status !== "PENDING") {
+    return apiError("VALIDATION_ERROR", "Không có yêu cầu kích hoạt lại đang chờ duyệt.", ctx.requestId);
+  }
+  const now = nowIso();
+  // Đánh dấu đã duyệt, sau đó kích hoạt (dùng transitionVersion để xử lý bản ACTIVE cũ).
+  await db.prepare(
+    `UPDATE process_versions SET reactivation_status = 'APPROVED', reactivation_reviewed_by = ?, reactivation_reviewed_at = ?, updated_at = ? WHERE id = ?`
+  ).bind(me.user.id, now, now, versionId).run();
+  await audit(db, {
+    event_type: "PROCESS_VERSION_REACTIVATION_APPROVED",
+    actor_id: me.user.id,
+    object_type: "process_version",
+    object_id: versionId,
+    request_id: ctx.requestId,
+  });
+  // Kích hoạt: gọi transitionVersion với RETIRED -> ACTIVE.
+  return transitionVersion(ctx, versionId, ["RETIRED"], "ACTIVE", "processes.approve", "PROCESS_VERSION_ACTIVATED");
+}
+
+// POST .../versions/{vId}:reject-reactivation — từ chối yêu cầu kích hoạt lại (bắt buộc lý do).
+export async function handleRejectReactivation(ctx: Ctx, versionId: string): Promise<Response> {
+  const s = requirePermission(ctx, "processes.approve");
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+  if (!reason) {
+    return apiError("VALIDATION_ERROR", "Từ chối bắt buộc phải có lý do.", ctx.requestId);
+  }
+  const v = await db.prepare(`SELECT * FROM process_versions WHERE id = ?`).bind(versionId).first<VersionRow>();
+  if (!v) return apiError("NOT_FOUND", "Không tìm thấy phiên bản.", ctx.requestId);
+  if (v.status !== "RETIRED" || (v as unknown as Record<string, unknown>).reactivation_status !== "PENDING") {
+    return apiError("VALIDATION_ERROR", "Không có yêu cầu kích hoạt lại đang chờ duyệt.", ctx.requestId);
+  }
+  const now = nowIso();
+  await db.prepare(
+    `UPDATE process_versions SET reactivation_status = 'REJECTED', reactivation_reviewed_by = ?, reactivation_reviewed_at = ?, reactivation_reject_reason = ?, updated_at = ? WHERE id = ?`
+  ).bind(me.user.id, now, reason, now, versionId).run();
+  await audit(db, {
+    event_type: "PROCESS_VERSION_REACTIVATION_REJECTED",
+    actor_id: me.user.id,
+    object_type: "process_version",
+    object_id: versionId,
+    request_id: ctx.requestId,
+    diff: { reason },
+  });
+  return ok({ rejected: true });
 }
 
 // POST .../versions/{vId}:retire — ACTIVE/SUPERSEDED/APPROVED -> RETIRED.

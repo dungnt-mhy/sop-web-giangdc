@@ -340,7 +340,7 @@ export async function renderProcessDetail(
       root.querySelector("#pd-name")!.textContent = p.name;
       root.querySelector("#pd-code")!.textContent = `Mã: ${p.code}`;
       body.innerHTML = detailHtml(p);
-      renderVersionButtons(body, canManage, canApprove);
+      renderVersionButtons(body, canManage, canApprove, p);
     } catch (e) {
       body.innerHTML = `<p class="empty">Không tải được quy trình: ${esc(msg(e))}</p>`;
     }
@@ -366,27 +366,50 @@ export async function renderProcessDetail(
       else if (act === "approve") await api.approveVersion(vid);
       else if (act === "return") await api.returnVersion(vid);
       else if (act === "activate") {
-        // Kích hoạt lại bản đã ngừng: cảnh báo sẽ ngừng bản đang hoạt động.
-        if (v?.status === "RETIRED") {
-          restore();
-          openConfirmDialog(
-            dialogRoot,
-            `Kích hoạt lại phiên bản ${label}?`,
-            "Phiên bản đang hoạt động sẽ tự động chuyển thành Ngừng. Chỉ 1 phiên bản hoạt động tại 1 thời điểm.",
-            async () => {
-              try {
-                await api.activateVersion(vid);
-                toast(`Đã kích hoạt lại phiên bản ${label}.`);
-                await reload();
-              } catch (e) {
-                toast(`Lỗi: ${msg(e)}`);
-              }
-            },
-            "Kích hoạt lại"
-          );
-          return;
-        }
         await api.activateVersion(vid);
+      }
+      else if (act === "request-reactivation") {
+        restore();
+        openConfirmDialog(
+          dialogRoot,
+          `Yêu cầu kích hoạt lại phiên bản ${label}?`,
+          "Yêu cầu sẽ được gửi đến người có quyền duyệt. Phiên bản đang hoạt động sẽ tự động chuyển thành Ngừng sau khi được duyệt.",
+          async () => {
+            try {
+              await api.requestReactivation(vid);
+              toast(`Đã gửi yêu cầu kích hoạt lại phiên bản ${label}.`);
+              await reload();
+            } catch (e) {
+              toast(`Lỗi: ${msg(e)}`);
+            }
+          },
+          "Gửi yêu cầu"
+        );
+        return;
+      }
+      else if (act === "approve-reactivation") {
+        restore();
+        openConfirmDialog(
+          dialogRoot,
+          `Duyệt kích hoạt lại phiên bản ${label}?`,
+          "Phiên bản đang hoạt động sẽ tự động chuyển thành Ngừng. Chỉ 1 phiên bản hoạt động tại 1 thời điểm.",
+          async () => {
+            try {
+              await api.approveReactivation(vid);
+              toast(`Đã duyệt kích hoạt lại phiên bản ${label}.`);
+              await reload();
+            } catch (e) {
+              toast(`Lỗi: ${msg(e)}`);
+            }
+          },
+          "Duyệt"
+        );
+        return;
+      }
+      else if (act === "reject-reactivation") {
+        restore();
+        openRejectDialog(dialogRoot, label, vid, reload);
+        return;
       }
       else if (act === "retire") {
         restore();
@@ -475,7 +498,7 @@ function detailHtml(p: import("../api.js").SopProcessDetail): string {
 }
 
 /** Vẽ nút thao tác cho từng phiên bản theo trạng thái + quyền (không gắn listener). */
-function renderVersionButtons(body: HTMLElement, canManage: boolean, canApprove: boolean): void {
+function renderVersionButtons(body: HTMLElement, canManage: boolean, canApprove: boolean, current: { versions: { id: string; reactivation_status?: string; reactivation_reject_reason?: string }[] }): void {
   const rows = Array.from(body.querySelectorAll("tr[data-vid]")) as HTMLTableRowElement[];
   for (const tr of rows) {
     const status = tr.dataset.status!;
@@ -484,21 +507,32 @@ function renderVersionButtons(body: HTMLElement, canManage: boolean, canApprove:
     // Nút xem bước — mọi phiên bản đều xem được.
     btns.push(`<button class="link" data-v="steps"><span>Bước</span></button>`);
     if (status === "DRAFT" && canManage) {
-      btns.push(`<button class="link" data-v="submit"><span>Gửi duyệt</span></button>`);
+      btns.push(`<button class="link" data-v="submit"><span>📤 Gửi duyệt</span></button>`);
     }
     if (status === "IN_REVIEW" && canApprove) {
-      btns.push(`<button class="link" data-v="approve"><span>Duyệt</span></button>`);
-      btns.push(`<button class="link danger" data-v="return"><span>Trả sửa</span></button>`);
+      btns.push(`<button class="link" data-v="approve"><span>✅ Duyệt</span></button>`);
+      btns.push(`<button class="link danger" data-v="return"><span>↩️ Trả sửa</span></button>`);
     }
     if ((status === "APPROVED" || status === "SCHEDULED") && canApprove) {
-      btns.push(`<button class="link" data-v="activate"><span>Kích hoạt</span></button>`);
-      btns.push(`<button class="link danger" data-v="retire"><span>Hủy</span></button>`);
+      btns.push(`<button class="link" data-v="activate"><span>🚀 Kích hoạt</span></button>`);
+      btns.push(`<button class="link danger" data-v="retire"><span>🗑️ Hủy</span></button>`);
     }
     if ((status === "ACTIVE" || status === "SUPERSEDED") && canApprove) {
-      btns.push(`<button class="link danger" data-v="retire"><span>Ngừng</span></button>`);
+      btns.push(`<button class="link danger" data-v="retire"><span>⏸️ Ngừng</span></button>`);
     }
     if (status === "RETIRED" && canApprove) {
-      btns.push(`<button class="link" data-v="activate"><span>Kích hoạt lại</span></button>`);
+      const v = current.versions.find((x) => x.id === tr.dataset.vid);
+      const reactStatus = (v as unknown as Record<string, unknown> | undefined)?.reactivation_status as string | undefined;
+      if (reactStatus === "PENDING") {
+        btns.push(`<button class="link" data-v="approve-reactivation"><span>✅ Duyệt kích hoạt</span></button>`);
+        btns.push(`<button class="link danger" data-v="reject-reactivation"><span>❌ Từ chối</span></button>`);
+      } else {
+        btns.push(`<button class="link" data-v="request-reactivation"><span>🔄 Yêu cầu kích hoạt lại</span></button>`);
+      }
+      if (reactStatus === "REJECTED") {
+        const reason = (v as unknown as Record<string, unknown>)?.reactivation_reject_reason as string | undefined;
+        if (reason) btns.push(`<span class="muted small" title="${esc(reason)}">Từ chối: ${esc(reason.slice(0, 30))}${reason.length > 30 ? "…" : ""}</span>`);
+      }
     }
     cell.innerHTML = btns.join("") || '<span class="muted">—</span>';
   }
@@ -711,6 +745,48 @@ async function toggleSteps(
   } catch (e) {
     container.innerHTML = `<p class="empty">Không tải được bước: ${esc(msg(e))}</p>`;
   }
+}
+
+/** Dialog từ chối kích hoạt lại — bắt buộc nhập lý do. */
+function openRejectDialog(dialogRoot: HTMLElement, label: string, vid: string, reload: () => Promise<void>): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-scrim"></div>
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="Từ chối kích hoạt lại">
+      <h3>❌ Từ chối kích hoạt lại ${esc(label)}?</h3>
+      <form id="reject-form">
+        <label>Lý do từ chối <span class="req">*</span>
+          <textarea class="input" name="reason" required maxlength="500" rows="3"
+            placeholder="VD: Phiên bản mới đang chạy ổn định, chưa cần quay về bản cũ…"></textarea></label>
+        <p class="form-error" id="reject-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="reject-cancel">Huỷ</button>
+          <button type="submit" class="btn danger">Từ chối</button>
+        </div>
+      </form>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#reject-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector(".dialog-scrim")!.addEventListener("click", close);
+  dialogRoot.querySelector<HTMLFormElement>("#reject-form")!.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target as HTMLFormElement);
+    const reason = String(fd.get("reason") ?? "").trim();
+    const errEl = dialogRoot.querySelector<HTMLElement>("#reject-error")!;
+    if (!reason) {
+      errEl.textContent = "Vui lòng nhập lý do từ chối.";
+      errEl.hidden = false;
+      return;
+    }
+    try {
+      await api.rejectReactivation(vid, reason);
+      toast(`Đã từ chối kích hoạt lại phiên bản ${label}.`);
+      close();
+      await reload();
+    } catch (e) {
+      errEl.textContent = msg(e);
+      errEl.hidden = false;
+    }
+  });
 }
 
 /** Dialog xác nhận tùy chỉnh (không dùng window.confirm). */
