@@ -279,12 +279,14 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .link.back { display: inline-block; margin-bottom: 6px; font-size: 14px; }
 @media (max-width: 640px) {
   .info-row { grid-template-columns: 1fr; gap: 2px; }
-  /* Bộ lọc audit trên mobile: xếp 2 cột, gọn gàng. */
+  /* Bộ lọc audit trên mobile: 2 cột; 2 ô ngày mỗi ô 1 hàng full. */
   .filter-bar { flex-wrap: wrap; gap: 8px; }
   .filter-bar .input,
   .filter-bar .btn { flex: 1 1 calc(50% - 4px); max-width: none; min-width: 0; }
   .filter-bar .input { font-size: 14px; padding: 8px 10px; border-radius: 8px; }
   .filter-bar .btn { font-size: 14px; padding: 8px 10px; }
+  .filter-bar #audit-from,
+  .filter-bar #audit-to { flex: 1 1 100%; }
 }
 
 /* Danh sách bước (Task 1.5). */
