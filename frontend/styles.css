@@ -691,3 +691,4 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .notif-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
 .notif-msg { font-size: 13px; color: var(--text); margin-bottom: 4px; }
 .notif-time { font-size: 12px; }
+.mono { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); word-break: break-all; }
