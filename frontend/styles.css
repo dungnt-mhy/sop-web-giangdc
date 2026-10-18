@@ -738,3 +738,6 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   .table-wrap .table th, .table-wrap .table td { padding: 8px 6px; font-size: 13px; white-space: nowrap; }
   .table-wrap .table td strong { white-space: normal; }
 }
+.skip-section-title { margin: 16px 0 8px; padding: 0; }
+.skip-section-title .check { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; margin: 0; padding: 0; }
+.skip-section-title .check input[type="checkbox"] { width: 18px; height: 18px; margin: 0; flex-shrink: 0; }

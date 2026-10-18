@@ -886,9 +886,9 @@ function openStepDialog(
               value="${(() => { try { const cr = step?.completion_req as Record<string, unknown> | null; const v = cr?.["min_photos"]; return typeof v === "number" ? String(v) : ""; } catch { return ""; } })()}"
               placeholder="VD: 2 (0 = không yêu cầu)" /></label>
         </div>
-        <h4 style="margin-top:12px"><label class="check" style="font-size:16px"><input type="checkbox" name="allow_skip" id="step-allow-skip"
+        <div class="skip-section-title"><label class="check"><input type="checkbox" name="allow_skip" id="step-allow-skip"
           ${(step?.skip_policy as unknown as { allowed?: boolean } | null)?.allowed ? "checked" : ""} />
-          ⏭️ Cho phép bỏ qua bước này</label></h4>
+          <span>⏭️ Cho phép bỏ qua bước này</span></label></div>
         <label>⏭️ Vai trò được bỏ qua
           <div class="roles-grid" id="step-skip-positions">
             <span class="muted small">Đang tải…</span>
