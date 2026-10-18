@@ -1188,24 +1188,23 @@ function detailHtml(e: ExecutionDetail): string {
               </div>
               <div class="step-assignees" data-assignees-for="${esc(st.id)}"><span class="muted small">Đang tải…</span></div>
             </div>
-            ${st.instruction ? `<p class="step-instr">📖 ${esc(st.instruction)}</p>` : ""}
             ${(st as unknown as Record<string, unknown>).prerequisite || (st as unknown as Record<string, unknown>).input_desc || st.instruction || (st as unknown as Record<string, unknown>).expected_result || (st as unknown as Record<string, unknown>).output_desc || (st as unknown as Record<string, unknown>).warning || (st as unknown as Record<string, unknown>).target_duration_min || ((st as unknown as Record<string, unknown>).positions as unknown[] ?? []).length > 0 || (st as unknown as Record<string, unknown>).skip_policy || (st as unknown as Record<string, unknown>).failure_policy || st.note ? `
             <details class="step-details">
               <summary>📋 Chi tiết bước</summary>
-              <dl class="detail-list">
-                ${(st as unknown as Record<string, unknown>).prerequisite ? `<div><dt>Điều kiện tiên quyết</dt><dd>${esc((st as unknown as Record<string, unknown>).prerequisite as string)}</dd></div>` : ""}
-                ${(st as unknown as Record<string, unknown>).expected_result ? `<div><dt>Kết quả mong đợi</dt><dd>${esc((st as unknown as Record<string, unknown>).expected_result as string)}</dd></div>` : ""}
-                ${(st as unknown as Record<string, unknown>).input_desc ? `<div><dt>Đầu vào</dt><dd>${esc((st as unknown as Record<string, unknown>).input_desc as string)}</dd></div>` : ""}
-                ${st.instruction ? `<div><dt>📖 Hướng dẫn thực hiện</dt><dd>${esc(st.instruction)}</dd></div>` : ""}
-                ${(st as unknown as Record<string, unknown>).output_desc ? `<div><dt>Đầu ra / Bàn giao</dt><dd>${esc((st as unknown as Record<string, unknown>).output_desc as string)}</dd></div>` : ""}
-                ${st.note ? `<div><dt>Ghi chú</dt><dd>${esc(st.note)}</dd></div>` : ""}
-                ${(st as unknown as Record<string, unknown>).target_duration_min ? `<div><dt>Thời gian mục tiêu</dt><dd>${esc(String((st as unknown as Record<string, unknown>).target_duration_min))} phút</dd></div>` : ""}
-                ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div><dt>👤 Vai trò người thực hiện</dt><dd>${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</dd></div>` : ""}
-                ${st.is_required ? "" : `<div><dt>Bắt buộc</dt><dd>Không (bước tùy chọn, được phép bỏ qua)</dd></div>`}
-                ${((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed ? `<div><dt>⏭️ Bỏ qua</dt><dd>✅ Cho phép bỏ qua bước này (người giám sát duyệt)</dd></div>` : ""}
-                ${(st as unknown as Record<string, unknown>).failure_policy ? `<div><dt>Xử lý khi lỗi</dt><dd>${esc(typeof (st as unknown as Record<string, unknown>).failure_policy === "string" ? (st as unknown as Record<string, unknown>).failure_policy as string : JSON.stringify((st as unknown as Record<string, unknown>).failure_policy))}</dd></div>` : ""}
-                ${(st as unknown as Record<string, unknown>).warning ? `<div class="warning"><dt>⚠️ Cảnh báo</dt><dd>${esc((st as unknown as Record<string, unknown>).warning as string)}</dd></div>` : ""}
-              </dl>
+              <div class="step-details-body">
+                ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="step-detail-row"><span class="step-dlabel">👤 Vai trò thực hiện:</span> ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
+                ${(st as unknown as Record<string, unknown>).prerequisite ? `<div class="step-detail-row"><span class="step-dlabel">Điều kiện tiên quyết:</span> ${esc((st as unknown as Record<string, unknown>).prerequisite as string)}</div>` : ""}
+                ${(st as unknown as Record<string, unknown>).expected_result ? `<div class="step-detail-row"><span class="step-dlabel">Kết quả mong đợi:</span> ${esc((st as unknown as Record<string, unknown>).expected_result as string)}</div>` : ""}
+                ${(st as unknown as Record<string, unknown>).input_desc ? `<div class="step-detail-row"><span class="step-dlabel">Đầu vào:</span> ${esc((st as unknown as Record<string, unknown>).input_desc as string)}</div>` : ""}
+                ${(st as unknown as Record<string, unknown>).output_desc ? `<div class="step-detail-row"><span class="step-dlabel">Đầu ra / Bàn giao:</span> ${esc((st as unknown as Record<string, unknown>).output_desc as string)}</div>` : ""}
+                ${st.note ? `<div class="step-detail-row"><span class="step-dlabel">Ghi chú:</span> ${esc(st.note)}</div>` : ""}
+                ${(st as unknown as Record<string, unknown>).target_duration_min ? `<div class="step-detail-row"><span class="step-dlabel">Thời gian mục tiêu:</span> ${esc(String((st as unknown as Record<string, unknown>).target_duration_min))} phút</div>` : ""}
+                ${st.is_required ? "" : `<div class="step-detail-row"><span class="step-dlabel">Bắt buộc:</span> Không (bước tùy chọn, được phép bỏ qua)</div>`}
+                ${((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed ? `<div class="step-detail-row"><span class="step-dlabel">⏭️ Bỏ qua:</span> ✅ Cho phép bỏ qua bước này (người giám sát duyệt)</div>` : ""}
+                ${(st as unknown as Record<string, unknown>).failure_policy ? `<div class="step-detail-row"><span class="step-dlabel">Xử lý khi lỗi:</span> ${esc(typeof (st as unknown as Record<string, unknown>).failure_policy === "string" ? (st as unknown as Record<string, unknown>).failure_policy as string : JSON.stringify((st as unknown as Record<string, unknown>).failure_policy))}</div>` : ""}
+                ${(st as unknown as Record<string, unknown>).warning ? `<div class="step-detail-row"><span class="step-dlabel">⚠️ Cảnh báo:</span> ${esc((st as unknown as Record<string, unknown>).warning as string)}</div>` : ""}
+                ${st.instruction ? `<div class="step-guide"><div class="step-guide-title">📖 Hướng dẫn thực hiện</div><div class="step-guide-body">${esc(st.instruction)}</div></div>` : ""}
+              </div>
             </details>` : ""}
             <div class="evidence-section" data-evidence-for="${esc(st.id)}">
               <div class="evidence-head">
