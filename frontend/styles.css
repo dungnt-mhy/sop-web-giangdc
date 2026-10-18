@@ -402,7 +402,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   box-shadow: 0 2px 6px rgba(0,0,0,0.12);
 }
 .beauty-node.optional .beauty-num { background: linear-gradient(135deg, #94a3b8, #64748b); }
-.beauty-content { flex: 1; min-width: 0; }
+.beauty-content { flex: 1; min-width: 0; text-align: center; }
 .beauty-code { font-size: 12.5px; font-weight: 700; color: var(--accent-dark); letter-spacing: 0.3px; margin-bottom: 2px; }
 .beauty-title { font-size: 15.5px; font-weight: 700; color: #1e293b; line-height: 1.35; }
 .beauty-role, .beauty-time { font-size: 13px; color: #64748b; margin-top: 4px; }
@@ -738,6 +738,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   .table-wrap .table th, .table-wrap .table td { padding: 8px 6px; font-size: 13px; white-space: nowrap; }
   .table-wrap .table td strong { white-space: normal; }
 }
-.skip-section-title { margin: 16px 0 8px; padding: 0; }
+.skip-section-title { margin: 20px 0 16px; padding: 0; }
 .skip-section-title .check { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; margin: 0; padding: 0; }
 .skip-section-title .check input[type="checkbox"] { width: 18px; height: 18px; margin: 0; flex-shrink: 0; }
+.skip-section-title + label { margin-top: 8px; display: block; }

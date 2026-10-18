@@ -941,7 +941,7 @@ function openStepDialog(
     // PRC-007: cho phép bỏ qua.
     const allowSkip = fd.get("allow_skip") === "on";
     if (allowSkip) {
-      input.skip_policy = JSON.stringify({ allowed: true });
+      input.skip_policy = { allowed: true };
     } else {
       input.skip_policy = null;
     }
