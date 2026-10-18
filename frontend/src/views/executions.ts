@@ -910,6 +910,10 @@ function detailHtml(e: ExecutionDetail): string {
               <div class="evidence-head">
                 <span class="evidence-title">📷 Bằng chứng <span class="evidence-count" data-ev-count></span></span>
                 ${canUpload ? `<span class="evidence-upload-group">
+                  <label class="btn sm evidence-upload-btn camera-btn">
+                    📸 Chụp ảnh
+                    <input type="file" accept="image/*" capture="environment" hidden data-ev-input data-ev-kind="photo" />
+                  </label>
                   <label class="btn sm evidence-upload-btn">
                     + Ảnh
                     <input type="file" accept="image/*" multiple hidden data-ev-input data-ev-kind="photo" />

@@ -623,3 +623,5 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .flow-meta.small { font-size: 12px; }
 .flash-highlight { animation: flash 2s; }
 @keyframes flash { 0%, 100% { background: transparent; } 20%, 60% { background: #fef3c7; } }
+.camera-btn { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+.camera-btn:hover { background: #2563eb; }
