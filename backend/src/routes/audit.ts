@@ -72,3 +72,92 @@ export async function handleClearTestData(ctx: Ctx): Promise<Response> {
   }
   return ok({ cleared: tables });
 }
+
+/** POST /api/v1/admin/seed-test-data — Tạo 50 dữ liệu test (chỉ admin). TẠM THỜI. */
+export async function handleSeedTestData(ctx: Ctx): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as unknown as { user: { id: string }; permissions: string[] };
+  if (!me.permissions.includes("*")) {
+    return apiError("FORBIDDEN", "Chỉ admin mới được tạo dữ liệu test.", ctx.requestId);
+  }
+  const db = ctx.env.sop_demo_db;
+
+  // Lấy processes có version ACTIVE.
+  const procs = await db.prepare(
+    `SELECT p.id, p.code, p.name FROM processes p
+     JOIN process_versions pv ON pv.process_id = p.id AND pv.status = 'ACTIVE'
+     LIMIT 5`
+  ).all<{ id: string; code: string; name: string }>();
+  const procList = procs.results ?? [];
+  if (procList.length === 0) {
+    return apiError("VALIDATION_ERROR", "Chưa có quy trình nào đang hiệu lực.", ctx.requestId);
+  }
+
+  // Lấy users.
+  const users = await db.prepare(`SELECT id, display_name FROM users WHERE is_active = 1 LIMIT 10`)
+    .all<{ id: string; display_name: string }>();
+  const userList = users.results ?? [];
+  if (userList.length === 0) {
+    return apiError("VALIDATION_ERROR", "Chưa có user nào.", ctx.requestId);
+  }
+
+  // Lấy version ACTIVE và steps cho từng process.
+  const procData: { proc: { id: string; code: string; name: string }; versionId: string; steps: { id: string }[] }[] = [];
+  for (const p of procList) {
+    const v = await db.prepare(
+      `SELECT id FROM process_versions WHERE process_id = ? AND status = 'ACTIVE' LIMIT 1`
+    ).bind(p.id).first<{ id: string }>();
+    if (!v) continue;
+    const st = await db.prepare(`SELECT id FROM process_steps WHERE version_id = ? ORDER BY sort_order`)
+      .bind(v.id).all<{ id: string }>();
+    procData.push({ proc: p, versionId: v.id, steps: st.results ?? [] });
+  }
+
+  const shifts = ["MORNING", "AFTERNOON", "NIGHT", null, null];
+  const statuses = ["COMPLETED", "COMPLETED", "COMPLETED", "IN_PROGRESS", "IN_PROGRESS", "CREATED", "PENDING_CONFIRMATION", "CANCELLED"];
+  const now = new Date();
+  let created = 0;
+
+  for (let i = 0; i < 50; i++) {
+    const pd = procData[i % procData.length];
+    const user = userList[i % userList.length];
+    // Ngày ngẫu nhiên trong 30 ngày qua.
+    const daysAgo = Math.floor(Math.random() * 30);
+    const d = new Date(now);
+    d.setDate(d.getDate() - daysAgo);
+    const dateStr = d.toISOString().slice(0, 10);
+    const datePart = dateStr.replace(/-/g, "");
+    const status = statuses[i % statuses.length];
+    const shift = shifts[i % shifts.length];
+
+    const execId = crypto.randomUUID();
+    const code = `EXE-${datePart}-${String(created + 1).padStart(3, "0")}`;
+    const createdAt = `${dateStr}T${String(8 + (i % 10)).padStart(2, "0")}:00:00.000Z`;
+    const startedAt = status !== "CREATED" ? createdAt : null;
+    const completedAt = status === "COMPLETED" ? `${dateStr}T${String(10 + (i % 8)).padStart(2, "0")}:30:00.000Z` : null;
+
+    await db.prepare(
+      `INSERT INTO executions (id, code, process_id, version_id, title, assignee_id, creator_id, created_by,
+        execution_date, execution_time, shift, status, created_at, started_at, completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      execId, code, pd.proc.id, pd.versionId,
+      `Test ${pd.proc.name} #${i + 1}`,
+      user.id, me.user.id, me.user.id,
+      dateStr, "08:00", shift, status, createdAt, startedAt, completedAt
+    ).run();
+
+    // Tạo steps snapshot đơn giản.
+    for (let si = 0; si < pd.steps.length; si++) {
+      const stepStatus = status === "COMPLETED" ? "DONE" : status === "IN_PROGRESS" && si < 2 ? "DONE" : "NOT_STARTED";
+      await db.prepare(
+        `INSERT INTO execution_steps (id, execution_id, step_id, sort_order, status)
+         VALUES (?, ?, ?, ?, ?)`
+      ).bind(crypto.randomUUID(), execId, pd.steps[si].id, si, stepStatus).run();
+    }
+    created++;
+  }
+
+  return ok({ created });
+}
