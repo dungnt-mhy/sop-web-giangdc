@@ -213,7 +213,8 @@ export default {
       res = await route(ctx, request.method, path);
     } catch (e) {
       console.error("[api] lỗi không mong đợi:", requestId, e);
-      res = apiError("VALIDATION_ERROR", "Yêu cầu không hợp lệ.", requestId);
+      const detail = e instanceof Error ? e.message : String(e);
+      res = apiError("VALIDATION_ERROR", `Yêu cầu không hợp lệ. [${detail}]`, requestId);
     }
     applyCors(request, res, ctx);
     return res;
