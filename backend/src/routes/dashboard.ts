@@ -420,12 +420,14 @@ export async function handleStatsByUnit(ctx: Ctx) {
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
   const unitId = url.searchParams.get("unit_id");
+  const unitType = url.searchParams.get("unit_type");
 
   const conds: string[] = [];
   const params: unknown[] = [];
   if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
   if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
   if (unitId) { conds.push(`ou.id = ?`); params.push(unitId); }
+  if (unitType) { conds.push(`ou.type = ?`); params.push(unitType); }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 
   const rows = await db.prepare(

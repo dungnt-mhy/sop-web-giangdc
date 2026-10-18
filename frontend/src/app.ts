@@ -10,7 +10,7 @@ import { renderProcessDetail, renderProcesses } from "./views/processes.js";
 import { renderUsers } from "./views/users.js";
 import { renderDashboard } from "./views/dashboard.js";
 import { renderAudit, renderExceptions, renderEvidence, renderOrgUnits, renderPositions, renderRoles } from "./views/management.js";
-import { renderStatsPerson, renderStatsProcess, renderStatsShift, renderStatsUnit } from "./views/stats.js";
+import { renderStatsDaily, renderStatsPerson, renderStatsProcess, renderStatsShift, renderStatsUnit } from "./views/stats.js";
 
 let session: SessionInfo | null = null;
 
@@ -65,8 +65,8 @@ function renderShell(): void {
     {
       hash: "#/dashboard", label: "Thống kê", perm: "reports.view",
       children: [
-        { hash: "#/stats/unit", label: "Theo đơn vị", perm: "reports.view" },
         { hash: "#/dashboard", label: "Tổng quan", perm: "reports.view" },
+        { hash: "#/stats/unit", label: "Theo đơn vị", perm: "reports.view" },
         { hash: "#/stats/person", label: "Theo người", perm: "reports.view" },
         { hash: "#/stats/process", label: "Theo quy trình", perm: "reports.view" },
         { hash: "#/stats/shift", label: "Theo ca", perm: "reports.view" },
@@ -360,6 +360,14 @@ function route(): void {
       return;
     }
     void renderStatsShift(page);
+    return;
+  }
+  if (hash === "#/stats/daily") {
+    if (!can("reports.view")) {
+      page.innerHTML = `<div class="card"><h3>Không có quyền</h3></div>`;
+      return;
+    }
+    void renderStatsDaily(page);
     return;
   }
   const em = /^#\/executions\/([0-9a-f-]{36})$/.exec(hash);

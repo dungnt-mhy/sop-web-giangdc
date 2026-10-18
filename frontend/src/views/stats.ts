@@ -81,11 +81,16 @@ export async function renderStatsUnit(root: HTMLElement): Promise<void> {
   root.innerHTML = `
     <div class="page-head"><div><h2>📊 Thống kê theo đơn vị</h2>
     <p class="page-sub">Số lượt công việc của từng đơn vị tổ chức.</p></div></div>
-    ${filterBar(`<select class="input" id="st-unit"><option value="">— Tất cả đơn vị —</option></select>`)}
+    ${filterBar(`<select class="input" id="st-unit"><option value="">— Tất cả đơn vị —</option></select>
+      <select class="input" id="st-unit-type"><option value="">— Mọi loại —</option>
+        <option value="REGION">Khu vực</option><option value="BRANCH">Chi nhánh</option>
+        <option value="STORE">Cửa hàng</option><option value="WAREHOUSE">Kho</option>
+      </select>`)}
     <div id="st-result"><p class="empty">Đang tải…</p></div>`;
 
   const resultEl = root.querySelector<HTMLElement>("#st-result")!;
   const unitEl = root.querySelector<HTMLSelectElement>("#st-unit")!;
+  const typeEl = root.querySelector<HTMLSelectElement>("#st-unit-type")!;
 
   try {
     const { items } = await api.listOrgUnits();
@@ -98,6 +103,8 @@ export async function renderStatsUnit(root: HTMLElement): Promise<void> {
       const params = getDateParams();
       const usp = new URLSearchParams(params);
       if (unitEl.value) usp.set("unit_id", unitEl.value);
+      const typeEl = root.querySelector<HTMLSelectElement>("#st-unit-type")!;
+      if (typeEl.value) usp.set("unit_type", typeEl.value);
       const { items } = await api.statsByUnit(usp.toString());
       if (items.length === 0) {
         resultEl.innerHTML = `<p class="empty">Chưa có dữ liệu.</p>`;
@@ -299,6 +306,89 @@ export async function renderStatsShift(root: HTMLElement): Promise<void> {
       resultEl.innerHTML = `<p class="empty">Lỗi: ${esc(msg(e))}</p>`;
     }
   }
+
+  root.querySelector("#st-filter")!.addEventListener("click", reload);
+  await reload();
+}
+
+/** Vẽ biểu đồ cột đứng SVG cho thống kê theo ngày. */
+function verticalBarChart(days: { d: string; created: number; completed: number }[]): string {
+  if (days.length === 0) return `<p class="empty">Chưa có dữ liệu.</p>`;
+  const max = Math.max(...days.map((x) => Math.max(x.created, x.completed)), 1);
+  const W = 34, GAP = 8, H = 160;
+  const totalW = days.length * (W + GAP) + GAP;
+  const bars = days.map((x, i) => {
+    const cx = GAP + i * (W + GAP);
+    const h1 = Math.round((x.created / max) * H);
+    const h2 = Math.round((x.completed / max) * H);
+    const lbl = x.d.slice(5);
+    return `
+      <g>
+        <rect x="${cx}" y="${H - h1}" width="${W / 2 - 1}" height="${h1}" fill="#3b82f6" rx="2">
+          <title>${x.d}: tạo ${x.created}</title></rect>
+        <rect x="${cx + W / 2 + 1}" y="${H - h2}" width="${W / 2 - 1}" height="${h2}" fill="#22c55e" rx="2">
+          <title>${x.d}: xong ${x.completed}</title></rect>
+        <text x="${cx + W / 2}" y="${H + 14}" font-size="9" text-anchor="middle" fill="#64748b">${lbl}</text>
+      </g>`;
+  }).join("");
+  return `
+    <div style="overflow-x:auto"><svg width="${Math.max(totalW, 300)}" height="${H + 20}" style="min-width:100%">
+      ${bars}</svg></div>
+    <div class="donut-legend" style="margin-top:8px">
+      <div class="donut-legend-item"><span class="dot" style="background:#3b82f6"></span>Tạo mới</div>
+      <div class="donut-legend-item"><span class="dot" style="background:#22c55e"></span>Hoàn thành</div>
+    </div>`;
+}
+
+/** Thống kê theo ngày. */
+export async function renderStatsDaily(root: HTMLElement): Promise<void> {
+  root.innerHTML = `
+    <div class="page-head"><div><h2>📅 Thống kê theo ngày</h2>
+    <p class="page-sub">Số lượt tạo mới và hoàn thành từng ngày.</p></div></div>
+    <div class="filter-bar">
+      <input class="input" type="date" id="st-from" title="Từ ngày" />
+      <input class="input" type="date" id="st-to" title="Đến ngày" />
+      <button class="btn primary" id="st-filter">Lọc</button>
+    </div>
+    <div id="st-result"><p class="empty">Đang tải…</p></div>`;
+
+  const resultEl = root.querySelector<HTMLElement>("#st-result")!;
+
+  async function reload(): Promise<void> {
+    try {
+      const fromEl = root.querySelector<HTMLInputElement>("#st-from")!;
+      const toEl = root.querySelector<HTMLInputElement>("#st-to")!;
+      const data = await api.dashboardDaily({ from: fromEl.value, to: toEl.value });
+      const days = (data.days || []).map((x) => ({ d: x.date, created: x.created, completed: x.completed }));
+      const tc = data.totals?.created || 0;
+      const td = data.totals?.completed || 0;
+      resultEl.innerHTML = `
+        <div class="stat-cards">
+          <div class="stat-card"><div class="stat-num">${tc}</div><div class="stat-label">Lượt tạo</div></div>
+          <div class="stat-card"><div class="stat-num">${td}</div><div class="stat-label">Lượt xong</div></div>
+          <div class="stat-card"><div class="stat-num">${pct(td, tc)}</div><div class="stat-label">Tỉ lệ xong</div></div>
+        </div>
+        <div class="card"><h3>Biểu đồ theo ngày</h3>${verticalBarChart(days)}</div>
+        <div class="card"><h3>Chi tiết từng ngày</h3>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>Ngày</th><th>Tạo mới</th><th>Hoàn thành</th><th>Tỉ lệ</th></tr></thead>
+            <tbody>
+              ${days.map((x) => `<tr><td>${esc(x.d)}</td><td>${x.created || 0}</td><td>${x.completed || 0}</td><td>${pct(x.completed || 0, x.created || 0)}</td></tr>`).join("")}
+            </tbody>
+          </table></div>
+        </div>`;
+    } catch (e) {
+      resultEl.innerHTML = `<p class="empty">Lỗi: ${esc(msg(e))}</p>`;
+    }
+  }
+
+  // Mặc định 30 ngày gần nhất.
+  const toEl = root.querySelector<HTMLInputElement>("#st-to")!;
+  const fromEl = root.querySelector<HTMLInputElement>("#st-from")!;
+  const today = new Date();
+  toEl.value = today.toISOString().slice(0, 10);
+  const d30 = new Date(today); d30.setDate(d30.getDate() - 29);
+  fromEl.value = d30.toISOString().slice(0, 10);
 
   root.querySelector("#st-filter")!.addEventListener("click", reload);
   await reload();
