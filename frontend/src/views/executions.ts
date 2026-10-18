@@ -1174,7 +1174,7 @@ function detailHtml(e: ExecutionDetail): string {
                 <span class="pill ${st.status === "PASSED" ? "green" : st.status === "SKIPPED" ? "gray" : st.status === "IN_PROGRESS" ? "blue" : "gray"}">${esc(STEP_STATUS_LABELS[st.status] ?? st.status)}</span>
                 ${minPhotos > 0 ? ` <span class="pill orange" title="Yêu cầu ít nhất ${minPhotos} ảnh">📷 ${minPhotos} ảnh</span>` : ""}
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? ` <span class="pill amber" title="Lý do: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")}&#10;Lúc: ${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")}">🔄 Làm lại ${esc(String((st as unknown as Record<string, unknown>).redo_count))} lần</span>` : ""}
-                ${st.role ? `<div class="muted small">Vai trò: ${esc(st.role)}</div>` : ""}
+                ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👤 Thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
                 ${st.skip_reason ? `<div class="muted small">Lý do bỏ qua: ${esc(st.skip_reason)}</div>` : ""}
                 ${st.note ? `<div class="muted small">Ghi chú: ${esc(st.note)}</div>` : ""}
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? `<div class="muted small" style="color:#b45309;">🔄 Yêu cầu làm lại: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")} (${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")})</div>` : ""}
