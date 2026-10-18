@@ -984,7 +984,18 @@ function detailHtml(e: ExecutionDetail): string {
       <h3>Thông tin lượt công việc</h3>
       <dl class="info-list">
         <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}${(e.redo_steps ?? 0) > 0 ? ` <span class="pill amber">🔄 Bị trả lại làm lại ${e.redo_steps} bước</span>` : ""}</dd></div>
-        ${(e.redo_steps ?? 0) > 0 ? `<div class="info-row"><dt>Từ chối gần nhất</dt><dd>👤 ${esc(e.last_redo_by_name ?? "—")} · 🕐 ${esc(e.last_redo_at ?? "—")}<br/><span class="muted">Lý do: ${esc(e.last_redo_reason ?? "—")}</span></dd></div>` : ""}
+        ${((e as unknown as { reject_history?: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history ?? []).length > 0 ? `
+        <div class="info-row"><dt>Lịch sử từ chối (${(e as unknown as { reject_history: Array<unknown> }).reject_history.length} lần)</dt><dd>
+          <div style="max-height:180px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px;">
+            ${(e as unknown as { reject_history: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history.map((h, i) => `
+              <div style="margin-bottom:8px;padding-bottom:8px;${i < (e as unknown as { reject_history: Array<unknown> }).reject_history.length - 1 ? "border-bottom:1px solid var(--line);" : ""}">
+                <strong>Lần ${ (e as unknown as { reject_history: Array<unknown> }).reject_history.length - i}</strong>
+                ${h.action === "redo" ? ` · 🔄 Yêu cầu làm lại ${h.step_count} bước` : " · 🗑️ Hủy lượt"}<br/>
+                <span class="muted small">👤 ${esc(h.by_name ?? "—")} · 🕐 ${esc(h.at)}</span><br/>
+                <span>Lý do: ${esc(h.reason ?? "—")}</span>
+              </div>`).join("")}
+          </div>
+        </dd></div>` : ""}
         <div class="info-row"><dt>Quy trình</dt><dd>${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})</dd></div>
         <div class="info-row"><dt>Ngày thực hiện (dự kiến)</dt><dd>${esc(e.execution_date ?? "—")}${e.execution_time ? ` · ${esc(e.execution_time)}` : ""}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>
         ${e.started_at ? `<div class="info-row"><dt>Bắt đầu lúc</dt><dd>${esc(e.started_at.slice(0, 16).replace("T", " ").split(" ").map((s, i) => i === 0 ? s.split("-").reverse().join("/") : s).join(" "))}</dd></div>` : ""}

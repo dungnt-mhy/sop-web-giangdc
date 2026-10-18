@@ -168,6 +168,13 @@ export interface AppException {
 export interface ExecutionDetail extends Execution {
   process_code: string | null;
   steps: ExecutionStep[];
+  reject_history?: Array<{
+    by_name: string | null;
+    at: string;
+    reason: string | null;
+    action: string;
+    step_count: number;
+  }>;
 }
 
 // --- Bước công việc (Task 1.5) ---

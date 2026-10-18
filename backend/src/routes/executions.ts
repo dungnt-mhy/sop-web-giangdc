@@ -109,6 +109,35 @@ async function getRedoInfo(db: D1Database, executionId: string): Promise<{ redo_
   };
 }
 
+/** Lấy toàn bộ lịch sử từ chối xác nhận của một lượt (từ audit log). */
+async function getRejectHistory(db: D1Database, executionId: string): Promise<Array<{
+  by_name: string | null;
+  at: string;
+  reason: string | null;
+  action: string;
+  step_count: number;
+}>> {
+  const rows = await db.prepare(
+    `SELECT a.occurred_at AS at, a.diff_json, u.display_name AS by_name
+     FROM audit_events a LEFT JOIN users u ON u.id = a.actor_id
+     WHERE a.object_type = 'execution' AND a.object_id = ?
+       AND a.event_type IN ('EXECUTION_CONFIRM_REJECTED_REDO', 'EXECUTION_CONFIRM_REJECTED_CANCEL')
+     ORDER BY a.occurred_at DESC`
+  ).bind(executionId).all<{ at: string; diff_json: string | null; by_name: string | null }>();
+  return (rows.results ?? []).map((r) => {
+    let diff: Record<string, unknown> = {};
+    try { diff = r.diff_json ? JSON.parse(r.diff_json) : {}; } catch { /* ignore */ }
+    const stepIds = Array.isArray(diff.step_ids) ? diff.step_ids : [];
+    return {
+      by_name: r.by_name,
+      at: r.at,
+      reason: typeof diff.reason === "string" ? diff.reason : null,
+      action: stepIds.length > 0 ? "redo" : "cancel",
+      step_count: stepIds.length,
+    };
+  });
+}
+
 function toPublicStep(s: ExecStepRow) {
   return {
     id: s.id,
@@ -386,6 +415,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   }
   const progress = await getProgress(db, id);
   const redoInfo = await getRedoInfo(db, id);
+  const rejectHistory = await getRejectHistory(db, id);
   // Lấy người được phân công và số bằng chứng cho từng bước (cho tab sơ đồ).
   const assigneeMap = new Map<string, { display_name: string }[]>();
   const evidenceMap = new Map<string, number>();
@@ -417,6 +447,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     approver_name: (e as unknown as Record<string, unknown>).approver_id ? nameById[(e as unknown as Record<string, unknown>).approver_id as string] ?? null : null,
     approved_by_name: (e as unknown as Record<string, unknown>).approved_by ? nameById[(e as unknown as Record<string, unknown>).approved_by as string] ?? null : null,
     approved_at: (e as unknown as Record<string, unknown>).approved_at ?? null,
+    reject_history: rejectHistory,
     steps: (steps.results ?? []).map((s) => ({
       ...toPublicStep(s),
       positions: execPosMap.get(s.id) ?? [],
