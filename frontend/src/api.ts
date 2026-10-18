@@ -95,6 +95,10 @@ export interface Execution {
   completed_at: string | null;
   process_name: string | null;
   progress: { total: number; done: number } | null;
+  redo_steps?: number;
+  last_redo_by_name?: string | null;
+  last_redo_at?: string | null;
+  last_redo_reason?: string | null;
 }
 
 export interface ExecutionStep {

@@ -58,7 +58,7 @@ type ExecStepRow = {
   skip_reason: string | null;
 };
 
-function toPublicExec(e: ExecutionRow, processName?: string, progress?: { total: number; done: number }) {
+function toPublicExec(e: ExecutionRow, processName?: string, progress?: { total: number; done: number }, redoInfo?: { redo_steps: number; last_redo_by_name: string | null; last_redo_at: string | null; last_redo_reason: string | null }) {
   return {
     id: e.id,
     code: e.code,
@@ -79,6 +79,33 @@ function toPublicExec(e: ExecutionRow, processName?: string, progress?: { total:
     completed_at: e.completed_at,
     process_name: processName ?? null,
     progress: progress ?? null,
+    redo_steps: redoInfo?.redo_steps ?? 0,
+    last_redo_by_name: redoInfo?.last_redo_by_name ?? null,
+    last_redo_at: redoInfo?.last_redo_at ?? null,
+    last_redo_reason: redoInfo?.last_redo_reason ?? null,
+  };
+}
+
+/** Lấy thông tin làm lại của một lượt (số bước bị trả lại, người từ chối gần nhất...). */
+async function getRedoInfo(db: D1Database, executionId: string): Promise<{ redo_steps: number; last_redo_by_name: string | null; last_redo_at: string | null; last_redo_reason: string | null }> {
+  const r = await db.prepare(
+    `SELECT COUNT(*) AS redo_steps, MAX(es.redo_at) AS last_redo_at
+     FROM execution_steps es WHERE es.execution_id = ? AND es.redo_count > 0`
+  ).bind(executionId).first<{ redo_steps: number; last_redo_at: string | null }>();
+  if (!r || (r.redo_steps ?? 0) === 0) {
+    return { redo_steps: 0, last_redo_by_name: null, last_redo_at: null, last_redo_reason: null };
+  }
+  const last = await db.prepare(
+    `SELECT es.redo_reason AS last_redo_reason, u.display_name AS last_redo_by_name
+     FROM execution_steps es LEFT JOIN users u ON u.id = es.redo_by
+     WHERE es.execution_id = ? AND es.redo_count > 0
+     ORDER BY es.redo_at DESC LIMIT 1`
+  ).bind(executionId).first<{ last_redo_reason: string | null; last_redo_by_name: string | null }>();
+  return {
+    redo_steps: r.redo_steps ?? 0,
+    last_redo_by_name: last?.last_redo_by_name ?? null,
+    last_redo_at: r.last_redo_at,
+    last_redo_reason: last?.last_redo_reason ?? null,
   };
 }
 
@@ -167,7 +194,8 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
   const items = [];
   for (const r of rows.results) {
     const progress = await getProgress(db, r.id);
-    items.push({ ...toPublicExec(r, r.process_name, progress), assignee_name: r.assignee_name, creator_name: r.creator_name, supervisor_name: r.supervisor_name });
+    const redoInfo = await getRedoInfo(db, r.id);
+    items.push({ ...toPublicExec(r, r.process_name, progress, redoInfo), assignee_name: r.assignee_name, creator_name: r.creator_name, supervisor_name: r.supervisor_name });
   }
   return ok({ items, total: items.length });
 }
@@ -357,6 +385,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     }
   }
   const progress = await getProgress(db, id);
+  const redoInfo = await getRedoInfo(db, id);
   // Lấy người được phân công và số bằng chứng cho từng bước (cho tab sơ đồ).
   const assigneeMap = new Map<string, { display_name: string }[]>();
   const evidenceMap = new Map<string, number>();
@@ -378,7 +407,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     for (const r of evRows.results ?? []) evidenceMap.set(r.execution_step_id, r.cnt);
   }
   return ok({
-    ...toPublicExec(e, pname?.name, progress),
+    ...toPublicExec(e, pname?.name, progress, redoInfo),
     process_code: pname?.code ?? null,
     assignee_name: e.assignee_id ? nameById[e.assignee_id] ?? null : null,
     creator_name: creatorId ? nameById[creatorId] ?? null : null,
@@ -552,7 +581,8 @@ async function transitionExecution(
   });
   const updated = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
   const progress = await getProgress(db, id);
-  return ok(toPublicExec(updated!, undefined, progress));
+  const redoInfo = await getRedoInfo(db, id);
+  return ok(toPublicExec(updated!, undefined, progress, redoInfo));
 }
 
 export const handleStartExecution = (ctx: Ctx, id: string) =>
@@ -665,7 +695,8 @@ export async function handleRejectConfirmation(ctx: Ctx, id: string): Promise<Re
   }
   const updated = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
   const progress = await getProgress(db, id);
-  return ok(toPublicExec(updated!, undefined, progress));
+  const redoInfo = await getRedoInfo(db, id);
+  return ok(toPublicExec(updated!, undefined, progress, redoInfo));
 }
 
 // POST .../{id}/steps/{sid}:start — bắt đầu bước (AC-04: kiểm tra bước trước).
