@@ -97,7 +97,7 @@ export async function handleSeedTestData(ctx: Ctx): Promise<Response> {
   }
 
   // Lấy users.
-  const users = await db.prepare(`SELECT id, display_name FROM users WHERE is_active = 1 LIMIT 10`)
+  const users = await db.prepare(`SELECT id, display_name FROM users WHERE status = 'active' LIMIT 10`)
     .all<{ id: string; display_name: string }>();
   const userList = users.results ?? [];
   if (userList.length === 0) {
