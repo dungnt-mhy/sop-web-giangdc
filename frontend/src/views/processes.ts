@@ -886,14 +886,9 @@ function openStepDialog(
               value="${(() => { try { const cr = step?.completion_req as Record<string, unknown> | null; const v = cr?.["min_photos"]; return typeof v === "number" ? String(v) : ""; } catch { return ""; } })()}"
               placeholder="VD: 2 (0 = không yêu cầu)" /></label>
         </div>
-        <div class="form-grid">
-          <label class="check"><input type="checkbox" name="is_required" ${step?.is_required !== false ? "checked" : ""} />
-            Bước bắt buộc</label>
-        </div>
-        <h4 style="margin-top:12px">Cho phép bỏ qua (PRC-007)</h4>
-        <label class="check"><input type="checkbox" name="allow_skip" id="step-allow-skip"
+        <h4 style="margin-top:12px"><label class="check" style="font-size:16px"><input type="checkbox" name="allow_skip" id="step-allow-skip"
           ${(step?.skip_policy as unknown as { allowed?: boolean } | null)?.allowed ? "checked" : ""} />
-          Cho phép bỏ qua bước này</label>
+          ⏭️ Cho phép bỏ qua bước này</label></h4>
         <label>⏭️ Vai trò được bỏ qua
           <div class="roles-grid" id="step-skip-positions">
             <span class="muted small">Đang tải…</span>
@@ -943,7 +938,7 @@ function openStepDialog(
     const input: Record<string, unknown> = {
       code: String(fd.get("code") ?? "").trim(),
       title: String(fd.get("title") ?? "").trim(),
-      is_required: fd.get("is_required") === "on",
+      is_required: true,
     };
     for (const k of ["prerequisite", "input_desc", "instruction", "expected_result", "output_desc", "note", "warning"]) {
       const s = String(fd.get(k) ?? "").trim();
