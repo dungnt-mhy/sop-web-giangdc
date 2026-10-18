@@ -142,8 +142,10 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
           </select>
           <span class="hint">Để trống = người tạo cũng là người thực hiện chính.</span></label>
         <label>Người giám sát <span class="hint">(chọn nhiều)</span></label>
+        <input class="input" type="search" id="exec-sup-search" placeholder="🔍 Tìm theo tên…" style="margin-bottom:6px" />
         <div class="check-list" id="exec-supervisors" style="max-height:120px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
         <label>Người phê duyệt hoàn thành <span class="hint">(chọn nhiều)</span></label>
+        <input class="input" type="search" id="exec-apr-search" placeholder="🔍 Tìm theo tên…" style="margin-bottom:6px" />
         <div class="check-list" id="exec-approvers" style="max-height:120px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
         <span class="hint">Nếu chọn cụ thể: chỉ những người đó (hoặc quản trị viên) mới được phê duyệt hoàn thành. Để trống: giám sát/quản lý duyệt.</span>
         <p class="form-error" id="exec-error" role="alert" hidden></p>
@@ -164,25 +166,52 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
   const supList = dialogRoot.querySelector<HTMLElement>("#exec-supervisors")!;
   const aprList = dialogRoot.querySelector<HTMLElement>("#exec-approvers")!;
   // Tải danh sách người dùng cho ô chọn người thực hiện / giám sát / phê duyệt.
+  const renderChecks = (el: HTMLElement, users: { id: string; display_name: string; username: string; position: string | null; position_name: string | null }[]) => {
+    el.innerHTML = users.map((u) => {
+      const posName = u.position_name ?? u.position;
+      const label = posName ? `${esc(u.display_name)} — ${esc(posName)}` : esc(u.display_name);
+      const checked = el.querySelector<HTMLInputElement>(`input[value="${u.id}"]:checked`) ? "checked" : "";
+      return `<label class="check"><input type="checkbox" value="${esc(u.id)}" ${checked} /> ${label}</label>`;
+    }).join("") || `<p class="empty">Không tìm thấy.</p>`;
+  };
+  let supUsers: { id: string; display_name: string; username: string; position: string | null; position_name: string | null }[] = [];
+  let aprUsers: typeof supUsers = [];
   api.listActiveUsers().then((res) => {
     const items = res?.items ?? [];
-    const active = items;
-    if (active.length > 0) {
-      const opts = active.map((u) => {
+    if (items.length > 0) {
+      const opts = items.map((u) => {
         const posName = u.position_name ?? u.position;
         const label = posName ? `${esc(u.display_name)} — ${esc(posName)}` : esc(u.display_name);
         return `<option value="${esc(u.id)}">${label} (${esc(u.username)})</option>`;
       }).join("");
       selAssignee.innerHTML = `<option value="">Tôi (mặc định)</option>` + opts;
-      const checks = active.map((u) => {
-        const posName = u.position_name ?? u.position;
-        const label = posName ? `${esc(u.display_name)} — ${esc(posName)}` : esc(u.display_name);
-        return `<label class="check"><input type="checkbox" value="${esc(u.id)}" /> ${label}</label>`;
-      }).join("");
-      supList.innerHTML = checks;
-      aprList.innerHTML = checks;
+      supUsers = items;
+      aprUsers = items;
+      renderChecks(supList, supUsers);
+      renderChecks(aprList, aprUsers);
     }
   }).catch(() => { /* giữ mặc định */ });
+  // Tìm kiếm theo tên.
+  const supSearch = dialogRoot.querySelector<HTMLInputElement>("#exec-sup-search")!;
+  const aprSearch = dialogRoot.querySelector<HTMLInputElement>("#exec-apr-search")!;
+  let supTimer: number | undefined;
+  supSearch.addEventListener("input", () => {
+    clearTimeout(supTimer);
+    supTimer = window.setTimeout(async () => {
+      const { items } = await api.listActiveUsers(supSearch.value.trim());
+      supUsers = items ?? [];
+      renderChecks(supList, supUsers);
+    }, 300);
+  });
+  let aprTimer: number | undefined;
+  aprSearch.addEventListener("input", () => {
+    clearTimeout(aprTimer);
+    aprTimer = window.setTimeout(async () => {
+      const { items } = await api.listActiveUsers(aprSearch.value.trim());
+      aprUsers = items ?? [];
+      renderChecks(aprList, aprUsers);
+    }, 300);
+  });
   // Mặc định ngày và giờ là hiện tại.
   const dateInput = dialogRoot.querySelector<HTMLInputElement>("#exec-date")!;
   const timeInput = dialogRoot.querySelector<HTMLInputElement>("#exec-time")!;

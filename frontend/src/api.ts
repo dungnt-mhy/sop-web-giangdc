@@ -300,8 +300,12 @@ export const api = {
   listUsers(cursor?: string | null): Promise<{ items: PublicUser[]; next_cursor: string | null }> {
     return req("GET", "/users?limit=25" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : ""));
   },
-  listActiveUsers(): Promise<{ items: { id: string; username: string; display_name: string; position: string | null; position_id: string | null; position_name: string | null }[] }> {
-    return req("GET", "/users/active");
+  listActiveUsers(q?: string, role?: string): Promise<{ items: { id: string; username: string; display_name: string; position: string | null; position_id: string | null; position_name: string | null }[] }> {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (role) params.set("role", role);
+    const qs = params.toString();
+    return req("GET", "/users/active" + (qs ? `?${qs}` : ""));
   },
   // --- Chức vụ ---
   listPositions(): Promise<{ items: { id: string; name: string; description: string | null }[]; total: number }> {
