@@ -393,6 +393,14 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         }
         await api.skipStep(execId, sid, reason.trim());
         toast("Đã bỏ qua bước.");
+      } else if (act === "request-skip") {
+        const reason = prompt(`Lý do xin bỏ qua bước "${step?.code}":`);
+        if (!reason?.trim()) {
+          restore();
+          return;
+        }
+        await api.requestSkip(execId, sid, reason.trim());
+        toast("Đã gửi yêu cầu xin bỏ qua. Chờ giám sát duyệt.");
       } else if (act === "assign") {
         restore();
         const stepPositions = ((step as unknown as Record<string, unknown>)?.positions as { id: string; name: string }[] ?? []);
@@ -1110,7 +1118,8 @@ function detailHtml(e: ExecutionDetail): string {
         ${e.steps.map((st, idx) => {
           const canStart = active && st.status === "NOT_STARTED";
           const canFinish = active && st.status === "IN_PROGRESS";
-          const canSkip = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") && !st.is_required;
+          const skipAllowed = ((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed === true;
+          const canSkip = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") && skipAllowed;
           const canUpload = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS");
           // Yêu cầu ảnh từ completion_req (EXE-007).
           let minPhotos = 0;
@@ -1135,7 +1144,8 @@ function detailHtml(e: ExecutionDetail): string {
               <div class="step-actions">
                 ${canStart ? `<button class="btn sm primary" data-step="start">Bắt đầu</button>` : ""}
                 ${canFinish ? `<button class="btn sm primary" data-step="complete">Hoàn thành</button>` : ""}
-                ${canSkip ? `<button class="btn sm" data-step="skip">Bỏ qua</button>` : ""}
+                ${canSkip ? `<button class="btn sm" data-step="skip">⏭️ Bỏ qua</button>` : ""}
+                ${canSkip ? `<button class="btn sm secondary" data-step="request-skip">🙏 Xin bỏ qua</button>` : ""}
                 ${active ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : ""}
               </div>
               <div class="step-assignees" data-assignees-for="${esc(st.id)}"><span class="muted small">Đang tải…</span></div>

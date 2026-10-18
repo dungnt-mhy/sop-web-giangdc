@@ -496,6 +496,15 @@ export const api = {
   skipStep(execId: string, stepId: string, skip_reason: string): Promise<ExecutionStep> {
     return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:skip`, { skip_reason });
   },
+  requestSkip(execId: string, stepId: string, reason: string): Promise<{ requested: boolean }> {
+    return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:request-skip`, { reason });
+  },
+  approveSkip(execId: string, stepId: string): Promise<{ approved: boolean }> {
+    return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:approve-skip`, {});
+  },
+  rejectSkip(execId: string, stepId: string, reason: string): Promise<{ rejected: boolean }> {
+    return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:reject-skip`, { reason });
+  },
 
   // --- Bằng chứng (Task 1.7: EVD-001..013) ---
   listEvidence(execId: string, stepId: string): Promise<{ items: Evidence[]; total: number }> {
