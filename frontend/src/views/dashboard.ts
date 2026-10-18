@@ -11,6 +11,7 @@ const STATUS_LABELS: Record<string, string> = {
   CREATED: "Mới tạo",
   IN_PROGRESS: "Đang thực hiện",
   PAUSED: "Tạm dừng",
+  PENDING_CONFIRMATION: "Chờ xác nhận",
   COMPLETED: "Hoàn thành",
   CANCELLED: "Đã hủy",
 };
@@ -19,6 +20,7 @@ const STATUS_COLORS: Record<string, string> = {
   CREATED: "#94a3b8",
   IN_PROGRESS: "#3b82f6",
   PAUSED: "#f59e0b",
+  PENDING_CONFIRMATION: "#a855f7",
   COMPLETED: "#22c55e",
   CANCELLED: "#ef4444",
 };

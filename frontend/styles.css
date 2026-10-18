@@ -725,3 +725,14 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   .chart-row { grid-template-columns: 110px 1fr 40px; gap: 6px; }
   .chart-label { font-size: 12px; }
 }
+
+/* Card header với nút action. */
+.card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.card-head h3 { margin: 0; }
+
+/* Bảng thống kê mobile: đảm bảo đủ rộng để scroll ngang mượt. */
+@media (max-width: 640px) {
+  .table-wrap .table { min-width: 560px; }
+  .table-wrap .table th, .table-wrap .table td { padding: 8px 6px; font-size: 13px; white-space: nowrap; }
+  .table-wrap .table td strong { white-space: normal; }
+}

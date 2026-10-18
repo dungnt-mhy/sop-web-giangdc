@@ -56,6 +56,38 @@ function pct(a: number, b: number): string {
   return `${Math.round((a / b) * 100)}%`;
 }
 
+/** Xuất dữ liệu ra file CSV (Excel mở được). */
+function exportCsv(filename: string, headers: string[], rows: (string | number)[][]): void {
+  const escCsv = (v: string | number): string => {
+    const s = String(v ?? "");
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  const csv = "\uFEFF" + [headers.map(escCsv).join(","), ...rows.map((r) => r.map(escCsv).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("Đã xuất file Excel.");
+}
+
+/** Gắn nút xuất Excel: đọc dữ liệu từ bảng HTML. */
+function bindExport(root: HTMLElement, filename: string): void {
+  root.addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement).closest("[data-export]");
+    if (!btn) return;
+    const card = btn.closest(".card");
+    const table = card?.querySelector("table");
+    if (!table) return;
+    const headers = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent?.trim() || "");
+    const rows = Array.from(table.querySelectorAll("tbody tr")).map((tr) =>
+      Array.from(tr.querySelectorAll("td")).map((td) => td.textContent?.trim() || "")
+    );
+    exportCsv(filename, headers, rows);
+  });
+}
+
 /** Khung lọc chung: từ ngày, đến ngày + slot lọc riêng. */
 function filterBar(extra: string): string {
   return `
@@ -110,6 +142,36 @@ export async function renderStatsUnit(root: HTMLElement): Promise<void> {
         resultEl.innerHTML = `<p class="empty">Chưa có dữ liệu.</p>`;
         return;
       }
+      // Nếu chọn 1 đơn vị cụ thể → hiện chi tiết sâu (khác tổng quan).
+      if (unitEl.value && items.length === 1) {
+        const r = items[0];
+        const t = Number(r.total) || 0;
+        const c = Number(r.completed) || 0;
+        const ip = Number(r.in_progress) || 0;
+        const p = Number(r.pending) || 0;
+        const cr = Number(r.created) || 0;
+        const ca = Number(r.cancelled) || 0;
+        resultEl.innerHTML = `
+          <div class="page-head"><div><h3>🏢 ${esc(String(r.unit_name))}</h3>
+          <p class="page-sub">Loại: ${esc(String(r.unit_type || "—"))} · Tổng ${t} lượt</p></div></div>
+          <div class="stat-cards">
+            <div class="stat-card"><div class="stat-num" style="color:#22c55e">${c}</div><div class="stat-label">Hoàn thành (${pct(c, t)})</div></div>
+            <div class="stat-card"><div class="stat-num" style="color:#3b82f6">${ip}</div><div class="stat-label">Đang thực hiện</div></div>
+            <div class="stat-card"><div class="stat-num" style="color:#a855f7">${p}</div><div class="stat-label">Chờ xác nhận</div></div>
+            <div class="stat-card"><div class="stat-num" style="color:#94a3b8">${cr}</div><div class="stat-label">Mới tạo</div></div>
+            <div class="stat-card"><div class="stat-num" style="color:#ef4444">${ca}</div><div class="stat-label">Đã hủy</div></div>
+          </div>
+          <div class="card"><h3>Phân bố trạng thái</h3>
+            ${donutChart([
+              { label: "Hoàn thành", value: c, color: "#22c55e" },
+              { label: "Đang thực hiện", value: ip, color: "#3b82f6" },
+              { label: "Chờ xác nhận", value: p, color: "#a855f7" },
+              { label: "Mới tạo", value: cr, color: "#94a3b8" },
+              { label: "Đã hủy", value: ca, color: "#ef4444" },
+            ])}
+          </div>`;
+        return;
+      }
       const total = items.reduce((a, r) => a + (Number(r.total) || 0), 0);
       resultEl.innerHTML = `
         <div class="stat-cards">
@@ -123,7 +185,7 @@ export async function renderStatsUnit(root: HTMLElement): Promise<void> {
             color: "#3b82f6",
           })))}
         </div>
-        <div class="card"><h3>Chi tiết</h3>
+        <div class="card"><div class="card-head"><h3>Chi tiết</h3><button class="btn sm" data-export>📥 Xuất Excel</button></div>
           <div class="table-wrap"><table class="table">
             <thead><tr><th>Đơn vị</th><th>Loại</th><th>Tổng</th><th>Hoàn thành</th><th>Đang làm</th><th>Chờ xác nhận</th><th>Mới tạo</th><th>Đã hủy</th><th>Tỉ lệ HT</th></tr></thead>
             <tbody>
@@ -146,6 +208,7 @@ export async function renderStatsUnit(root: HTMLElement): Promise<void> {
   }
 
   root.querySelector("#st-filter")!.addEventListener("click", reload);
+  bindExport(root, "thong-ke.csv");
   await reload();
 }
 
@@ -184,7 +247,7 @@ export async function renderStatsPerson(root: HTMLElement): Promise<void> {
             color: "#22c55e",
           })))}
         </div>
-        <div class="card"><h3>Chi tiết</h3>
+        <div class="card"><div class="card-head"><h3>Chi tiết</h3><button class="btn sm" data-export>📥 Xuất Excel</button></div>
           <div class="table-wrap"><table class="table">
             <thead><tr><th>Người</th><th>Tổng lượt</th><th>Hoàn thành</th><th>Đang làm</th><th>Chờ xác nhận</th><th>TB giờ/lượt</th><th>Tỉ lệ HT</th></tr></thead>
             <tbody>
@@ -205,6 +268,7 @@ export async function renderStatsPerson(root: HTMLElement): Promise<void> {
     }
   }
 
+  bindExport(root, "thong-ke.csv");
   root.querySelector("#st-filter")!.addEventListener("click", reload);
   await reload();
 }
@@ -234,7 +298,7 @@ export async function renderStatsProcess(root: HTMLElement): Promise<void> {
             color: "#8b5cf6",
           })))}
         </div>
-        <div class="card"><h3>Chi tiết</h3>
+        <div class="card"><div class="card-head"><h3>Chi tiết</h3><button class="btn sm" data-export>📥 Xuất Excel</button></div>
           <div class="table-wrap"><table class="table">
             <thead><tr><th>Mã</th><th>Quy trình</th><th>Tổng lượt</th><th>Hoàn thành</th><th>Đang làm</th><th>Đã hủy</th><th>Ngoại lệ</th><th>Tỉ lệ HT</th></tr></thead>
             <tbody>
@@ -255,6 +319,7 @@ export async function renderStatsProcess(root: HTMLElement): Promise<void> {
       resultEl.innerHTML = `<p class="empty">Lỗi: ${esc(msg(e))}</p>`;
     }
   }
+  bindExport(root, "thong-ke.csv");
 
   root.querySelector("#st-filter")!.addEventListener("click", reload);
   await reload();
@@ -287,7 +352,7 @@ export async function renderStatsShift(root: HTMLElement): Promise<void> {
             color: colors[i % colors.length],
           })))}
         </div>
-        <div class="card"><h3>Chi tiết</h3>
+        <div class="card"><div class="card-head"><h3>Chi tiết</h3><button class="btn sm" data-export>📥 Xuất Excel</button></div>
           <div class="table-wrap"><table class="table">
             <thead><tr><th>Ca</th><th>Tổng lượt</th><th>Hoàn thành</th><th>Đang làm</th><th>Đã hủy</th><th>Tỉ lệ HT</th><th>Tỉ trọng</th></tr></thead>
             <tbody>
@@ -305,6 +370,7 @@ export async function renderStatsShift(root: HTMLElement): Promise<void> {
     } catch (e) {
       resultEl.innerHTML = `<p class="empty">Lỗi: ${esc(msg(e))}</p>`;
     }
+  bindExport(root, "thong-ke.csv");
   }
 
   root.querySelector("#st-filter")!.addEventListener("click", reload);
@@ -387,6 +453,7 @@ export async function renderStatsDaily(root: HTMLElement): Promise<void> {
   const fromEl = root.querySelector<HTMLInputElement>("#st-from")!;
   const today = new Date();
   toEl.value = today.toISOString().slice(0, 10);
+  bindExport(root, "thong-ke.csv");
   const d30 = new Date(today); d30.setDate(d30.getDate() - 29);
   fromEl.value = d30.toISOString().slice(0, 10);
 
