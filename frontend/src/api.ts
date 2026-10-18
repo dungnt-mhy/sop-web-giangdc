@@ -187,6 +187,16 @@ export interface AppNotification {
   created_at: string;
 }
 
+export interface AuditEvent {
+  id: string;
+  event_type: string;
+  object_type: string | null;
+  object_id: string | null;
+  occurred_at: string;
+  actor_name: string | null;
+  diff_json: string | null;
+}
+
 // --- Bước công việc (Task 1.5) ---
 export interface ProcessStep {
   id: string;
@@ -599,6 +609,15 @@ export const api = {
   },
   markAllNotificationsRead(): Promise<{ ok: boolean }> {
     return req("POST", `/notifications/read-all`);
+  },
+  updateExecution(id: string, input: Record<string, unknown>): Promise<Execution> {
+    return req("PATCH", `/executions/${encodeURIComponent(id)}`, input);
+  },
+  listAudit(params: string): Promise<{ items: AuditEvent[]; total: number }> {
+    return req("GET", `/audit${params ? "?" + params : ""}`);
+  },
+  listAuditEventTypes(): Promise<{ items: string[] }> {
+    return req("GET", `/audit/event-types`);
   },
 };
 

@@ -399,6 +399,8 @@ function renderActions(
   const btns: string[] = [];
   if (e.status === "CREATED") {
     btns.push(`<button class="btn primary" data-ea="start">Bắt đầu</button>`);
+    btns.push(`<button class="btn" data-ea="edit">✏️ Sửa</button>`);
+    btns.push(`<button class="btn danger" data-ea="cancel">🗑️ Hủy lượt</button>`);
   }
   if (e.status === "IN_PROGRESS") {
     btns.push(`<button class="btn" data-ea="pause">⏸️ Tạm dừng</button>`);
@@ -424,6 +426,10 @@ function renderActions(
       if (act === "start") {
         await api.startExecution(e.id);
         toast("Đã bắt đầu lượt.");
+      } else if (act === "edit") {
+        restore();
+        openEditExecutionDialog(dialogRoot, e, async () => { await reload(); });
+        return;
       } else if (act === "pause") {
         await api.pauseExecution(e.id);
         toast("Đã tạm dừng.");
@@ -602,6 +608,74 @@ function openCompleteConfirm(
   dialogRoot.querySelector("#cc-ok")!.addEventListener("click", () => {
     close();
     onConfirm();
+  });
+}
+
+/** Dialog sửa lượt công việc ở trạng thái Mới tạo. */
+function openEditExecutionDialog(
+  dialogRoot: HTMLElement,
+  e: import("../api.js").Execution,
+  onDone: () => Promise<void>
+): void {
+  api.getExecution(e.id).then((detail) => {
+    const d = detail as unknown as Record<string, unknown>;
+    dialogRoot.innerHTML = `
+      <div class="dialog-backdrop" data-close>
+        <div class="dialog" role="dialog" aria-modal="true" aria-label="Sửa lượt công việc">
+          <h3>✏️ Sửa lượt "${esc(e.code)}"</h3>
+          <form id="edit-exec-form">
+            <label>Tiêu đề
+              <input class="input" name="title" maxlength="200" value="${esc((d.title as string) ?? "")}"
+                placeholder="VD: Xuất hàng đợt sáng" /></label>
+            <label>Ngày thực hiện <span class="req">*</span>
+              <input class="input" type="date" name="execution_date" required
+                value="${esc((d.execution_date as string) ?? "")}" /></label>
+            <label>Giờ thực hiện
+              <input class="input" type="time" name="execution_time"
+                value="${esc((d.execution_time as string) ?? "")}" /></label>
+            <label>Ca làm việc
+              <select class="input" name="shift">
+                <option value="">— Chọn ca —</option>
+                <option value="MORNING" ${d.shift === "MORNING" ? "selected" : ""}>Sáng</option>
+                <option value="NOON" ${d.shift === "NOON" ? "selected" : ""}>Trưa</option>
+                <option value="AFTERNOON" ${d.shift === "AFTERNOON" ? "selected" : ""}>Chiều</option>
+                <option value="NIGHT" ${d.shift === "NIGHT" ? "selected" : ""}>Tối</option>
+              </select></label>
+            <p class="muted small">Người thực hiện, giám sát, phê duyệt: sửa ở màn hình phân công sau khi tạo. Chỉ sửa được khi lượt còn ở trạng thái "Mới tạo".</p>
+            <p class="form-error" id="edit-exec-error" role="alert" hidden></p>
+            <div class="dialog-actions">
+              <button type="button" class="btn" id="edit-exec-cancel">Huỷ</button>
+              <button type="submit" class="btn primary">Lưu</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    const close = () => { dialogRoot.innerHTML = ""; };
+    dialogRoot.querySelector("#edit-exec-cancel")!.addEventListener("click", close);
+    dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+      if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+    });
+    dialogRoot.querySelector<HTMLFormElement>("#edit-exec-form")!.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(ev.target as HTMLFormElement);
+      const errEl = dialogRoot.querySelector<HTMLElement>("#edit-exec-error")!;
+      try {
+        await api.updateExecution(e.id, {
+          title: String(fd.get("title") ?? "").trim() || null,
+          execution_date: String(fd.get("execution_date") ?? ""),
+          execution_time: String(fd.get("execution_time") ?? "") || null,
+          shift: String(fd.get("shift") ?? "") || null,
+        });
+        toast("Đã lưu thay đổi.");
+        close();
+        await onDone();
+      } catch (err) {
+        errEl.textContent = msg(err);
+        errEl.hidden = false;
+      }
+    });
+  }).catch((err) => {
+    toast(`Lỗi: ${msg(err)}`);
   });
 }
 

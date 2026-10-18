@@ -618,3 +618,62 @@ function formatBytes(n: number): string {
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
   return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
+
+/** Trang nhật ký audit (#/audit) — xem lịch sử thao tác. */
+export async function renderAudit(root: HTMLElement): Promise<void> {
+  root.innerHTML = `
+    <div class="page-head">
+      <div><h2>📋 Nhật ký hoạt động</h2>
+      <p class="page-sub">Lịch sử mọi thao tác trong hệ thống (ai làm gì, lúc nào).</p></div>
+    </div>
+    <div class="filter-bar">
+      <input class="input" id="audit-q" placeholder="Tìm theo loại sự kiện hoặc người thực hiện…" style="max-width:280px;" />
+      <select class="input" id="audit-type" style="max-width:220px;"><option value="">— Tất cả loại —</option></select>
+      <button class="btn primary" id="audit-filter">Lọc</button>
+    </div>
+    <div id="audit-list"><p class="empty">Đang tải…</p></div>`;
+
+  const listEl = root.querySelector<HTMLElement>("#audit-list")!;
+  const qEl = root.querySelector<HTMLInputElement>("#audit-q")!;
+  const typeEl = root.querySelector<HTMLSelectElement>("#audit-type")!;
+
+  try {
+    const { items } = await api.listAuditEventTypes();
+    typeEl.innerHTML = `<option value="">— Tất cả loại —</option>` +
+      items.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  } catch { /* ignore */ }
+
+  async function reload(): Promise<void> {
+    const params = new URLSearchParams();
+    if (qEl.value.trim()) params.set("q", qEl.value.trim());
+    if (typeEl.value) params.set("event_type", typeEl.value);
+    params.set("limit", "50");
+    try {
+      const { items, total } = await api.listAudit(params.toString());
+      if (items.length === 0) {
+        listEl.innerHTML = `<p class="empty">Chưa có dữ liệu.</p>`;
+        return;
+      }
+      listEl.innerHTML = `
+        <p class="muted small">Tổng ${total} sự kiện (hiện 50 mới nhất).</p>
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>Thời gian</th><th>Người thực hiện</th><th>Sự kiện</th><th>Đối tượng</th></tr></thead>
+          <tbody>
+            ${items.map((a) => `
+              <tr>
+                <td class="muted small">${esc(a.occurred_at)}</td>
+                <td>${esc(a.actor_name ?? "—")}</td>
+                <td><span class="pill gray">${esc(a.event_type)}</span></td>
+                <td class="muted small">${esc(a.object_type ?? "—")}${a.object_id ? ` · ${esc(a.object_id.slice(0, 8))}…` : ""}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table></div>`;
+    } catch (e) {
+      listEl.innerHTML = `<p class="empty">Không tải được: ${esc(msg(e))}</p>`;
+    }
+  }
+
+  root.querySelector("#audit-filter")!.addEventListener("click", reload);
+  qEl.addEventListener("keydown", (ev) => { if (ev.key === "Enter") reload(); });
+  await reload();
+}

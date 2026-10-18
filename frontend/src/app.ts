@@ -9,7 +9,7 @@ import { renderExecutionDetail, renderMyWork } from "./views/executions.js";
 import { renderProcessDetail, renderProcesses } from "./views/processes.js";
 import { renderUsers } from "./views/users.js";
 import { renderDashboard } from "./views/dashboard.js";
-import { renderExceptions, renderEvidence, renderOrgUnits, renderPositions, renderRoles } from "./views/management.js";
+import { renderAudit, renderExceptions, renderEvidence, renderOrgUnits, renderPositions, renderRoles } from "./views/management.js";
 
 let session: SessionInfo | null = null;
 
@@ -66,6 +66,7 @@ function renderShell(): void {
     { hash: "#/processes", label: "Quy trình" },
     { hash: "#/exceptions", label: "Ngoại lệ", perm: "exceptions.handle" },
     { hash: "#/evidence", label: "Bằng chứng", perm: "executions.view" },
+    { hash: "#/audit", label: "Nhật ký", perm: "audit.view" },
     {
       hash: "#/users", label: "Quản lý người dùng", perm: "users.manage",
       children: [
@@ -307,6 +308,15 @@ function route(): void {
       return;
     }
     void renderRoles(page);
+    return;
+  }
+  if (hash === "#/audit") {
+    if (!can("audit.view")) {
+      page.innerHTML = `<div class="card"><h3>Không có quyền</h3>
+        <p class="empty">Tài khoản của bạn không có quyền xem nhật ký.</p></div>`;
+      return;
+    }
+    void renderAudit(page);
     return;
   }
   const em = /^#\/executions\/([0-9a-f-]{36})$/.exec(hash);

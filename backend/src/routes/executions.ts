@@ -468,6 +468,99 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   });
 }
 
+// PATCH /api/v1/executions/{id} — sửa lượt ở trạng thái Mới tạo (CREATED).
+export async function handleUpdateExecution(ctx: Ctx, id: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+  const e = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
+  if (!e) return apiError("NOT_FOUND", "Không tìm thấy lượt thực hiện.", ctx.requestId);
+  if (e.status !== "CREATED") {
+    return apiError("VALIDATION_ERROR", "Chỉ sửa được lượt ở trạng thái Mới tạo.", ctx.requestId);
+  }
+  // Chỉ người tạo hoặc người có quyền manage mới được sửa.
+  const canManage = me.permissions.includes("*") || me.permissions.includes("executions.manage");
+  const creatorId = (e as unknown as Record<string, unknown>).creator_id as string | null;
+  if (!canManage && me.user.id !== creatorId && me.user.id !== e.created_by) {
+    return apiError("FORBIDDEN", "Bạn không có quyền sửa lượt này.", ctx.requestId);
+  }
+
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const updates: string[] = [];
+  const binds: unknown[] = [];
+  const setIf = (col: string, val: unknown) => { updates.push(`${col} = ?`); binds.push(val); };
+
+  if ("title" in (body ?? {})) {
+    const v = typeof body?.title === "string" ? body.title.trim() || null : null;
+    setIf("title", v);
+  }
+  if ("assignee_id" in (body ?? {})) {
+    const v = typeof body?.assignee_id === "string" && body.assignee_id.trim() ? body.assignee_id.trim() : null;
+    if (v) {
+      const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(v).first();
+      if (!u) return apiError("VALIDATION_ERROR", "Người thực hiện không tồn tại.", ctx.requestId);
+    }
+    setIf("assignee_id", v ?? me.user.id);
+  }
+  if ("execution_date" in (body ?? {})) {
+    const v = typeof body?.execution_date === "string" ? body.execution_date.trim() : "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      return apiError("VALIDATION_ERROR", "Ngày thực hiện không hợp lệ (YYYY-MM-DD).", ctx.requestId);
+    }
+    setIf("execution_date", v);
+  }
+  if ("execution_time" in (body ?? {})) {
+    const v = typeof body?.execution_time === "string" && /^\d{2}:\d{2}$/.test(body.execution_time.trim())
+      ? body.execution_time.trim() : null;
+    setIf("execution_time", v);
+  }
+  if ("shift" in (body ?? {})) {
+    const v = typeof body?.shift === "string" && ["MORNING", "NOON", "AFTERNOON", "NIGHT"].includes(body.shift)
+      ? body.shift : null;
+    setIf("shift", v);
+  }
+  if ("supervisor_id" in (body ?? {})) {
+    const v = typeof body?.supervisor_id === "string" && body.supervisor_id.trim() ? body.supervisor_id.trim() : null;
+    if (v) {
+      const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(v).first();
+      if (!u) return apiError("VALIDATION_ERROR", "Người giám sát không tồn tại.", ctx.requestId);
+    }
+    setIf("supervisor_id", v);
+  }
+  if ("approver_id" in (body ?? {})) {
+    const v = typeof body?.approver_id === "string" && body.approver_id.trim() ? body.approver_id.trim() : null;
+    if (v) {
+      const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(v).first();
+      if (!u) return apiError("VALIDATION_ERROR", "Người phê duyệt không tồn tại.", ctx.requestId);
+    }
+    setIf("approver_id", v);
+  }
+  if ("due_at" in (body ?? {})) {
+    const v = typeof body?.due_at === "string" && body.due_at.trim() ? body.due_at.trim() : null;
+    setIf("due_at", v);
+  }
+  if (updates.length === 0) {
+    return apiError("VALIDATION_ERROR", "Không có gì để sửa.", ctx.requestId);
+  }
+  updates.push("updated_at = ?");
+  binds.push(nowIso());
+  binds.push(id);
+  await db.prepare(`UPDATE executions SET ${updates.join(", ")} WHERE id = ?`).bind(...binds).run();
+  await audit(db, {
+    event_type: "EXECUTION_UPDATED",
+    actor_id: me.user.id,
+    object_type: "execution",
+    object_id: id,
+    request_id: ctx.requestId,
+    diff: { updated_fields: updates.map((u) => u.split(" = ")[0]) },
+  });
+  const updated = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
+  const progress = await getProgress(db, id);
+  const redoInfo = await getRedoInfo(db, id);
+  return ok(toPublicExec(updated!, undefined, progress, redoInfo));
+}
+
 /** GET /executions/{eid}/steps/{sid}/assignees — danh sách người được phân công. */
 export async function handleListStepAssignees(ctx: Ctx, execId: string, stepId: string) {
   const s = ctx.requireAuth();

@@ -68,6 +68,7 @@ import {
   handleListExecutions,
   handleListStepAssignees,
   handlePauseExecution,
+  handleUpdateExecution,
   handleRejectConfirmation,
   handleReportComplete,
   handleResumeExecution,
@@ -95,6 +96,10 @@ import {
   handleListRoles,
   handleUpdateRole,
 } from "./routes/roles";
+import {
+  handleAuditEventTypes,
+  handleListAudit,
+} from "./routes/audit";
 import {
   handleDeleteEvidence,
   handleDownloadEvidence,
@@ -262,6 +267,10 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   const notifM = /^\/notifications\/([^/:]+):read$/.exec(path);
   if (notifM && method === "POST") return handleMarkRead(ctx, decodeURIComponent(notifM[1]));
 
+  // --- Audit log ---
+  if (path === "/audit" && method === "GET") return handleListAudit(ctx);
+  if (path === "/audit/event-types" && method === "GET") return handleAuditEventTypes(ctx);
+
   // --- Users (quyền users.manage) ---
   if (path === "/users/active" && method === "GET") {
     return handleListActiveUsers(ctx);
@@ -370,6 +379,7 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     }
     if (!action) {
       if (method === "GET") return handleGetExecution(ctx, eid);
+      if (method === "PATCH") return handleUpdateExecution(ctx, eid);
     } else if (method === "POST") {
       if (action === "start") return handleStartExecution(ctx, eid);
       if (action === "pause") return handlePauseExecution(ctx, eid);
