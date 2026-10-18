@@ -1090,17 +1090,10 @@ export async function handleSkipStep(ctx: Ctx, execId: string, stepId: string): 
     return apiError("VALIDATION_ERROR", "Bước đã kết thúc.", ctx.requestId);
   }
   // Kiểm tra quyền bỏ qua: bước không bắt buộc HOẶC có skip_policy cho phép.
-  const skipPolicy = step.skip_policy ? JSON.parse(step.skip_policy) as { allowed?: boolean; allowed_positions?: string[] } : null;
+  const skipPolicy = step.skip_policy ? JSON.parse(step.skip_policy) as { allowed?: boolean } : null;
   const canSkipByPolicy = skipPolicy?.allowed === true;
   if (step.is_required === 1 && !canSkipByPolicy) {
     return apiError("VALIDATION_ERROR", "Không được bỏ qua bước bắt buộc.", ctx.requestId);
-  }
-  // Nếu giới hạn chức vụ được bỏ qua → kiểm tra.
-  if (canSkipByPolicy && skipPolicy?.allowed_positions && skipPolicy.allowed_positions.length > 0) {
-    const mePos = await db.prepare(`SELECT position_id FROM users WHERE id = ?`).bind(me.user.id).first<{ position_id: string | null }>();
-    if (!mePos?.position_id || !skipPolicy.allowed_positions.includes(mePos.position_id)) {
-      return apiError("FORBIDDEN", "Chức vụ của bạn không được phép bỏ qua bước này.", ctx.requestId);
-    }
   }
   // AC-04 cũng áp dụng cho skip: bước trước phải xong.
   if (step.sort_order > 1) {
@@ -1137,4 +1130,94 @@ export async function handleSkipStep(ctx: Ctx, execId: string, stepId: string): 
   });
   const updated = await db.prepare(`SELECT * FROM execution_steps WHERE id = ?`).bind(stepId).first<ExecStepRow>();
   return ok(toPublicStep(updated!));
+}
+
+// POST /executions/:id/steps/:stepId:request-skip — người thực hiện xin bỏ qua bước.
+export async function handleRequestSkip(ctx: Ctx, execId: string, stepId: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+
+  const e = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(execId).first<ExecutionRow>();
+  if (!e) return apiError("NOT_FOUND", "Không tìm thấy lượt thực hiện.", ctx.requestId);
+  const step = await db.prepare(`SELECT * FROM execution_steps WHERE id = ? AND execution_id = ?`).bind(stepId, execId).first<ExecStepRow>();
+  if (!step) return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
+  const skipPolicy = step.skip_policy ? JSON.parse(step.skip_policy) as { allowed?: boolean } : null;
+  if (!skipPolicy?.allowed) {
+    return apiError("VALIDATION_ERROR", "Bước này không cho phép bỏ qua.", ctx.requestId);
+  }
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+  if (!reason) return apiError("VALIDATION_ERROR", "Vui lòng nhập lý do xin bỏ qua.", ctx.requestId);
+
+  const id = newId();
+  const now = nowIso();
+  try {
+    await db.prepare(
+      `INSERT INTO skip_requests (id, execution_id, step_id, requested_by, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(id, execId, stepId, me.user.id, reason, now).run();
+  } catch {
+    return apiError("VALIDATION_ERROR", "Đã có yêu cầu đang chờ duyệt.", ctx.requestId);
+  }
+  // Thông báo cho giám sát.
+  const supRows = await db.prepare(`SELECT user_id FROM execution_supervisors WHERE execution_id = ?`).bind(execId).all<{ user_id: string }>();
+  const notifyIds = [...new Set((supRows.results ?? []).map((r) => r.user_id))].filter((x) => x !== me.user.id);
+  if (notifyIds.length > 0) {
+    await notifyUsers(db, notifyIds, {
+      type: "SKIP_REQUESTED",
+      title: `Xin bỏ qua bước ${step.code}`,
+      message: `${me.user.display_name} xin bỏ qua bước ${step.code} (${step.title}). Lý do: ${reason}`,
+      link: `#/executions/${execId}`,
+    });
+  }
+  return ok({ requested: true });
+}
+
+// POST /executions/:id/steps/:stepId:approve-skip — giám sát duyệt yêu cầu bỏ qua.
+export async function handleApproveSkip(ctx: Ctx, execId: string, stepId: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+  const req = await db.prepare(
+    `SELECT * FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING'`
+  ).bind(execId, stepId).first<{ id: string; requested_by: string }>();
+  if (!req) return apiError("NOT_FOUND", "Không có yêu cầu đang chờ.", ctx.requestId);
+  const now = nowIso();
+  await db.prepare(`UPDATE skip_requests SET status = 'APPROVED', reviewed_by = ?, reviewed_at = ? WHERE id = ?`)
+    .bind(me.user.id, now, req.id).run();
+  // Đánh dấu bước đã bỏ qua.
+  await db.prepare(`UPDATE execution_steps SET status = 'SKIPPED', completed_at = ?, updated_at = ? WHERE id = ?`)
+    .bind(now, now, stepId).run();
+  await notifyUsers(db, [req.requested_by], {
+    type: "SKIP_APPROVED",
+    title: `Yêu cầu bỏ qua được duyệt`,
+    message: `${me.user.display_name} đã duyệt yêu cầu bỏ qua bước của bạn.`,
+    link: `#/executions/${execId}`,
+  });
+  return ok({ approved: true });
+}
+
+// POST /executions/:id/steps/:stepId:reject-skip — giám sát từ chối yêu cầu bỏ qua.
+export async function handleRejectSkip(ctx: Ctx, execId: string, stepId: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+  const req = await db.prepare(
+    `SELECT * FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING'`
+  ).bind(execId, stepId).first<{ id: string; requested_by: string }>();
+  if (!req) return apiError("NOT_FOUND", "Không có yêu cầu đang chờ.", ctx.requestId);
+  await db.prepare(`UPDATE skip_requests SET status = 'REJECTED', reviewed_by = ?, reviewed_at = ?, reject_reason = ? WHERE id = ?`)
+    .bind(me.user.id, nowIso(), reason || null, req.id).run();
+  await notifyUsers(db, [req.requested_by], {
+    type: "SKIP_REJECTED",
+    title: `Yêu cầu bỏ qua bị từ chối`,
+    message: `${me.user.display_name} đã từ chối yêu cầu bỏ qua bước của bạn.${reason ? " Lý do: " + reason : ""}`,
+    link: `#/executions/${execId}`,
+  });
+  return ok({ rejected: true });
 }
