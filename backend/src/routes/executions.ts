@@ -236,12 +236,16 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   const supervisorId = typeof body?.supervisor_id === "string" && body.supervisor_id.trim()
     ? body.supervisor_id.trim()
     : null;
-  // Người tạo: bắt buộc chọn, mặc định là chính người đang đăng nhập.
-  const creatorId = typeof body?.creator_id === "string" && body.creator_id.trim()
-    ? body.creator_id.trim()
-    : me.user.id;
-  const creator = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(creatorId).first();
-  if (!creator) return apiError("VALIDATION_ERROR", "Người tạo không tồn tại.", ctx.requestId);
+  // Người tạo: luôn là người đang đăng nhập (không cho chọn).
+  const creatorId = me.user.id;
+  // Người phê duyệt (tùy chọn).
+  const approverId = typeof body?.approver_id === "string" && body.approver_id.trim()
+    ? body.approver_id.trim()
+    : null;
+  if (approverId) {
+    const apr = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(approverId).first();
+    if (!apr) return apiError("VALIDATION_ERROR", "Người phê duyệt không tồn tại.", ctx.requestId);
+  }
   if (supervisorId) {
     const sup = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(supervisorId).first();
     if (!sup) return apiError("VALIDATION_ERROR", "Người giám sát không tồn tại.", ctx.requestId);
@@ -249,9 +253,9 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
 
   const stmts: D1PreparedStatement[] = [
     db.prepare(
-      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, supervisor_id, creator_id, due_at, execution_date, execution_time, shift, created_at, created_by)
-       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorId, creatorId, dueAt, executionDate, executionTime, shift, now, me.user.id),
+      `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, supervisor_id, creator_id, approver_id, due_at, execution_date, execution_time, shift, created_at, created_by)
+       VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorId, creatorId, approverId, dueAt, executionDate, executionTime, shift, now, me.user.id),
   ];
   // Lấy danh sách chức vụ của các bước để snapshot.
   const stepIds = (steps.results ?? []).map((s) => s.id);
@@ -316,7 +320,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     name: string;
     code: string;
   }>();
-  const users = await db.prepare(`SELECT id, display_name, position_id FROM users WHERE id IN (?, ?, ?, ?)`).bind(e.assignee_id, e.created_by, e.supervisor_id, (e as unknown as Record<string, unknown>).creator_id).all<{ id: string; display_name: string; position_id: string | null }>();
+  const users = await db.prepare(`SELECT id, display_name, position_id FROM users WHERE id IN (?, ?, ?, ?, ?, ?)`).bind(e.assignee_id, e.created_by, e.supervisor_id, (e as unknown as Record<string, unknown>).creator_id, (e as unknown as Record<string, unknown>).approver_id, (e as unknown as Record<string, unknown>).approved_by).all<{ id: string; display_name: string; position_id: string | null }>();
   const nameById: Record<string, string> = {};
   const posById: Record<string, string | null> = {};
   for (const u of users.results ?? []) {
@@ -377,6 +381,10 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     creator_name: creatorId ? nameById[creatorId] ?? null : null,
     creator_position_name: creatorPositionName,
     supervisor_name: e.supervisor_id ? nameById[e.supervisor_id] ?? null : null,
+    approver_id: (e as unknown as Record<string, unknown>).approver_id ?? null,
+    approver_name: (e as unknown as Record<string, unknown>).approver_id ? nameById[(e as unknown as Record<string, unknown>).approver_id as string] ?? null : null,
+    approved_by_name: (e as unknown as Record<string, unknown>).approved_by ? nameById[(e as unknown as Record<string, unknown>).approved_by as string] ?? null : null,
+    approved_at: (e as unknown as Record<string, unknown>).approved_at ?? null,
     steps: (steps.results ?? []).map((s) => ({
       ...toPublicStep(s),
       positions: execPosMap.get(s.id) ?? [],
@@ -495,6 +503,28 @@ async function transitionExecution(
       return apiError("VALIDATION_ERROR", "Còn bước bắt buộc chưa hoàn thành.", ctx.requestId);
     }
     updates.push("completed_at = ?");
+    binds.push(now);
+    // Kiểm tra quyền phê duyệt hoàn thành.
+    const approverId = (e as unknown as Record<string, unknown>).approver_id as string | null;
+    const supervisorId = e.supervisor_id as string | null;
+    const isAdmin = me.permissions.includes("*") || me.permissions.includes("executions.manage");
+    let canApprove = false;
+    if (approverId) {
+      // Đã chỉ định người phê duyệt: chỉ người đó hoặc admin mới duyệt được.
+      canApprove = me.user.id === approverId || isAdmin;
+      if (!canApprove) {
+        return apiError("FORBIDDEN", "Chỉ người phê duyệt được chỉ định mới có thể hoàn thành lượt này.", ctx.requestId);
+      }
+    } else {
+      // Không chỉ định: người giám sát hoặc người có quyền quản lý lượt mới duyệt được.
+      canApprove = me.user.id === supervisorId || isAdmin;
+      if (!canApprove) {
+        return apiError("FORBIDDEN", "Chỉ người giám sát hoặc quản lý mới có thể hoàn thành lượt này.", ctx.requestId);
+      }
+    }
+    updates.push("approved_by = ?");
+    binds.push(me.user.id);
+    updates.push("approved_at = ?");
     binds.push(now);
   }
   if (to === "CANCELLED") {

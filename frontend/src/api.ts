@@ -412,7 +412,7 @@ export const api = {
     const suffix = qs.toString() ? "?" + qs.toString() : "";
     return req("GET", "/executions" + suffix);
   },
-  createExecution(input: { process_id: string; title?: string; assignee_id?: string; supervisor_id?: string; due_at?: string; execution_date: string; execution_time?: string; shift?: string }): Promise<Execution> {
+  createExecution(input: { process_id: string; title?: string; assignee_id?: string; supervisor_id?: string; approver_id?: string; due_at?: string; execution_date: string; execution_time?: string; shift?: string }): Promise<Execution> {
     return req("POST", "/executions", input);
   },
   getExecution(id: string): Promise<ExecutionDetail> {

@@ -123,9 +123,9 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
         <label>Tiêu đề lượt <input class="input" name="title" maxlength="200"
           placeholder="VD: Xuất hàng đợt sáng 17/10" /></label>
         <label>Ngày thực hiện <span class="req">*</span>
-          <input class="input" type="date" name="execution_date" required /></label>
+          <input class="input" type="date" name="execution_date" id="exec-date" required /></label>
         <div class="form-row-2">
-          <label>Giờ thực hiện <input class="input" type="time" name="execution_time" /></label>
+          <label>Giờ thực hiện <input class="input" type="time" name="execution_time" id="exec-time" /></label>
           <label>Ca làm việc
             <select class="input" name="shift">
               <option value="">— Chọn ca —</option>
@@ -135,11 +135,6 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
               <option value="NIGHT">Đêm</option>
             </select></label>
         </div>
-        <label>Người tạo <span class="req">*</span>
-          <select class="input" name="creator_id" id="exec-creator" required>
-            <option value="">— Chọn người tạo —</option>
-          </select>
-          <span class="hint">Người chịu trách nhiệm tạo lượt công việc này.</span></label>
         <label>Người thực hiện chính
           <select class="input" name="assignee_id" id="exec-assignee">
             <option value="">Tôi (mặc định)</option>
@@ -149,6 +144,11 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
           <select class="input" name="supervisor_id" id="exec-supervisor">
             <option value="">— Không có —</option>
           </select></label>
+        <label>Người phê duyệt hoàn thành
+          <select class="input" name="approver_id" id="exec-approver">
+            <option value="">— Không chỉ định (giám sát/quản lý duyệt) —</option>
+          </select>
+          <span class="hint">Nếu chọn cụ thể: chỉ người đó (hoặc quản trị viên) mới được phê duyệt hoàn thành.</span></label>
         <p class="form-error" id="exec-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button type="button" class="btn" id="exec-cancel">Huỷ</button>
@@ -165,8 +165,8 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
   const sel = dialogRoot.querySelector<HTMLSelectElement>("#exec-process")!;
   const selAssignee = dialogRoot.querySelector<HTMLSelectElement>("#exec-assignee")!;
   const selSupervisor = dialogRoot.querySelector<HTMLSelectElement>("#exec-supervisor")!;
-  const selCreator = dialogRoot.querySelector<HTMLSelectElement>("#exec-creator")!;
-  // Tải danh sách người dùng cho ô chọn người tạo / thực hiện / giám sát.
+  const selApprover = dialogRoot.querySelector<HTMLSelectElement>("#exec-approver")!;
+  // Tải danh sách người dùng cho ô chọn người thực hiện / giám sát / phê duyệt.
   api.listActiveUsers().then((res) => {
     const items = res?.items ?? [];
     const active = items;
@@ -176,12 +176,18 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
         const label = posName ? `${esc(u.display_name)} — ${esc(posName)}` : esc(u.display_name);
         return `<option value="${esc(u.id)}">${label} (${esc(u.username)})</option>`;
       }).join("");
-      // Người tạo mặc định là chính người đang đăng nhập (option đầu tiên sau placeholder).
-      selCreator.innerHTML = `<option value="">— Chọn người tạo —</option>` + opts;
       selAssignee.innerHTML = `<option value="">Tôi (mặc định)</option>` + opts;
       selSupervisor.innerHTML = `<option value="">— Không có —</option>` + opts;
+      selApprover.innerHTML = `<option value="">— Không chỉ định (giám sát/quản lý duyệt) —</option>` + opts;
     }
   }).catch(() => { /* giữ mặc định */ });
+  // Mặc định ngày và giờ là hiện tại.
+  const dateInput = dialogRoot.querySelector<HTMLInputElement>("#exec-date")!;
+  const timeInput = dialogRoot.querySelector<HTMLInputElement>("#exec-time")!;
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  dateInput.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  timeInput.value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
   api.listProcesses().then(({ items }) => {
     const available = items.filter((p) => p.active_version);
     if (available.length === 0) {
@@ -226,13 +232,8 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
     if (assignee_id) input.assignee_id = assignee_id;
     const supervisor_id = String(fd.get("supervisor_id") ?? "").trim();
     if (supervisor_id) input.supervisor_id = supervisor_id;
-    const creator_id = String(fd.get("creator_id") ?? "").trim();
-    if (!creator_id) {
-      errEl.textContent = "Vui lòng chọn người tạo.";
-      errEl.hidden = false;
-      return;
-    }
-    input.creator_id = creator_id;
+    const approver_id = String(fd.get("approver_id") ?? "").trim();
+    if (approver_id) input.approver_id = approver_id;
     setLoading(submitBtn, true, "Đang tạo…");
     try {
       const created = await api.createExecution(input as { process_id: string; title?: string; execution_date: string; execution_time?: string; shift?: string; assignee_id?: string; supervisor_id?: string; creator_id: string });
@@ -853,6 +854,8 @@ function detailHtml(e: ExecutionDetail): string {
         <div class="info-row"><dt>Người tạo</dt><dd>${esc(e.creator_name ?? "—")}${(e as unknown as Record<string, unknown>).creator_position_name ? ` <span class="muted small">— ${esc((e as unknown as Record<string, unknown>).creator_position_name as string)}</span>` : ""}</dd></div>
         <div class="info-row"><dt>Người thực hiện chính</dt><dd>${esc(e.assignee_name ?? "—")}</dd></div>
         ${e.supervisor_name ? `<div class="info-row"><dt>Người giám sát</dt><dd>${esc(e.supervisor_name)}</dd></div>` : ""}
+        ${(e as unknown as Record<string, unknown>).approver_name ? `<div class="info-row"><dt>Người phê duyệt</dt><dd>${esc((e as unknown as Record<string, unknown>).approver_name as string)}</dd></div>` : ""}
+        ${(e as unknown as Record<string, unknown>).approved_by_name ? `<div class="info-row"><dt>Đã phê duyệt bởi</dt><dd>${esc((e as unknown as Record<string, unknown>).approved_by_name as string)}${(e as unknown as Record<string, unknown>).approved_at ? ` · ${esc(String((e as unknown as Record<string, unknown>).approved_at).slice(0, 16).replace("T", " "))}` : ""}</dd></div>` : ""}
         <div class="info-row"><dt>Tiến độ</dt><dd>
           <div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
           ${p?.done ?? 0}/${p?.total ?? 0} bước (${pct}%)</dd></div>
