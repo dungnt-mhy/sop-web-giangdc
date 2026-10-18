@@ -279,6 +279,11 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .link.back { display: inline-block; margin-bottom: 6px; font-size: 14px; }
 @media (max-width: 640px) {
   .info-row { grid-template-columns: 1fr; gap: 2px; }
+  /* Bộ lọc audit trên mobile: xếp 2 cột, gọn gàng. */
+  .filter-bar { flex-wrap: wrap; gap: 8px; }
+  .filter-bar .input,
+  .filter-bar .btn { flex: 1 1 calc(50% - 4px); max-width: none; min-width: 0; }
+  .filter-bar .input[type="date"] { flex: 1 1 calc(50% - 4px); }
 }
 
 /* Danh sách bước (Task 1.5). */
