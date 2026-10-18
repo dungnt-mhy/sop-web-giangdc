@@ -139,6 +139,18 @@ async function getRejectHistory(db: D1Database, executionId: string): Promise<Ar
   });
 }
 
+function parsePolicy(raw: string | null): { allowed?: boolean } | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    // Dữ liệu cũ bị double-encode: parse thêm lần nữa nếu ra string.
+    if (typeof v === "string") {
+      try { return JSON.parse(v); } catch { return null; }
+    }
+    return v;
+  } catch { return null; }
+}
+
 function toPublicStep(s: ExecStepRow) {
   return {
     id: s.id,
@@ -155,7 +167,7 @@ function toPublicStep(s: ExecStepRow) {
     output_desc: s.output_desc,
     target_duration_min: s.target_duration_min,
     warning: s.warning,
-    skip_policy: s.skip_policy,
+    skip_policy: parsePolicy(s.skip_policy),
     failure_policy: s.failure_policy,
     is_required: s.is_required === 1,
     completion_req: s.completion_req,
@@ -476,6 +488,33 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     for (const r of supRows.results ?? []) {
       if (!execSupMap.has(r.execution_step_id)) execSupMap.set(r.execution_step_id, []);
       execSupMap.get(r.execution_step_id)!.push({ id: r.id, name: r.name });
+    }
+    // Fallback cho lượt cũ (tạo trước khi có snapshot): đọc từ process_step_supervisors theo mã bước.
+    const missingSteps = (steps.results ?? []).filter((s) => !execSupMap.has(s.id) || (execSupMap.get(s.id) ?? []).length === 0);
+    if (missingSteps.length > 0 && e.version_id) {
+      const procSteps = await db.prepare(
+        `SELECT id, code FROM process_steps WHERE version_id = ?`
+      ).bind(e.version_id).all<{ id: string; code: string }>();
+      const procStepIdByCode = new Map<string, string>();
+      for (const ps of procSteps.results ?? []) procStepIdByCode.set(ps.code, ps.id);
+      const procStepIds = [...procStepIdByCode.values()];
+      if (procStepIds.length > 0) {
+        const ph2 = procStepIds.map(() => "?").join(",");
+        const fbRows = await db.prepare(
+          `SELECT pss.step_id, p.id, p.name FROM process_step_supervisors pss
+           JOIN positions p ON p.id = pss.position_id
+           WHERE pss.step_id IN (${ph2}) ORDER BY p.name ASC`
+        ).bind(...procStepIds).all<{ step_id: string; id: string; name: string }>();
+        const fbByProcStep = new Map<string, { id: string; name: string }[]>();
+        for (const r of fbRows.results ?? []) {
+          if (!fbByProcStep.has(r.step_id)) fbByProcStep.set(r.step_id, []);
+          fbByProcStep.get(r.step_id)!.push({ id: r.id, name: r.name });
+        }
+        for (const s of missingSteps) {
+          const pid = procStepIdByCode.get(s.code);
+          if (pid && fbByProcStep.has(pid)) execSupMap.set(s.id, fbByProcStep.get(pid)!);
+        }
+      }
     }
   }
   const progress = await getProgress(db, id);
