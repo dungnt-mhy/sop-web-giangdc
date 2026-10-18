@@ -283,7 +283,8 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   .filter-bar { flex-wrap: wrap; gap: 8px; }
   .filter-bar .input,
   .filter-bar .btn { flex: 1 1 calc(50% - 4px); max-width: none; min-width: 0; }
-  .filter-bar .input[type="date"] { flex: 1 1 calc(50% - 4px); }
+  .filter-bar .input { font-size: 14px; padding: 8px 10px; border-radius: 8px; }
+  .filter-bar .btn { font-size: 14px; padding: 8px 10px; }
 }
 
 /* Danh sách bước (Task 1.5). */
