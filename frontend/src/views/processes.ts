@@ -184,13 +184,13 @@ function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], proces
             ${st.target_duration_min ? `<div class="beauty-time">⏱ ~${st.target_duration_min} phút</div>` : ""}
             ${hasDetails ? `<button class="beauty-expand" data-expand>Chi tiết ▾</button>
             <div class="beauty-details" hidden>
+              ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? detailRow("👤 Vai trò thực hiện", ((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => p.name).join(", ")) : ""}
+              ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? detailRow("👁️ Vai trò giám sát", ((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => p.name).join(", ")) : ""}
               ${detailRow("Điều kiện tiên quyết", st.prerequisite)}
               ${detailRow("Kết quả mong đợi", st.expected_result)}
               ${detailRow("Đầu vào", st.input_desc)}
               ${detailRow("Đầu ra / bàn giao", st.output_desc)}
               ${detailRow("Ghi chú", st.note)}
-              ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? detailRow("👤 Vai trò thực hiện", ((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => p.name).join(", ")) : ""}
-              ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? detailRow("👁️ Vai trò giám sát", ((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => p.name).join(", ")) : ""}
               ${((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) ? detailRow("⏭️ Bỏ qua", "✅ Cho phép bỏ qua bước này") : ""}
               ${detailRow("⚠️ Cảnh báo", st.warning)}
               ${st.instruction ? `<div class="step-guide"><div class="step-guide-title">📖 Hướng dẫn thực hiện</div><div class="step-guide-body">${esc(st.instruction)}</div></div>` : ""}
@@ -661,6 +661,8 @@ async function toggleSteps(
               ${hasDetails ? `
                 <button class="link sm step-expand" data-step-act="expand">Chi tiết ▾</button>
                 <div class="step-details" hidden>
+                  ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? dRow("👤 Vai trò thực hiện", ((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => p.name).join(", ")) : ""}
+                  ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? dRow("👁️ Vai trò giám sát", ((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => p.name).join(", ")) : ""}
                   ${dRow("Điều kiện tiên quyết", st.prerequisite)}
                   ${dRow("Kết quả mong đợi", st.expected_result)}
                   ${dRow("Đầu vào", st.input_desc)}
