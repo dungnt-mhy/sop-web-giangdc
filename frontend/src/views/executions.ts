@@ -134,31 +134,18 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
           placeholder="VD: Xuất hàng đợt sáng 17/10" /></label>
         <label>Ngày thực hiện <span class="req">*</span>
           <input class="input" type="date" name="execution_date" id="exec-date" required /></label>
-        <div class="form-row-2">
-          <label>Giờ thực hiện <input class="input" type="time" name="execution_time" id="exec-time" /></label>
-          <label>Ca làm việc
-            <select class="input" name="shift">
-              <option value="">— Chọn ca —</option>
-              <option value="MORNING">Sáng</option>
-              <option value="NOON">Trưa</option>
-              <option value="AFTERNOON">Chiều</option>
-              <option value="NIGHT">Đêm</option>
-            </select></label>
-        </div>
+        <label>Giờ thực hiện <input class="input" type="time" name="execution_time" id="exec-time" />
+          <span class="hint">Ca làm việc sẽ tự xác định theo giờ.</span></label>
         <label>Người thực hiện chính
           <select class="input" name="assignee_id" id="exec-assignee">
             <option value="">Tôi (mặc định)</option>
           </select>
           <span class="hint">Để trống = người tạo cũng là người thực hiện chính.</span></label>
-        <label>Người giám sát
-          <select class="input" name="supervisor_id" id="exec-supervisor">
-            <option value="">— Không có —</option>
-          </select></label>
-        <label>Người phê duyệt hoàn thành
-          <select class="input" name="approver_id" id="exec-approver">
-            <option value="">— Không chỉ định (giám sát/quản lý duyệt) —</option>
-          </select>
-          <span class="hint">Nếu chọn cụ thể: chỉ người đó (hoặc quản trị viên) mới được phê duyệt hoàn thành.</span></label>
+        <label>Người giám sát <span class="hint">(chọn nhiều)</span></label>
+        <div class="check-list" id="exec-supervisors" style="max-height:120px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
+        <label>Người phê duyệt hoàn thành <span class="hint">(chọn nhiều)</span></label>
+        <div class="check-list" id="exec-approvers" style="max-height:120px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
+        <span class="hint">Nếu chọn cụ thể: chỉ những người đó (hoặc quản trị viên) mới được phê duyệt hoàn thành. Để trống: giám sát/quản lý duyệt.</span>
         <p class="form-error" id="exec-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button type="button" class="btn" id="exec-cancel">Huỷ</button>
@@ -174,8 +161,8 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
 
   const sel = dialogRoot.querySelector<HTMLSelectElement>("#exec-process")!;
   const selAssignee = dialogRoot.querySelector<HTMLSelectElement>("#exec-assignee")!;
-  const selSupervisor = dialogRoot.querySelector<HTMLSelectElement>("#exec-supervisor")!;
-  const selApprover = dialogRoot.querySelector<HTMLSelectElement>("#exec-approver")!;
+  const supList = dialogRoot.querySelector<HTMLElement>("#exec-supervisors")!;
+  const aprList = dialogRoot.querySelector<HTMLElement>("#exec-approvers")!;
   // Tải danh sách người dùng cho ô chọn người thực hiện / giám sát / phê duyệt.
   api.listActiveUsers().then((res) => {
     const items = res?.items ?? [];
@@ -187,8 +174,13 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
         return `<option value="${esc(u.id)}">${label} (${esc(u.username)})</option>`;
       }).join("");
       selAssignee.innerHTML = `<option value="">Tôi (mặc định)</option>` + opts;
-      selSupervisor.innerHTML = `<option value="">— Không có —</option>` + opts;
-      selApprover.innerHTML = `<option value="">— Không chỉ định (giám sát/quản lý duyệt) —</option>` + opts;
+      const checks = active.map((u) => {
+        const posName = u.position_name ?? u.position;
+        const label = posName ? `${esc(u.display_name)} — ${esc(posName)}` : esc(u.display_name);
+        return `<label class="check"><input type="checkbox" value="${esc(u.id)}" /> ${label}</label>`;
+      }).join("");
+      supList.innerHTML = checks;
+      aprList.innerHTML = checks;
     }
   }).catch(() => { /* giữ mặc định */ });
   // Mặc định ngày và giờ là hiện tại.
@@ -240,10 +232,10 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
     if (shift) input.shift = shift;
     const assignee_id = String(fd.get("assignee_id") ?? "").trim();
     if (assignee_id) input.assignee_id = assignee_id;
-    const supervisor_id = String(fd.get("supervisor_id") ?? "").trim();
-    if (supervisor_id) input.supervisor_id = supervisor_id;
-    const approver_id = String(fd.get("approver_id") ?? "").trim();
-    if (approver_id) input.approver_id = approver_id;
+    const supervisor_ids = Array.from(dialogRoot.querySelectorAll<HTMLInputElement>('#exec-supervisors input:checked')).map((c) => c.value);
+    if (supervisor_ids.length > 0) (input as Record<string, unknown>).supervisor_ids = supervisor_ids;
+    const approver_ids = Array.from(dialogRoot.querySelectorAll<HTMLInputElement>('#exec-approvers input:checked')).map((c) => c.value);
+    if (approver_ids.length > 0) (input as Record<string, unknown>).approver_ids = approver_ids;
     setLoading(submitBtn, true, "Đang tạo…");
     try {
       const created = await api.createExecution(input as { process_id: string; title?: string; execution_date: string; execution_time?: string; shift?: string; assignee_id?: string; supervisor_id?: string; creator_id: string });
@@ -632,15 +624,8 @@ function openEditExecutionDialog(
                 value="${esc((d.execution_date as string) ?? "")}" /></label>
             <label>Giờ thực hiện
               <input class="input" type="time" name="execution_time"
-                value="${esc((d.execution_time as string) ?? "")}" /></label>
-            <label>Ca làm việc
-              <select class="input" name="shift">
-                <option value="">— Chọn ca —</option>
-                <option value="MORNING" ${d.shift === "MORNING" ? "selected" : ""}>Sáng</option>
-                <option value="NOON" ${d.shift === "NOON" ? "selected" : ""}>Trưa</option>
-                <option value="AFTERNOON" ${d.shift === "AFTERNOON" ? "selected" : ""}>Chiều</option>
-                <option value="NIGHT" ${d.shift === "NIGHT" ? "selected" : ""}>Tối</option>
-              </select></label>
+                value="${esc((d.execution_time as string) ?? "")}" />
+              <span class="hint">Ca làm việc sẽ tự cập nhật theo giờ.</span></label>
             <p class="muted small">Người thực hiện, giám sát, phê duyệt: sửa ở màn hình phân công sau khi tạo. Chỉ sửa được khi lượt còn ở trạng thái "Mới tạo".</p>
             <p class="form-error" id="edit-exec-error" role="alert" hidden></p>
             <div class="dialog-actions">
@@ -664,7 +649,6 @@ function openEditExecutionDialog(
           title: String(fd.get("title") ?? "").trim() || null,
           execution_date: String(fd.get("execution_date") ?? ""),
           execution_time: String(fd.get("execution_time") ?? "") || null,
-          shift: String(fd.get("shift") ?? "") || null,
         });
         toast("Đã lưu thay đổi.");
         close();

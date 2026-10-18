@@ -231,6 +231,16 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
 }
 
 // POST /api/v1/executions — tạo lượt mới từ phiên bản đang hiệu lực (EXE-001, EXE-002).
+
+/** Suy ca làm việc từ giờ (HH:MM). */
+function deriveShift(time: string | null): string | null {
+  if (!time) return null;
+  const h = parseInt(time.slice(0, 2), 10);
+  if (h >= 6 && h < 12) return "MORNING";
+  if (h >= 12 && h < 14) return "NOON";
+  if (h >= 14 && h < 18) return "AFTERNOON";
+  return "NIGHT";
+}
 export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   const s = requirePermission(ctx, "executions.perform");
   if (s instanceof Response) return s;
@@ -291,24 +301,30 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   const executionTime = typeof body?.execution_time === "string" && /^\d{2}:\d{2}$/.test(body.execution_time.trim())
     ? body.execution_time.trim()
     : null;
-  const shift = typeof body?.shift === "string" && ["MORNING", "NOON", "AFTERNOON", "NIGHT"].includes(body.shift)
-    ? body.shift
-    : null;
-  const supervisorId = typeof body?.supervisor_id === "string" && body.supervisor_id.trim()
-    ? body.supervisor_id.trim()
-    : null;
+  // Tự suy ca làm việc từ giờ (không cho chọn tay nữa).
+  const shift = deriveShift(executionTime);
+  // Người giám sát: chọn nhiều (mảng) hoặc 1 (chuỗi) để tương thích.
+  const supervisorIds: string[] = [];
+  const supRaw = body?.supervisor_ids ?? body?.supervisor_id;
+  const supArr = Array.isArray(supRaw) ? supRaw : (supRaw ? [supRaw] : []);
+  for (const s of supArr) {
+    if (typeof s === "string" && s.trim()) supervisorIds.push(s.trim());
+  }
   // Người tạo: luôn là người đang đăng nhập (không cho chọn).
   const creatorId = me.user.id;
-  // Người phê duyệt (tùy chọn).
-  const approverId = typeof body?.approver_id === "string" && body.approver_id.trim()
-    ? body.approver_id.trim()
-    : null;
-  if (approverId) {
-    const apr = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(approverId).first();
+  // Người phê duyệt (tùy chọn, chọn nhiều).
+  const approverIds: string[] = [];
+  const aprRaw = body?.approver_ids ?? body?.approver_id;
+  const aprArr = Array.isArray(aprRaw) ? aprRaw : (aprRaw ? [aprRaw] : []);
+  for (const a of aprArr) {
+    if (typeof a === "string" && a.trim()) approverIds.push(a.trim());
+  }
+  for (const aid of approverIds) {
+    const apr = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(aid).first();
     if (!apr) return apiError("VALIDATION_ERROR", "Người phê duyệt không tồn tại.", ctx.requestId);
   }
-  if (supervisorId) {
-    const sup = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(supervisorId).first();
+  for (const sid of supervisorIds) {
+    const sup = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(sid).first();
     if (!sup) return apiError("VALIDATION_ERROR", "Người giám sát không tồn tại.", ctx.requestId);
   }
 
@@ -316,8 +332,15 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
     db.prepare(
       `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, supervisor_id, creator_id, approver_id, due_at, execution_date, execution_time, shift, created_at, created_by)
        VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorId, creatorId, approverId, dueAt, executionDate, executionTime, shift, now, me.user.id),
+    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorIds[0] ?? null, creatorId, approverIds[0] ?? null, dueAt, executionDate, executionTime, shift, now, me.user.id),
   ];
+  // Lưu nhiều giám sát / phê duyệt.
+  for (const sid of supervisorIds) {
+    stmts.push(db.prepare(`INSERT OR IGNORE INTO execution_supervisors (execution_id, user_id) VALUES (?, ?)`).bind(execId, sid));
+  }
+  for (const aid of approverIds) {
+    stmts.push(db.prepare(`INSERT OR IGNORE INTO execution_approvers (execution_id, user_id) VALUES (?, ?)`).bind(execId, aid));
+  }
   // Lấy danh sách chức vụ của các bước để snapshot.
   const stepIds = (steps.results ?? []).map((s) => s.id);
   const stepPosMap = new Map<string, string[]>();
@@ -514,11 +537,8 @@ export async function handleUpdateExecution(ctx: Ctx, id: string): Promise<Respo
     const v = typeof body?.execution_time === "string" && /^\d{2}:\d{2}$/.test(body.execution_time.trim())
       ? body.execution_time.trim() : null;
     setIf("execution_time", v);
-  }
-  if ("shift" in (body ?? {})) {
-    const v = typeof body?.shift === "string" && ["MORNING", "NOON", "AFTERNOON", "NIGHT"].includes(body.shift)
-      ? body.shift : null;
-    setIf("shift", v);
+    // Tự suy ca từ giờ.
+    setIf("shift", deriveShift(v));
   }
   if ("supervisor_id" in (body ?? {})) {
     const v = typeof body?.supervisor_id === "string" && body.supervisor_id.trim() ? body.supervisor_id.trim() : null;
@@ -674,19 +694,26 @@ async function transitionExecution(
     updates.push("completed_at = ?");
     binds.push(now);
     // Kiểm tra quyền xác nhận hoàn thành (chỉ khi từ PENDING_CONFIRMATION).
-    const approverId = (e as unknown as Record<string, unknown>).approver_id as string | null;
-    const supervisorId = e.supervisor_id as string | null;
+    const approverRows = await db.prepare(`SELECT user_id FROM execution_approvers WHERE execution_id = ?`).bind(id).all<{ user_id: string }>();
+    const approverIds = (approverRows.results ?? []).map((r) => r.user_id);
+    // Fallback cột cũ.
+    const legacyApprover = (e as unknown as Record<string, unknown>).approver_id as string | null;
+    if (legacyApprover && !approverIds.includes(legacyApprover)) approverIds.push(legacyApprover);
+    const supRows = await db.prepare(`SELECT user_id FROM execution_supervisors WHERE execution_id = ?`).bind(id).all<{ user_id: string }>();
+    const supervisorIds = (supRows.results ?? []).map((r) => r.user_id);
+    const legacySup = e.supervisor_id as string | null;
+    if (legacySup && !supervisorIds.includes(legacySup)) supervisorIds.push(legacySup);
     const isAdmin = me.permissions.includes("*") || me.permissions.includes("executions.manage");
     let canApprove = false;
-    if (approverId) {
-      // Đã chỉ định người phê duyệt: chỉ người đó hoặc admin mới xác nhận được.
-      canApprove = me.user.id === approverId || isAdmin;
+    if (approverIds.length > 0) {
+      // Đã chỉ định người phê duyệt: bất kỳ ai trong danh sách hoặc admin mới xác nhận được.
+      canApprove = approverIds.includes(me.user.id) || isAdmin;
       if (!canApprove) {
         return apiError("FORBIDDEN", "Chỉ người phê duyệt được chỉ định mới có thể xác nhận hoàn thành.", ctx.requestId);
       }
     } else {
       // Không chỉ định: người giám sát hoặc người có quyền quản lý lượt mới xác nhận được.
-      canApprove = me.user.id === supervisorId || isAdmin;
+      canApprove = supervisorIds.includes(me.user.id) || isAdmin;
       if (!canApprove) {
         return apiError("FORBIDDEN", "Chỉ người giám sát hoặc quản lý mới có thể xác nhận hoàn thành.", ctx.requestId);
       }
