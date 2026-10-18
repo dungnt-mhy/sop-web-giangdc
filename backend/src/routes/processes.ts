@@ -113,6 +113,10 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
   for (const p of rows.results) {
     const av = await getActiveVersion(db, p.id);
     if (status && (!av || av.status !== status)) continue;
+    // Phiên bản mới nhất (để hiện trạng thái đúng: nháp, chờ duyệt...).
+    const latest = await db.prepare(
+      `SELECT * FROM process_versions WHERE process_id = ? ORDER BY version_number DESC LIMIT 1`
+    ).bind(p.id).first<VersionRow>();
     let creatorName: string | null = null;
     if (p.created_by) {
       const u = await db.prepare(`SELECT display_name FROM users WHERE id = ?`).bind(p.created_by).first<{ display_name: string }>();
@@ -126,6 +130,7 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
       ...toPublicProcess(p, av),
       creator_name: creatorName,
       org_units: ouRows.results ?? [],
+      latest_version: latest ? { version_number: latest.version_number, status: latest.status } : null,
     });
   }
   return ok({ items, total: items.length });

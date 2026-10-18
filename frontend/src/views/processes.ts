@@ -47,7 +47,7 @@ export async function renderProcesses(root: HTMLElement, canManage: boolean): Pr
     </div>
     <div class="table-wrap"><table class="tbl" id="proc-table">
       <thead><tr>
-        <th>Mã</th><th>Tên quy trình</th><th>Nhóm</th><th>Phiên bản hiệu lực</th><th>Ngày tạo</th><th>Người tạo</th><th>Thao tác</th>
+        <th>Mã</th><th>Tên quy trình</th><th>Nhóm</th><th>Trạng thái phiên bản</th><th>Ngày tạo</th><th>Người tạo</th><th>Thao tác</th>
       </tr></thead>
       <tbody><tr><td colspan="7" class="empty">Đang tải…</td></tr></tbody>
     </table></div>
@@ -200,13 +200,26 @@ function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], proces
 
 function rowHtml(p: SopProcess): string {
   const av = p.active_version;
+  const latest = (p as unknown as Record<string, unknown>).latest_version as { version_number: number; status: string } | null;
   const creator = (p as unknown as Record<string, unknown>).creator_name as string | null;
   const createdAt = p.created_at ? p.created_at.slice(0, 10).split("-").reverse().join("/") : "—";
+  // Hiện trạng thái của phiên bản mới nhất (nháp, chờ duyệt...), kèm phiên bản hiệu lực nếu khác.
+  let verCell: string;
+  if (latest) {
+    verCell = `v${latest.version_number} ${statusPill(latest.status)}`;
+    if (av && av.version_number !== latest.version_number) {
+      verCell += `<div class="muted small">Hiệu lực: v${av.version_number}</div>`;
+    }
+  } else if (av) {
+    verCell = `v${av.version_number} ${statusPill(av.status)}`;
+  } else {
+    verCell = '<span class="muted">Chưa có</span>';
+  }
   return `<tr data-id="${esc(p.id)}">
     <td><strong>${esc(p.code)}</strong></td>
     <td>${esc(p.name)}${p.group_name ? `<div class="muted small">${esc(p.group_name)}</div>` : ""}</td>
     <td>${p.group_name ? esc(p.group_name) : '<span class="muted">—</span>'}</td>
-    <td>${av ? `v${av.version_number} ${statusPill(av.status)}` : '<span class="muted">Chưa có</span>'}</td>
+    <td>${verCell}</td>
     <td class="muted small">${esc(createdAt)}</td>
     <td>${creator ? esc(creator) : '<span class="muted">—</span>'}</td>
     <td class="actions"><button class="link" data-act="view"><span>Chi tiết</span></button></td>
