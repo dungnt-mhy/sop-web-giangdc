@@ -182,14 +182,14 @@ function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], proces
             ${st.target_duration_min ? `<div class="beauty-time">⏱ ~${st.target_duration_min} phút</div>` : ""}
             ${hasDetails ? `<button class="beauty-expand" data-expand>Chi tiết ▾</button>
             <div class="beauty-details" hidden>
-              ${detailRow("Điều kiện", st.prerequisite)}
+              ${detailRow("Điều kiện tiên quyết", st.prerequisite)}
+              ${detailRow("Kết quả mong đợi", st.expected_result)}
               ${detailRow("Đầu vào", st.input_desc)}
               ${detailRow("Hướng dẫn", st.instruction)}
-              ${detailRow("Kết quả mong đợi", st.expected_result)}
-              ${detailRow("Đầu ra", st.output_desc)}
-              ${detailRow("Lưu ý", st.warning ? "⚠️ " + st.warning : null)}
+              ${detailRow("Đầu ra / bàn giao", st.output_desc)}
               ${detailRow("Ghi chú", st.note)}
-              ${((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) ? detailRow("Bỏ qua", "✅ Cho phép bỏ qua bước này") : ""}
+              ${((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) ? detailRow("⏭️ Bỏ qua", "✅ Cho phép bỏ qua bước này") : ""}
+              ${detailRow("⚠️ Cảnh báo", st.warning)}
             </div>` : ""}
           </div>
         </div>`;
@@ -630,7 +630,8 @@ async function toggleSteps(
         <div data-steps-list>
         <ol class="step-list">
           ${items.map((st, idx) => {
-            const hasDetails = st.prerequisite || st.input_desc || st.expected_result || st.output_desc || st.note || st.warning;
+            const skipAllowed = ((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) === true;
+            const hasDetails = st.prerequisite || st.input_desc || st.expected_result || st.output_desc || st.note || st.warning || skipAllowed || st.target_duration_min;
             const dRow = (label: string, val: string | null): string =>
               val ? `<div class="step-detail-row"><span class="step-dlabel">${label}:</span> ${esc(val)}</div>` : "";
             return `
@@ -640,7 +641,7 @@ async function toggleSteps(
                 <div class="step-title">
                   <strong>${esc(st.code)}</strong> — ${esc(st.title)}
                   ${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}
-                  ${((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) ? ' <span class="pill blue">⏭️ Được bỏ qua</span>' : ""}
+                  ${skipAllowed ? ' <span class="pill blue">⏭️ Được bỏ qua</span>' : ""}
                   ${st.role ? `<div class="muted small">Vai trò: ${esc(st.role)}</div>` : ""}
                   ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👤 Thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
                   ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👁️ Kiểm duyệt/Giám sát: ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
@@ -657,19 +658,15 @@ async function toggleSteps(
               ${hasDetails ? `
                 <button class="link sm step-expand" data-step-act="expand">Chi tiết ▾</button>
                 <div class="step-details" hidden>
-                  ${dRow("Điều kiện", st.prerequisite)}
-                  ${dRow("Đầu vào", st.input_desc)}
+                  ${dRow("Điều kiện tiên quyết", st.prerequisite)}
                   ${dRow("Kết quả mong đợi", st.expected_result)}
-                  ${dRow("Đầu ra", st.output_desc)}
-                  ${dRow("Lưu ý", st.warning ? "⚠️ " + st.warning : null)}
+                  ${dRow("Đầu vào", st.input_desc)}
+                  ${dRow("Đầu ra / bàn giao", st.output_desc)}
                   ${dRow("Ghi chú", st.note)}
-                  ${(() => {
-                    const sp = (st.skip_policy as unknown as { allowed?: boolean; allowed_positions?: string[] } | null);
-                    if (sp?.allowed) {
-                      return `<div class="step-detail-row"><span class="step-dlabel">Bỏ qua:</span> ✅ Cho phép bỏ qua bước này</div>`;
-                    }
-                    return "";
-                  })()}
+                  ${st.target_duration_min ? dRow("Thời lượng mục tiêu", `${st.target_duration_min} phút`) : ""}
+                  ${(() => { try { const cr = st.completion_req as Record<string, unknown> | null; const v = cr?.["min_photos"]; return typeof v === "number" && v > 0 ? dRow("Số ảnh tối thiểu", `${v} ảnh`) : ""; } catch { return ""; } })()}
+                  ${skipAllowed ? `<div class="step-detail-row"><span class="step-dlabel">⏭️ Bỏ qua:</span> ✅ Cho phép bỏ qua bước này</div>` : ""}
+                  ${dRow("⚠️ Cảnh báo", st.warning)}
                 </div>` : ""}
             </li>`;
           }).join("")}
