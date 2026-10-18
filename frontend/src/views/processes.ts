@@ -178,9 +178,8 @@ function renderBeautifulDiagram(items: import("../api.js").ProcessStep[], proces
           <div class="beauty-content">
             <div class="beauty-code">${esc(st.code)}${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}${((st.skip_policy as unknown as { allowed?: boolean } | null)?.allowed) ? ' <span class="pill blue">⏭️ Được bỏ qua</span>' : ""}</div>
             <div class="beauty-title">${esc(st.title)}</div>
-            ${st.role ? `<div class="beauty-role">👤 ${esc(st.role)}</div>` : ""}
             ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="beauty-role">👤 Thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
-            ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? `<div class="beauty-role">👁️ Giám sát: ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
+            ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? `<div class="beauty-role">👁️ Kiểm duyệt/Giám sát: ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
             ${st.target_duration_min ? `<div class="beauty-time">⏱ ~${st.target_duration_min} phút</div>` : ""}
             ${hasDetails ? `<button class="beauty-expand" data-expand>Chi tiết ▾</button>
             <div class="beauty-details" hidden>
