@@ -1299,18 +1299,22 @@ function renderExecDiagram(steps: import("../api.js").ExecutionStep[]): string {
       ${steps.map((st, idx) => {
         const sx = st as unknown as Record<string, unknown>;
         const positions = (sx.positions as { name: string }[] ?? []);
+        const supervisors = (sx.supervisors as { name: string }[] ?? []);
         const assignees = (sx.assignees as { display_name: string }[] ?? []);
         const evCount = (sx.evidence_count as number) ?? 0;
+        const skipAllowed = (sx.skip_policy as { allowed?: boolean } | null)?.allowed === true;
         return `
         ${idx > 0 ? `<div class="flow-arrow" aria-hidden="true">↓</div>` : ""}
         <div class="flow-node exec ${cls[st.status] ?? ""}" data-goto-step="${esc(st.id)}" title="Bấm để xem chi tiết bước">
           <div class="flow-node-head">
             <span class="flow-num">${idx + 1}</span>
             <strong>${esc(st.code)}</strong>
+            ${skipAllowed ? ' <span class="pill blue">⏭️ Được bỏ qua</span>' : ""}
             <span class="pill ${st.status === "PASSED" ? "green" : st.status === "IN_PROGRESS" ? "blue" : "gray"}">${esc(label[st.status] ?? st.status)}</span>
           </div>
           <div class="flow-title">${esc(st.title)}</div>
-          ${positions.length > 0 ? `<div class="flow-meta">👤 ${positions.map((p) => esc(p.name)).join(", ")}</div>` : ""}
+          ${positions.length > 0 ? `<div class="flow-meta">👤 Thực hiện: ${positions.map((p) => esc(p.name)).join(", ")}</div>` : ""}
+          ${supervisors.length > 0 ? `<div class="flow-meta">👁️ Giám sát: ${supervisors.map((p) => esc(p.name)).join(", ")}</div>` : ""}
           ${assignees.length > 0 ? `<div class="flow-meta">✅ ${assignees.map((a) => esc(a.display_name)).join(", ")}</div>` : `<div class="flow-meta muted">Chưa phân công</div>`}
           ${evCount > 0 ? `<div class="flow-meta">📷 ${evCount} bằng chứng</div>` : ""}
           ${st.completed_at ? `<div class="flow-meta muted small">Xong: ${esc(st.completed_at.slice(0, 16).replace("T", " "))}</div>` : ""}
