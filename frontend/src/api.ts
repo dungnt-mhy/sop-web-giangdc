@@ -287,15 +287,15 @@ export const api = {
   },
   // --- Đơn vị tổ chức ---
   listOrgUnits(): Promise<{
-    items: { id: string; name: string; type: string; type_label: string; parent_id: string | null; parent_name: string | null; description: string | null; created_at: string }[];
+    items: { id: string; code: string | null; name: string; type: string; type_label: string; parent_id: string | null; parent_name: string | null; description: string | null; address: string | null; phone: string | null; email: string | null; manager_id: string | null; manager_name: string | null; status: string; status_label: string; created_at: string }[];
     total: number;
   }> {
     return req("GET", "/org-units");
   },
-  createOrgUnit(input: { name: string; type: string; parent_id?: string | null; description?: string }): Promise<unknown> {
+  createOrgUnit(input: { name: string; code?: string; type: string; parent_id?: string | null; description?: string; address?: string; phone?: string; email?: string; manager_id?: string | null; status?: string }): Promise<unknown> {
     return req("POST", "/org-units", input);
   },
-  updateOrgUnit(id: string, input: { name?: string; type?: string; parent_id?: string | null; description?: string }): Promise<unknown> {
+  updateOrgUnit(id: string, input: { name?: string; code?: string; type?: string; parent_id?: string | null; description?: string; address?: string; phone?: string; email?: string; manager_id?: string | null; status?: string }): Promise<unknown> {
     return req("PATCH", `/org-units/${encodeURIComponent(id)}`, input);
   },
   deleteOrgUnit(id: string): Promise<{ deleted: boolean }> {

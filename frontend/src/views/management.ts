@@ -265,13 +265,16 @@ export async function renderOrgUnits(root: HTMLElement): Promise<void> {
         return;
       }
       listEl.innerHTML = `<div class="table-wrap"><table class="tbl">
-        <thead><tr><th>Tên đơn vị</th><th>Loại</th><th>Trực thuộc</th><th>Mô tả</th><th style="width:120px"></th></tr></thead>
+        <thead><tr><th>Mã</th><th>Tên đơn vị</th><th>Loại</th><th>Trực thuộc</th><th>Liên hệ</th><th>Người quản lý</th><th>Trạng thái</th><th style="width:120px"></th></tr></thead>
         <tbody>${items.map((u) => `
           <tr data-id="${esc(u.id)}">
-            <td><strong>${esc(u.name)}</strong></td>
+            <td><strong>${u.code ? esc(u.code) : '<span class="muted">—</span>'}</strong></td>
+            <td><strong>${esc(u.name)}</strong>${u.address ? `<div class="muted small">📍 ${esc(u.address)}</div>` : ""}</td>
             <td><span class="pill blue">${esc(u.type_label)}</span></td>
             <td class="muted">${u.parent_name ? esc(u.parent_name) : "—"}</td>
-            <td class="muted">${esc(u.description ?? "—")}</td>
+            <td class="muted small">${u.phone ? `📞 ${esc(u.phone)}<br/>` : ""}${u.email ? `✉️ ${esc(u.email)}` : ""}${!u.phone && !u.email ? "—" : ""}</td>
+            <td>${u.manager_name ? esc(u.manager_name) : '<span class="muted">—</span>'}</td>
+            <td><span class="pill ${u.status === "active" ? "green" : "gray"}">${esc(u.status_label)}</span></td>
             <td class="actions">
               <button class="btn sm" data-act="edit">Sửa</button>
               <button class="btn sm danger" data-act="del">Xoá</button>
@@ -305,7 +308,7 @@ export async function renderOrgUnits(root: HTMLElement): Promise<void> {
 
 function openOrgUnitDialog(
   dialogRoot: HTMLElement,
-  existing: { id: string; name: string; type: string; parent_id: string | null; description: string | null } | null,
+  existing: { id: string; code: string | null; name: string; type: string; parent_id: string | null; description: string | null; address: string | null; phone: string | null; email: string | null; manager_id: string | null; status: string } | null,
   allUnits: { id: string; name: string }[],
   typeOptions: { value: string; label: string }[],
   onDone: () => void
@@ -313,22 +316,47 @@ function openOrgUnitDialog(
   const parentOpts = allUnits.filter((u) => !existing || u.id !== existing.id);
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
-      <div class="dialog" role="dialog" aria-modal="true">
+      <div class="dialog wide" role="dialog" aria-modal="true">
         <h3>${existing ? "Sửa đơn vị" : "Thêm đơn vị"}</h3>
         <form id="ou-form">
-          <label>Tên đơn vị <span class="req">*</span>
-            <input class="input" name="name" required maxlength="100" value="${existing ? esc(existing.name) : ""}" placeholder="VD: Chi nhánh Hà Nội, Kho chính…" /></label>
-          <label>Loại đơn vị <span class="req">*</span>
-            <select class="input" name="type">
-              ${typeOptions.map((o) => `<option value="${o.value}" ${existing?.type === o.value ? "selected" : ""}>${o.label}</option>`).join("")}
-            </select></label>
-          <label>Trực thuộc
-            <select class="input" name="parent_id">
-              <option value="">— Không có —</option>
-              ${parentOpts.map((u) => `<option value="${esc(u.id)}" ${existing?.parent_id === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}
-            </select>
-            <span class="hint">VD: Cửa hàng trực thuộc Chi nhánh</span></label>
-          <label>Mô tả <input class="input" name="description" maxlength="255" value="${existing?.description ? esc(existing.description) : ""}" /></label>
+          <div class="form-grid">
+            <label>Mã đơn vị
+              <input class="input" name="code" maxlength="32" value="${existing?.code ? esc(existing.code) : ""}" placeholder="VD: CN-HN, KHO-01" style="text-transform:uppercase" />
+              <span class="hint">Mã ngắn gọn để tra cứu nhanh</span></label>
+            <label>Tên đơn vị <span class="req">*</span>
+              <input class="input" name="name" required maxlength="100" value="${existing ? esc(existing.name) : ""}" placeholder="VD: Chi nhánh Hà Nội, Kho chính…" /></label>
+          </div>
+          <div class="form-grid">
+            <label>Loại đơn vị <span class="req">*</span>
+              <select class="input" name="type">
+                ${typeOptions.map((o) => `<option value="${o.value}" ${existing?.type === o.value ? "selected" : ""}>${o.label}</option>`).join("")}
+              </select></label>
+            <label>Trực thuộc
+              <select class="input" name="parent_id">
+                <option value="">— Không có —</option>
+                ${parentOpts.map((u) => `<option value="${esc(u.id)}" ${existing?.parent_id === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}
+              </select>
+              <span class="hint">VD: Cửa hàng trực thuộc Chi nhánh</span></label>
+          </div>
+          <label>Địa chỉ
+            <input class="input" name="address" maxlength="255" value="${existing?.address ? esc(existing.address) : ""}" placeholder="VD: 123 Nguyễn Trãi, Thanh Xuân, Hà Nội" /></label>
+          <div class="form-grid">
+            <label>Số điện thoại
+              <input class="input" name="phone" maxlength="32" value="${existing?.phone ? esc(existing.phone) : ""}" placeholder="VD: 024 3856 7890" /></label>
+            <label>Email
+              <input class="input" name="email" type="email" maxlength="100" value="${existing?.email ? esc(existing.email) : ""}" placeholder="VD: hanoi@congty.vn" /></label>
+          </div>
+          <div class="form-grid">
+            <label>Người quản lý
+              <select class="input" name="manager_id" id="ou-manager"><option value="">— Chưa chọn —</option></select>
+              <span class="hint">Chọn từ danh sách nhân viên</span></label>
+            <label>Trạng thái
+              <select class="input" name="status">
+                <option value="active" ${!existing || existing.status === "active" ? "selected" : ""}>Đang hoạt động</option>
+                <option value="inactive" ${existing?.status === "inactive" ? "selected" : ""}>Ngừng hoạt động</option>
+              </select></label>
+          </div>
+          <label>Mô tả <input class="input" name="description" maxlength="255" value="${existing?.description ? esc(existing.description) : ""}" placeholder="Ghi chú thêm về đơn vị…" /></label>
           <p class="form-error" id="ou-error" role="alert" hidden></p>
           <div class="dialog-actions">
             <button type="button" class="btn" id="ou-cancel">Huỷ</button>
@@ -342,15 +370,29 @@ function openOrgUnitDialog(
   dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
     if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
   });
+  // Tải danh sách nhân viên cho dropdown người quản lý.
+  const managerSel = dialogRoot.querySelector<HTMLSelectElement>("#ou-manager")!;
+  api.listActiveUsers().then(({ items }) => {
+    managerSel.innerHTML = `<option value="">— Chưa chọn —</option>` + items.map((u: { id: string; display_name: string; position_name?: string | null }) =>
+      `<option value="${esc(u.id)}" ${existing?.manager_id === u.id ? "selected" : ""}>${esc(u.display_name)}${u.position_name ? ` — ${esc(u.position_name)}` : ""}</option>`
+    ).join("");
+  }).catch(() => {});
   dialogRoot.querySelector<HTMLFormElement>("#ou-form")!.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const fd = new FormData(ev.target as HTMLFormElement);
     const errEl = dialogRoot.querySelector<HTMLElement>("#ou-error")!;
+    const str = (k: string) => { const s = String(fd.get(k) ?? "").trim(); return s || undefined; };
     const input = {
+      code: str("code"),
       name: String(fd.get("name") ?? "").trim(),
       type: String(fd.get("type") ?? "BRANCH"),
-      parent_id: String(fd.get("parent_id") ?? "") || null,
-      description: String(fd.get("description") ?? "").trim() || undefined,
+      parent_id: str("parent_id") ?? null,
+      description: str("description"),
+      address: str("address"),
+      phone: str("phone"),
+      email: str("email"),
+      manager_id: str("manager_id") ?? null,
+      status: String(fd.get("status") ?? "active"),
     };
     try {
       if (existing) await api.updateOrgUnit(existing.id, input);
