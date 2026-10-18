@@ -839,7 +839,9 @@ function openStepDialog(
       <h3>${isEdit ? "Sửa bước" : "Thêm bước mới"}</h3>
       <form id="step-form" novalidate>
         <div class="form-grid">
-          <div class="muted small" style="align-self:end;padding-bottom:8px">Mã bước tự động: B01, B02… theo thứ tự</div>
+          <label>Mã bước <span class="req">*</span>
+            <input class="input" name="code" required maxlength="32" value="${val(step?.code)}" style="text-transform:uppercase"
+              placeholder="VD: B01" /></label>
           <label>Vai trò người thực hiện
             <div class="roles-grid" id="step-positions">
               <span class="muted small">Đang tải…</span>
@@ -917,6 +919,7 @@ function openStepDialog(
     errEl.hidden = true;
     const fd = new FormData(form);
     const input: Record<string, unknown> = {
+      code: String(fd.get("code") ?? "").trim(),
       title: String(fd.get("title") ?? "").trim(),
       is_required: fd.get("is_required") === "on",
     };

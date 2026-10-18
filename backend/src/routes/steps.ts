@@ -132,9 +132,22 @@ export async function handleCreateStep(ctx: Ctx, versionId: string): Promise<Res
   }
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const code = String(body?.code ?? "").trim().toUpperCase();
   const title = String(body?.title ?? "").trim();
+  if (!code || code.length > 32) {
+    return apiError("VALIDATION_ERROR", "Mã bước không được trống và tối đa 32 ký tự.", ctx.requestId);
+  }
   if (!title || title.length > 200) {
     return apiError("VALIDATION_ERROR", "Tiêu đề bước không được trống và tối đa 200 ký tự.", ctx.requestId);
+  }
+  const dup = await db
+    .prepare(`SELECT id FROM process_steps WHERE version_id = ? AND code = ?`)
+    .bind(versionId, code)
+    .first();
+  if (dup) {
+    return apiError("VALIDATION_ERROR", "Mã bước đã tồn tại trong phiên bản này.", ctx.requestId, {
+      field: "code",
+    });
   }
 
   const str = (k: string) => {
@@ -153,8 +166,6 @@ export async function handleCreateStep(ctx: Ctx, versionId: string): Promise<Res
   const now = nowIso();
   const id = newId();
   const order = nextSortOrderFn(await nextSortOrder(db, versionId), body);
-  // Tự sinh mã bước: B01, B02... theo thứ tự.
-  const code = `B${String(order).padStart(2, "0")}`;
   // Vai trò người thực hiện: mảng nhiều chức vụ.
   const positionIds = Array.isArray(body?.position_ids)
     ? (body.position_ids as unknown[]).filter((x): x is string => typeof x === "string" && x.trim() !== "")
@@ -358,8 +369,7 @@ export async function handleDeleteStep(ctx: Ctx, versionId: string, stepId: stri
     );
     await db.batch(phase1);
     const phase2 = remaining.results.map((r, idx) =>
-      db.prepare(`UPDATE process_steps SET sort_order = ?, code = ? WHERE id = ?`)
-        .bind(idx + 1, `B${String(idx + 1).padStart(2, "0")}`, r.id)
+      db.prepare(`UPDATE process_steps SET sort_order = ? WHERE id = ?`).bind(idx + 1, r.id)
     );
     await db.batch(phase2);
   }
@@ -406,8 +416,7 @@ export async function handleReorderSteps(ctx: Ctx, versionId: string): Promise<R
     db.prepare(`UPDATE process_steps SET sort_order = ? WHERE id = ?`).bind(-(idx + 1), id)
   );
   const phase2 = ids.map((id, idx) =>
-    db.prepare(`UPDATE process_steps SET sort_order = ?, code = ?, updated_at = ? WHERE id = ?`)
-      .bind(idx + 1, `B${String(idx + 1).padStart(2, "0")}`, now, id)
+    db.prepare(`UPDATE process_steps SET sort_order = ?, updated_at = ? WHERE id = ?`).bind(idx + 1, now, id)
   );
   await db.batch([...phase1, ...phase2]);
   await audit(db, {
