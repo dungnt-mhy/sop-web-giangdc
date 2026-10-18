@@ -1069,8 +1069,18 @@ export async function handleSkipStep(ctx: Ctx, execId: string, stepId: string): 
   if (step.status !== "NOT_STARTED" && step.status !== "IN_PROGRESS") {
     return apiError("VALIDATION_ERROR", "Bước đã kết thúc.", ctx.requestId);
   }
-  if (step.is_required === 1) {
+  // Kiểm tra quyền bỏ qua: bước không bắt buộc HOẶC có skip_policy cho phép.
+  const skipPolicy = step.skip_policy ? JSON.parse(step.skip_policy) as { allowed?: boolean; allowed_positions?: string[] } : null;
+  const canSkipByPolicy = skipPolicy?.allowed === true;
+  if (step.is_required === 1 && !canSkipByPolicy) {
     return apiError("VALIDATION_ERROR", "Không được bỏ qua bước bắt buộc.", ctx.requestId);
+  }
+  // Nếu giới hạn chức vụ được bỏ qua → kiểm tra.
+  if (canSkipByPolicy && skipPolicy?.allowed_positions && skipPolicy.allowed_positions.length > 0) {
+    const mePos = await db.prepare(`SELECT position_id FROM users WHERE id = ?`).bind(me.user.id).first<{ position_id: string | null }>();
+    if (!mePos?.position_id || !skipPolicy.allowed_positions.includes(mePos.position_id)) {
+      return apiError("FORBIDDEN", "Chức vụ của bạn không được phép bỏ qua bước này.", ctx.requestId);
+    }
   }
   // AC-04 cũng áp dụng cho skip: bước trước phải xong.
   if (step.sort_order > 1) {

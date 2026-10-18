@@ -868,6 +868,14 @@ function openStepDialog(
           <label class="check"><input type="checkbox" name="is_required" ${step?.is_required !== false ? "checked" : ""} />
             Bước bắt buộc</label>
         </div>
+        <h4 style="margin-top:12px">Cho phép bỏ qua (PRC-007)</h4>
+        <label class="check"><input type="checkbox" name="allow_skip" id="step-allow-skip"
+          ${(step?.skip_policy as unknown as { allowed?: boolean } | null)?.allowed ? "checked" : ""} />
+          Cho phép bỏ qua bước này</label>
+        <label>Chức vụ được bỏ qua
+          <select class="input" name="skip_positions" id="step-skip-positions" multiple size="4">
+          </select>
+          <span class="hint">Chạm để chọn/bỏ chọn từng vai trò (giữ Ctrl trên máy tính để chọn nhiều). Để trống = ai cũng được bỏ qua.</span></label>
         <label>Cảnh báo <input class="input" name="warning" maxlength="500" value="${val(step?.warning)}"
           placeholder="VD: Cẩn thận hàng dễ vỡ" /></label>
         <p class="form-error" id="step-error" role="alert" hidden></p>
@@ -889,10 +897,15 @@ function openStepDialog(
   // Tải danh sách chức vụ (checkbox nhiều chọn).
   const posGrid = dialogRoot.querySelector<HTMLElement>("#step-positions")!;
   const existingPosIds = new Set(((step as unknown as Record<string, unknown>)?.positions as { id: string }[] ?? []).map((p) => p.id));
+  const skipSel = dialogRoot.querySelector<HTMLSelectElement>("#step-skip-positions")!;
+  const existingSkip = (step?.skip_policy as unknown as { allowed?: boolean; allowed_positions?: string[] } | null);
+  const existingSkipPosIds = new Set(existingSkip?.allowed_positions ?? []);
   api.listPositions().then(({ items }) => {
     posGrid.innerHTML = items.map((p) => `
       <label class="check"><input type="checkbox" name="position_ids" value="${esc(p.id)}"
         ${existingPosIds.has(p.id) ? "checked" : ""} /> ${esc(p.name)}</label>`).join("") || `<span class="muted small">Chưa có chức vụ nào.</span>`;
+    skipSel.innerHTML = items.map((p) => `
+      <option value="${esc(p.id)}" ${existingSkipPosIds.has(p.id) ? "selected" : ""}>${esc(p.name)}</option>`).join("");
   }).catch(() => { posGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; });
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -909,6 +922,14 @@ function openStepDialog(
     }
     const positionIds = fd.getAll("position_ids").map(String).filter((x) => x);
     if (positionIds.length > 0) input.position_ids = positionIds;
+    // PRC-007: cho phép bỏ qua.
+    const allowSkip = fd.get("allow_skip") === "on";
+    if (allowSkip) {
+      const skipPosIds = Array.from(form.querySelectorAll<HTMLSelectElement>("#step-skip-positions option:checked")).map((o) => o.value);
+      input.skip_policy = JSON.stringify({ allowed: true, allowed_positions: skipPosIds });
+    } else {
+      input.skip_policy = null;
+    }
     const dur = String(fd.get("target_duration_min") ?? "").trim();
     if (dur) input.target_duration_min = parseInt(dur, 10);
     const minPhotos = parseInt(String(fd.get("min_photos") ?? "").trim(), 10);
