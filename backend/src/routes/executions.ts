@@ -632,25 +632,27 @@ export async function handleRejectConfirmation(ctx: Ctx, id: string): Promise<Re
     if (stepIds.length === 0) {
       return apiError("VALIDATION_ERROR", "Vui lòng chọn ít nhất 1 bước cần làm lại.", ctx.requestId);
     }
-    // Kiểm tra các bước thuộc lượt này.
-    const placeholders = stepIds.map(() => "?").join(",");
-    const steps = await db.prepare(
-      `SELECT id FROM execution_steps WHERE id IN (${placeholders}) AND execution_id = ?`
-    ).bind(...stepIds, id).all<{ id: string }>();
-    if ((steps.results ?? []).length !== stepIds.length) {
-      return apiError("VALIDATION_ERROR", "Có bước không thuộc lượt này.", ctx.requestId);
+    try {
+      // Kiểm tra các bước thuộc lượt này.
+      const placeholders = stepIds.map(() => "?").join(",");
+      const steps = await db.prepare(
+        `SELECT id FROM execution_steps WHERE id IN (${placeholders}) AND execution_id = ?`
+      ).bind(...stepIds, id).all<{ id: string }>();
+      if ((steps.results ?? []).length !== stepIds.length) {
+        return apiError("VALIDATION_ERROR", "Có bước không thuộc lượt này.", ctx.requestId);
+      }
+      // Reset các bước về PENDING + lưu vết làm lại.
+      for (const sid of stepIds) {
+        await db.prepare(
+          `UPDATE execution_steps SET status = 'PENDING', redo_count = redo_count + 1, redo_reason = ?, redo_by = ?, redo_at = ?, updated_at = ? WHERE id = ?`
+        ).bind(reason, me.user.id, now, now, sid).run();
+      }
+      // Lượt quay về IN_PROGRESS để làm lại.
+      await db.prepare(`UPDATE executions SET status = 'IN_PROGRESS', updated_at = ? WHERE id = ?`).bind(now, id).run();
+    } catch (err) {
+      console.error("[reject-confirmation] redo failed:", err instanceof Error ? err.message : String(err));
+      return apiError("VALIDATION_ERROR", "Yêu cầu không hợp lệ.", ctx.requestId);
     }
-    // Reset các bước về PENDING + lưu vết làm lại.
-    const stmts = stepIds.map((sid) =>
-      db.prepare(
-        `UPDATE execution_steps SET status = 'PENDING', redo_count = redo_count + 1, redo_reason = ?, redo_by = ?, redo_at = ?, updated_at = ? WHERE id = ?`
-      ).bind(reason, me.user.id, now, now, sid)
-    );
-    // Lượt quay về IN_PROGRESS để làm lại.
-    stmts.push(
-      db.prepare(`UPDATE executions SET status = 'IN_PROGRESS', updated_at = ? WHERE id = ?`).bind(now, id)
-    );
-    await db.batch(stmts);
     await audit(db, {
       event_type: "EXECUTION_CONFIRM_REJECTED_REDO",
       actor_id: me.user.id,
