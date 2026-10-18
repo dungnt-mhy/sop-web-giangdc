@@ -505,6 +505,9 @@ export const api = {
   rejectSkip(execId: string, stepId: string, reason: string): Promise<{ rejected: boolean }> {
     return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:reject-skip`, { reason });
   },
+  listSkipRequests(execId: string): Promise<{ items: unknown[] }> {
+    return req("GET", `/executions/${encodeURIComponent(execId)}/skip-requests`);
+  },
 
   // --- Bằng chứng (Task 1.7: EVD-001..013) ---
   listEvidence(execId: string, stepId: string): Promise<{ items: Evidence[]; total: number }> {

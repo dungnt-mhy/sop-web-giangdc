@@ -77,6 +77,7 @@ import {
   handleRequestSkip,
   handleApproveSkip,
   handleRejectSkip,
+  handleListSkipRequests,
   handleStartExecution,
   handleStartStep,
 } from "./routes/executions";
@@ -413,6 +414,13 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     if (action === "request-skip") return handleRequestSkip(ctx, eid, sid);
     if (action === "approve-skip") return handleApproveSkip(ctx, eid, sid);
     if (action === "reject-skip") return handleRejectSkip(ctx, eid, sid);
+  }
+  // --- Danh sách yêu cầu xin bỏ qua ---
+  const srq = /^\/executions\/([^/:]+)\/skip-requests$/.exec(path);
+  if (srq && method === "GET") {
+    const eid = decodeURIComponent(srq[1]);
+    if (!UUID_RE.test(eid)) return apiError("NOT_FOUND", "Không tìm thấy.", ctx.requestId);
+    return handleListSkipRequests(ctx, eid);
   }
   // --- Phân công người cho bước ---
   const asg = /^\/executions\/([^/:]+)\/steps\/([^/:]+)\/assignees$/.exec(path);

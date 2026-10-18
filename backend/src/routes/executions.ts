@@ -1221,3 +1221,19 @@ export async function handleRejectSkip(ctx: Ctx, execId: string, stepId: string)
   });
   return ok({ rejected: true });
 }
+
+// GET /executions/:id/skip-requests — lấy danh sách yêu cầu xin bỏ qua đang chờ.
+export async function handleListSkipRequests(ctx: Ctx, execId: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const db = ctx.env.sop_demo_db;
+  const rows = await db.prepare(
+    `SELECT sr.*, u.display_name AS requester_name, es.code AS step_code, es.title AS step_title
+     FROM skip_requests sr
+     JOIN users u ON u.id = sr.requested_by
+     JOIN execution_steps es ON es.id = sr.step_id
+     WHERE sr.execution_id = ? AND sr.status = 'PENDING'
+     ORDER BY sr.created_at ASC`
+  ).bind(execId).all();
+  return ok({ items: rows.results ?? [] });
+}

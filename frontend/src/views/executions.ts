@@ -306,6 +306,43 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         `${e.process_name ?? ""}${e.title ? " — " + e.title : ""}`;
       renderActions(actionsEl, dialogRoot, e, reload);
       body.innerHTML = detailHtml(e);
+      // Tải và hiển thị yêu cầu xin bỏ qua đang chờ.
+      try {
+        const { items } = await api.listSkipRequests(execId);
+        if (items.length > 0) {
+          const srHtml = `
+            <div class="card" style="margin-bottom:16px;border-left:4px solid #f59e0b;">
+              <h4 style="margin:0 0 8px;">🙏 Yêu cầu xin bỏ qua đang chờ (${items.length})</h4>
+              ${(items as Record<string, unknown>[]).map((r) => `
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);">
+                  <div style="flex:1;">
+                    <strong>${esc(String(r.step_code))}</strong> — ${esc(String(r.step_title))}<br/>
+                    <span class="muted small">${esc(String(r.requester_name))}: ${esc(String(r.reason))}</span>
+                  </div>
+                  <button class="btn sm primary" data-skip-approve="${esc(String(r.step_id))}">✅ Duyệt</button>
+                  <button class="btn sm danger" data-skip-reject="${esc(String(r.step_id))}">❌ Từ chối</button>
+                </div>`).join("")}
+            </div>`;
+          body.insertAdjacentHTML("afterbegin", srHtml);
+          body.querySelectorAll<HTMLButtonElement>("[data-skip-approve]").forEach((b) => {
+            b.addEventListener("click", async () => {
+              if (!confirm("Duyệt yêu cầu bỏ qua bước này?")) return;
+              await api.approveSkip(execId, b.dataset.skipApprove!);
+              toast("Đã duyệt bỏ qua.");
+              await reload();
+            });
+          });
+          body.querySelectorAll<HTMLButtonElement>("[data-skip-reject]").forEach((b) => {
+            b.addEventListener("click", async () => {
+              const reason = prompt("Lý do từ chối:");
+              if (reason === null) return;
+              await api.rejectSkip(execId, b.dataset.skipReject!, reason);
+              toast("Đã từ chối.");
+              await reload();
+            });
+          });
+        }
+      } catch { /* ignore */ }
       // Xử lý chuyển đổi Danh sách / Sơ đồ.
       const toggleBtns = body.querySelectorAll<HTMLButtonElement>(".toggle-btn[data-eview]");
       const listView = body.querySelector("[data-exec-list]") as HTMLElement | null;
