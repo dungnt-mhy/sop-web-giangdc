@@ -5,6 +5,7 @@ import { audit, newId, nowIso } from "../db";
 import { apiError, ok, readJson } from "../errors";
 import { requirePermission } from "./auth";
 import type { Ctx } from "./context";
+import { notifyUsers } from "./notifications";
 
 type ExceptionRow = {
   id: string;
@@ -109,6 +110,17 @@ export async function handleCreateException(ctx: Ctx, execId: string) {
     request_id: ctx.requestId,
     diff: { execution_id: execId, step_id: stepId, severity },
   });
+
+  // Thông báo cho giám sát của lượt (nếu có và khác người tạo).
+  const execFull = await db.prepare(`SELECT supervisor_id, code FROM executions WHERE id = ?`).bind(execId).first<{ supervisor_id: string | null; code: string }>();
+  if (execFull?.supervisor_id && execFull.supervisor_id !== me.user.id) {
+    await notifyUsers(db, [execFull.supervisor_id], {
+      type: "EXCEPTION_CREATED",
+      title: `Ngoại lệ mới ở lượt ${execFull.code}`,
+      message: `${me.user.display_name} đã báo ngoại lệ "${title}" (mức ${severity}).`,
+      link: `#/exceptions`,
+    });
+  }
 
   const row = await db.prepare(`SELECT * FROM exceptions WHERE id = ?`).bind(id).first<ExceptionRow>();
   return ok(toPublic(row!), 201);

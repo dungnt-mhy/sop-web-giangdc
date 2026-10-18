@@ -119,7 +119,76 @@ function renderShell(): void {
     toast("Đã đăng xuất.", "ok");
   };
   const notif = $("#btn-notif") as HTMLButtonElement;
-  notif.onclick = () => toast("Chưa có thông báo mới.", "ok");
+  // Dropdown thông báo.
+  let notifOpen = false;
+  let notifPanel: HTMLElement | null = null;
+  async function refreshNotifBadge(): Promise<void> {
+    try {
+      const { unread } = await api.unreadCount();
+      notif.innerHTML = `🔔${unread > 0 ? `<span class="notif-badge">${unread > 9 ? "9+" : unread}</span>` : ""}`;
+      notif.classList.toggle("has-unread", unread > 0);
+    } catch { /* ignore */ }
+  }
+  async function toggleNotifPanel(): Promise<void> {
+    if (notifOpen && notifPanel) {
+      notifPanel.remove();
+      notifPanel = null;
+      notifOpen = false;
+      return;
+    }
+    notifOpen = true;
+    notifPanel = document.createElement("div");
+    notifPanel.id = "notif-panel";
+    notifPanel.innerHTML = `<div class="notif-head"><strong>Thông báo</strong><button class="link" id="notif-read-all">Đánh dấu đã đọc</button></div><div class="notif-list"><p class="muted" style="padding:12px;">Đang tải…</p></div>`;
+    document.body.appendChild(notifPanel);
+    // Đóng khi bấm ra ngoài.
+    const closeOnOutside = (ev: MouseEvent) => {
+      if (notifPanel && !notifPanel.contains(ev.target as Node) && ev.target !== notif) {
+        notifPanel.remove();
+        notifPanel = null;
+        notifOpen = false;
+        document.removeEventListener("click", closeOnOutside);
+      }
+    };
+    setTimeout(() => document.addEventListener("click", closeOnOutside), 0);
+    notifPanel.querySelector("#notif-read-all")!.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      await api.markAllNotificationsRead();
+      await refreshNotifBadge();
+      toggleNotifPanel();
+    });
+    try {
+      const { items } = await api.listNotifications(20);
+      const listEl = notifPanel.querySelector(".notif-list")!;
+      if (items.length === 0) {
+        listEl.innerHTML = `<p class="muted" style="padding:12px;">Chưa có thông báo nào.</p>`;
+      } else {
+        listEl.innerHTML = items.map((n) => `
+          <div class="notif-item ${n.is_read ? "" : "unread"}" data-nid="${esc(n.id)}" data-link="${esc(n.link ?? "")}">
+            <div class="notif-title">${esc(n.title)}</div>
+            ${n.message ? `<div class="notif-msg">${esc(n.message)}</div>` : ""}
+            <div class="notif-time muted small">${esc(n.created_at)}</div>
+          </div>`).join("");
+        listEl.querySelectorAll(".notif-item").forEach((el) => {
+          el.addEventListener("click", async () => {
+            const nid = (el as HTMLElement).dataset.nid!;
+            const link = (el as HTMLElement).dataset.link!;
+            await api.markNotificationRead(nid);
+            await refreshNotifBadge();
+            if (notifPanel) { notifPanel.remove(); notifPanel = null; notifOpen = false; }
+            if (link) location.hash = link;
+          });
+        });
+      }
+    } catch {
+      const listEl = notifPanel.querySelector(".notif-list")!;
+      listEl.innerHTML = `<p class="muted" style="padding:12px;">Không tải được thông báo.</p>`;
+    }
+  }
+  notif.onclick = (ev) => { ev.stopPropagation(); toggleNotifPanel(); };
+  refreshNotifBadge();
+  // Tự động làm mới badge mỗi 60s.
+  setInterval(refreshNotifBadge, 60000);
   // Nút thu gọn sidebar (chỉ có tác dụng trên desktop, CSS ẩn trên mobile).
   const brand = document.querySelector("#sidebar .brand");
   if (brand && !document.getElementById("btn-collapse")) {

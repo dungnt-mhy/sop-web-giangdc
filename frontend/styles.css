@@ -661,3 +661,33 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .org-unit-picker { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 14px; }
 .org-unit-picker legend { font-size: 14px; font-weight: 600; padding: 0 6px; }
 .org-unit-picker .check { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; }
+
+/* Chuông thông báo */
+#btn-notif { position: relative; }
+#btn-notif .notif-badge {
+  position: absolute; top: -4px; right: -4px;
+  background: var(--danger); color: #fff;
+  font-size: 10px; font-weight: 700;
+  min-width: 18px; height: 18px; line-height: 18px;
+  border-radius: 9px; text-align: center; padding: 0 4px;
+}
+#notif-panel {
+  position: fixed; top: 56px; right: 16px; z-index: 1000;
+  width: 360px; max-width: calc(100vw - 32px); max-height: 70vh;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden;
+}
+.notif-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 14px; border-bottom: 1px solid var(--line);
+}
+.notif-head .link { background: none; border: none; color: var(--navy-3); cursor: pointer; font-size: 13px; }
+.notif-list { overflow-y: auto; }
+.notif-item { padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: var(--page); }
+.notif-item.unread { background: #eef4fb; }
+.notif-item.unread:hover { background: #e2ecf7; }
+.notif-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+.notif-msg { font-size: 13px; color: var(--text); margin-bottom: 4px; }
+.notif-time { font-size: 12px; }

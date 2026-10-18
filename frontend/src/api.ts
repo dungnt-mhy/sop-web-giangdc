@@ -177,6 +177,16 @@ export interface ExecutionDetail extends Execution {
   }>;
 }
 
+export interface AppNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string | null;
+  link: string | null;
+  is_read: number;
+  created_at: string;
+}
+
 // --- Bước công việc (Task 1.5) ---
 export interface ProcessStep {
   id: string;
@@ -576,6 +586,19 @@ export const api = {
   },
   setStepAssignees(execId: string, stepId: string, user_ids: string[]): Promise<{ assigned: number }> {
     return req("PUT", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/assignees`, { user_ids });
+  },
+  // --- Thông báo ---
+  listNotifications(limit = 20): Promise<{ items: AppNotification[] }> {
+    return req("GET", `/notifications?limit=${limit}`);
+  },
+  unreadCount(): Promise<{ unread: number }> {
+    return req("GET", `/notifications/unread-count`);
+  },
+  markNotificationRead(id: string): Promise<{ ok: boolean }> {
+    return req("POST", `/notifications/${encodeURIComponent(id)}:read`);
+  },
+  markAllNotificationsRead(): Promise<{ ok: boolean }> {
+    return req("POST", `/notifications/read-all`);
   },
 };
 

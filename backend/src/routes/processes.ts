@@ -10,6 +10,7 @@
 import { audit, newId, nowIso } from "../db";
 import { apiError, ok, readJson } from "../errors";
 import { requirePermission, type SessionInfo } from "./auth";
+import { notifyUsers } from "./notifications";
 import type { Ctx } from "./context";
 
 const CODE_RE = /^[A-Z0-9][A-Z0-9._-]{1,31}$/i;
@@ -386,6 +387,42 @@ async function transitionVersion(
     request_id: ctx.requestId,
     diff: { from: v.status, to },
   });
+  // Gửi thông báo.
+  const proc = await db.prepare(`SELECT code, name FROM processes WHERE id = ?`).bind(v.process_id).first<{ code: string; name: string }>();
+  const procLabel = proc ? `${proc.code} v${v.version_number}` : `v${v.version_number}`;
+  const verLink = `#/processes/${v.process_id}`;
+  if (to === "IN_REVIEW") {
+    // Gửi duyệt → thông báo cho người có quyền duyệt (trừ người gửi).
+    const approvers = await db.prepare(
+      `SELECT DISTINCT u.id FROM users u
+       JOIN user_roles ur ON ur.user_id = u.id
+       JOIN role_permissions rp ON rp.role_id = ur.role_id
+       WHERE (rp.permission = 'processes.approve' OR rp.permission = '*') AND u.id != ? AND u.status = 'active'`
+    ).bind(me.user.id).all<{ id: string }>();
+    const ids = (approvers.results ?? []).map((r) => r.id);
+    if (ids.length > 0) {
+      await notifyUsers(db, ids, {
+        type: "VERSION_SUBMITTED",
+        title: `${procLabel} chờ duyệt`,
+        message: `${me.user.display_name} đã gửi duyệt ${procLabel}.`,
+        link: verLink,
+      });
+    }
+  } else if (to === "APPROVED" || to === "DRAFT") {
+    // Duyệt / trả về → thông báo cho người gửi duyệt.
+    const submitterId = (v as unknown as Record<string, unknown>).submitted_by as string | null;
+    if (submitterId && submitterId !== me.user.id) {
+      const isApprove = to === "APPROVED";
+      await notifyUsers(db, [submitterId], {
+        type: isApprove ? "VERSION_APPROVED" : "VERSION_RETURNED",
+        title: isApprove ? `${procLabel} đã được duyệt` : `${procLabel} bị trả về sửa`,
+        message: isApprove
+          ? `${me.user.display_name} đã duyệt ${procLabel}.`
+          : `${me.user.display_name} đã trả về ${procLabel} để sửa.`,
+        link: verLink,
+      });
+    }
+  }
   const updated = await db.prepare(`SELECT * FROM process_versions WHERE id = ?`).bind(v.id).first<VersionRow>();
   return ok(toPublicVersion(updated!));
 }

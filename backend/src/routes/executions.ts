@@ -10,6 +10,7 @@ import { audit, newId, nowIso } from "../db";
 import { apiError, ok, readJson } from "../errors";
 import { requirePermission, type SessionInfo } from "./auth";
 import type { Ctx } from "./context";
+import { createNotification, notifyUsers } from "./notifications";
 
 type ExecutionRow = {
   id: string;
@@ -366,6 +367,16 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
 
   const created = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(execId).first<ExecutionRow>();
   const pname = await db.prepare(`SELECT name FROM processes WHERE id = ?`).bind(processId).first<{ name: string }>();
+  // Thông báo cho người được giao (nếu khác người tạo).
+  if (assigneeId !== me.user.id) {
+    await createNotification(db, {
+      user_id: assigneeId,
+      type: "EXECUTION_ASSIGNED",
+      title: `Bạn được giao lượt ${code}`,
+      message: `${me.user.display_name} đã tạo lượt công việc "${pname?.name ?? ""}" và giao cho bạn.`,
+      link: `#/executions/${execId}`,
+    });
+  }
   return ok(toPublicExec(created!, pname?.name, { total: steps.results.length, done: 0 }), 201);
 }
 
@@ -610,6 +621,47 @@ async function transitionExecution(
     request_id: ctx.requestId,
     diff: { from: e.status, to },
   });
+  // Gửi thông báo theo trạng thái đích.
+  const execCode = e.code;
+  const execLink = `#/executions/${id}`;
+  if (to === "PENDING_CONFIRMATION") {
+    // Báo hoàn thành → thông báo cho người phê duyệt/giám sát.
+    const approverId = (e as unknown as Record<string, unknown>).approver_id as string | null;
+    const supervisorId = e.supervisor_id as string | null;
+    const notifyIds = [approverId, supervisorId].filter((x): x is string => !!x && x !== me.user.id);
+    if (notifyIds.length > 0) {
+      await notifyUsers(db, notifyIds, {
+        type: "EXECUTION_REPORTED",
+        title: `Lượt ${execCode} chờ xác nhận hoàn thành`,
+        message: `${me.user.display_name} đã báo hoàn thành lượt ${execCode}. Vui lòng vào xác nhận.`,
+        link: execLink,
+      });
+    }
+  } else if (to === "COMPLETED") {
+    // Xác nhận hoàn thành → thông báo cho người tạo và người được giao.
+    const notifyIds = [e.created_by, e.assignee_id, (e as unknown as Record<string, unknown>).creator_id as string | null]
+      .filter((x): x is string => !!x && x !== me.user.id);
+    if (notifyIds.length > 0) {
+      await notifyUsers(db, notifyIds, {
+        type: "EXECUTION_CONFIRMED",
+        title: `Lượt ${execCode} đã hoàn thành`,
+        message: `${me.user.display_name} đã xác nhận hoàn thành lượt ${execCode}.`,
+        link: execLink,
+      });
+    }
+  } else if (to === "CANCELLED") {
+    // Hủy lượt → thông báo cho người tạo và người được giao.
+    const notifyIds = [e.created_by, e.assignee_id, (e as unknown as Record<string, unknown>).creator_id as string | null]
+      .filter((x): x is string => !!x && x !== me.user.id);
+    if (notifyIds.length > 0) {
+      await notifyUsers(db, notifyIds, {
+        type: "EXECUTION_CANCELLED",
+        title: `Lượt ${execCode} đã bị hủy`,
+        message: `${me.user.display_name} đã hủy lượt ${execCode}. Lý do: ${extra?.cancel_reason ?? ""}`,
+        link: execLink,
+      });
+    }
+  }
   const updated = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
   const progress = await getProgress(db, id);
   const redoInfo = await getRedoInfo(db, id);
@@ -723,6 +775,16 @@ export async function handleRejectConfirmation(ctx: Ctx, id: string): Promise<Re
       request_id: ctx.requestId,
       diff: { reason, step_ids: stepIds },
     });
+    // Thông báo cho người thực hiện biết bị trả lại làm lại.
+    const notifyIds = [e.assignee_id, e.created_by].filter((x): x is string => !!x && x !== me.user.id);
+    if (notifyIds.length > 0) {
+      await notifyUsers(db, notifyIds, {
+        type: "EXECUTION_REJECTED",
+        title: `Lượt ${e.code} bị yêu cầu làm lại`,
+        message: `${me.user.display_name} đã từ chối xác nhận lượt ${e.code}, yêu cầu làm lại ${stepIds.length} bước. Lý do: ${reason}`,
+        link: `#/executions/${id}`,
+      });
+    }
   }
   const updated = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
   const progress = await getProgress(db, id);

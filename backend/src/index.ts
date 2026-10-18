@@ -109,6 +109,12 @@ import {
   handleUploadStepResource,
 } from "./routes/step_resources";
 import {
+  handleListNotifications,
+  handleMarkAllRead,
+  handleMarkRead,
+  handleUnreadCount,
+} from "./routes/notifications";
+import {
   handleDashboardExecutions,
   handleDashboardExportCsv,
   handleDashboardDaily,
@@ -248,6 +254,13 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     if (method === "PATCH") return handleUpdateOrgUnit(ctx, oid);
     if (method === "DELETE") return handleDeleteOrgUnit(ctx, oid);
   }
+
+  // --- Notifications (thông báo) ---
+  if (path === "/notifications" && method === "GET") return handleListNotifications(ctx);
+  if (path === "/notifications/unread-count" && method === "GET") return handleUnreadCount(ctx);
+  if (path === "/notifications/read-all" && method === "POST") return handleMarkAllRead(ctx);
+  const notifM = /^\/notifications\/([^/:]+):read$/.exec(path);
+  if (notifM && method === "POST") return handleMarkRead(ctx, decodeURIComponent(notifM[1]));
 
   // --- Users (quyền users.manage) ---
   if (path === "/users/active" && method === "GET") {
