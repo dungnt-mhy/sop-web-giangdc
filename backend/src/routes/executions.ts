@@ -1336,18 +1336,20 @@ export async function handleUpdateStepNote(ctx: Ctx, execId: string, stepId: str
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
   const note = typeof body?.note === "string" ? body.note.trim() || null : null;
 
-  await db.prepare(
-    `UPDATE execution_steps SET note = ?, updated_at = ? WHERE id = ?`
-  ).bind(note, nowIso(), stepId).run();
-
-  await audit(db, {
-    event_type: "STEP_NOTE_UPDATED",
-    actor_id: me.user.id,
-    object_type: "execution_step",
-    object_id: stepId,
-    request_id: ctx.requestId,
-    diff: { note },
-  });
+  const now = nowIso();
+  await Promise.all([
+    db.prepare(
+      `UPDATE execution_steps SET note = ?, updated_at = ? WHERE id = ?`
+    ).bind(note, now, stepId).run(),
+    audit(db, {
+      event_type: "STEP_NOTE_UPDATED",
+      actor_id: me.user.id,
+      object_type: "execution_step",
+      object_id: stepId,
+      request_id: ctx.requestId,
+      diff: { note },
+    }),
+  ]);
   return ok({ updated: true });
 }
 

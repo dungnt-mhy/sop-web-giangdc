@@ -1435,7 +1435,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👤 Thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
                 ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👁️ Giám sát: ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
                 ${st.skip_reason ? `<div class="muted small">Lý do bỏ qua: ${esc(st.skip_reason)}</div>` : ""}
-                ${st.note ? `<div class="muted small">Ghi chú: ${esc(st.note)}</div>` : ""}
+                ${st.note ? `<div class="muted small">📝 Ghi chú: ${esc(st.note)}</div>` : ""}
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? `<div class="muted small" style="color:#b45309;">🔄 Yêu cầu làm lại: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")} (${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")})</div>` : ""}
               </div>
               <div class="step-actions">
@@ -1458,7 +1458,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${(st as unknown as Record<string, unknown>).expected_result ? `<div class="step-detail-row"><span class="step-dlabel">Kết quả mong đợi:</span> ${esc((st as unknown as Record<string, unknown>).expected_result as string)}</div>` : ""}
                 ${(st as unknown as Record<string, unknown>).input_desc ? `<div class="step-detail-row"><span class="step-dlabel">Đầu vào:</span> ${esc((st as unknown as Record<string, unknown>).input_desc as string)}</div>` : ""}
                 ${(st as unknown as Record<string, unknown>).output_desc ? `<div class="step-detail-row"><span class="step-dlabel">Đầu ra / Bàn giao:</span> ${esc((st as unknown as Record<string, unknown>).output_desc as string)}</div>` : ""}
-                ${st.note ? `<div class="step-detail-row"><span class="step-dlabel">Ghi chú:</span> ${esc(st.note)}</div>` : ""}
+                ${st.note ? `<div class="step-detail-row"><span class="step-dlabel">📝 Ghi chú:</span> ${esc(st.note)}</div>` : ""}
                 ${(st as unknown as Record<string, unknown>).target_duration_min ? `<div class="step-detail-row"><span class="step-dlabel">Thời gian mục tiêu:</span> ${esc(String((st as unknown as Record<string, unknown>).target_duration_min))} phút</div>` : ""}
                 ${st.is_required ? "" : `<div class="step-detail-row"><span class="step-dlabel">Bắt buộc:</span> Không (bước tùy chọn, được phép bỏ qua)</div>`}
                 ${((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed ? `<div class="step-detail-row"><span class="step-dlabel">⏭️ Bỏ qua:</span> ✅ Cho phép bỏ qua bước này (người giám sát duyệt)</div>` : ""}
