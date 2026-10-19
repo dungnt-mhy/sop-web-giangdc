@@ -663,7 +663,17 @@ function renderActions(
 
 /** Xuất báo cáo lượt công việc ra file Word. */
 async function exportExecutionToWord(e: ExecutionDetail): Promise<void> {
-  const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, AlignmentType } = await import("docx");
+  const docxLib = (window as unknown as Record<string, unknown>).docx as {
+    Document: new (opts: unknown) => unknown;
+    Packer: { toBlob: (doc: unknown) => Promise<Blob> };
+    Paragraph: new (opts: unknown) => unknown;
+    TextRun: new (opts: unknown) => unknown;
+    HeadingLevel: Record<string, string>;
+    ImageRun: new (opts: unknown) => unknown;
+    AlignmentType: Record<string, string>;
+  } | undefined;
+  if (!docxLib) throw new Error("Chưa tải được thư viện Word. Hãy kiểm tra mạng và thử lại.");
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, AlignmentType } = docxLib;
 
   const children: any[] = [];
 
