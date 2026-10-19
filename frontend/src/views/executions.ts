@@ -1526,7 +1526,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
             const cr = st.completion_req ? JSON.parse(st.completion_req) : null;
             minPhotos = cr?.min_photos ?? (cr?.require_photo ? 1 : 0);
           } catch { /* bỏ qua */ }
-          return `<li data-sid="${esc(st.id)}">
+          return `<li data-sid="${esc(st.id)}" class="exec-step-item">
             <div class="step-head">
               <span class="step-num">${idx + 1}</span>
               <div class="step-title">

@@ -438,11 +438,18 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 }
 .step-history { margin-top: 10px; border-top: 1px dashed #cbd5e1; padding-top: 8px; }
 .step-history summary { cursor: pointer; font-weight: 600; color: #475569; font-size: 13px; }
-.step-history-body { margin-top: 6px; }
+.step-history-body { margin-top: 6px; max-height: 200px; overflow-y: auto; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; }
 .hist-item { padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
 .hist-item:last-child { border-bottom: 0; }
 .hist-action { font-weight: 600; }
 .hist-reason { color: #64748b; margin-top: 2px; white-space: pre-wrap; }
+/* Viền rõ nét cho mỗi bước trong lượt thực hiện. */
+.exec-step-item {
+  border: 2px solid #3b82f6; border-radius: 12px;
+  padding: 12px; margin-bottom: 12px; background: #fff;
+  list-style: none;
+}
+.exec-step-item .step-details { margin-left: 0; }
 .step-dlabel { font-weight: 700; color: #475569; }
 @keyframes beauty-in {
   from { opacity: 0; transform: translateY(12px); }
