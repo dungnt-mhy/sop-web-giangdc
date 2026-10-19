@@ -667,7 +667,8 @@ function openCompleteConfirm(
       <div class="dialog" role="dialog" aria-modal="true" aria-label="Xác nhận hoàn thành">
         <h3>Hoàn thành bước "${esc(step?.code ?? "")}"?</h3>
         <p>⚠️ Sau khi hoàn thành, <strong>bạn sẽ không thể sửa đổi</strong> bước này nữa
-        (không thêm/xóa ảnh, không sửa trạng thái). Hãy kiểm tra kỹ bằng chứng và thông tin trước khi xác nhận.</p>
+        (không thêm/xóa ảnh, không sửa trạng thái, <strong>không thay đổi người được phân công</strong>).
+        Người thực hiện sẽ được cố định. Hãy kiểm tra kỹ bằng chứng và thông tin trước khi xác nhận.</p>
         <div class="dialog-actions">
           <button type="button" class="btn" id="cc-cancel">Kiểm tra lại</button>
           <button type="button" class="btn primary" id="cc-ok">Xác nhận hoàn thành</button>
@@ -1257,7 +1258,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${canFinish ? `<button class="btn sm primary" data-step="complete">Hoàn thành</button>` : ""}
                 ${canSkip ? `<button class="btn sm" data-step="skip">⏭️ Bỏ qua</button>` : ""}
                 ${canSkip ? `<button class="btn sm secondary" data-step="request-skip">🙏 Xin bỏ qua</button>` : ""}
-                ${active ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : ""}
+                ${active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : ""}
               </div>
               <div class="step-assignees" data-assignees-for="${esc(st.id)}"><span class="muted small">Đang tải…</span></div>
             </div>

@@ -702,9 +702,13 @@ export async function handleSetStepAssignees(ctx: Ctx, execId: string, stepId: s
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
 
-  const step = await db.prepare(`SELECT id, execution_id FROM execution_steps WHERE id = ?`).bind(stepId).first<{ id: string; execution_id: string }>();
+  const step = await db.prepare(`SELECT id, execution_id, status FROM execution_steps WHERE id = ?`).bind(stepId).first<{ id: string; execution_id: string; status: string }>();
   if (!step || step.execution_id !== execId) {
     return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
+  }
+  // Người phân công bị cố định khi bước đã hoàn thành/bỏ qua/hủy.
+  if (["PASSED", "SKIPPED", "CANCELLED"].includes(step.status)) {
+    return apiError("VALIDATION_ERROR", "Bước đã hoàn thành — không thể thay đổi người được phân công.", ctx.requestId);
   }
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
