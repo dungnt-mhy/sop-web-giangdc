@@ -13,7 +13,7 @@ function stopEvidenceAutoRefresh(): void {
   }
 }
 /** Bật tự động tải lại bằng chứng mỗi 15s (chỉ khi tab đang hiển thị). */
-function startEvidenceAutoRefresh(body: HTMLElement, execId: string): void {
+function startEvidenceAutoRefresh(body: HTMLElement, execId: string, dialogRoot: HTMLElement): void {
   stopEvidenceAutoRefresh();
   evidenceRefreshTimer = window.setInterval(async () => {
     if (document.hidden) return;
@@ -27,7 +27,7 @@ function startEvidenceAutoRefresh(body: HTMLElement, execId: string): void {
         const currentCount = countEl?.textContent?.match(/\d+/)?.[0];
         // Chỉ render lại khi số lượng thay đổi (tránh nhấp nháy).
         if (currentCount !== String(items.length)) {
-          renderEvidenceGrid(sec, execId, sid, items);
+          renderEvidenceGrid(sec, execId, sid, items, dialogRoot);
         }
       } catch {
         // Bỏ qua lỗi khi tự động refresh.
@@ -588,9 +588,9 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         });
       });
       // Tải bằng chứng cho từng bước.
-      await loadAllEvidence(body, e.id);
+      await loadAllEvidence(body, e.id, dialogRoot);
       // Tự động tải lại bằng chứng mỗi 15s (2 người cùng upload đều thấy).
-      startEvidenceAutoRefresh(body, e.id);
+      startEvidenceAutoRefresh(body, e.id, dialogRoot);
       // Hiển thị phân công từ dữ liệu đã có.
       renderAllAssignees(body, e.steps);
       // Tải lịch sử khi mở.
@@ -638,7 +638,7 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           const files = Array.from(input.files ?? []);
           input.value = "";
           if (files.length === 0) return;
-          await uploadEvidenceFiles(body, e.id, sid, files);
+          await uploadEvidenceFiles(body, e.id, sid, files, dialogRoot);
         });
       });
       // Nút tải lại danh sách bằng chứng (hữu ích khi nhiều người cùng upload).
@@ -649,7 +649,7 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           btn.disabled = true;
           try {
             const { items } = await api.listEvidence(e.id, sid);
-            renderEvidenceGrid(sec, e.id, sid, items);
+            renderEvidenceGrid(sec, e.id, sid, items, dialogRoot);
             toast(`Đã tải lại (${items.length} bằng chứng).`);
           } catch (err) {
             toast(`Lỗi tải lại: ${msg(err)}`);
@@ -1108,14 +1108,14 @@ async function exportExecutionToWord(e: ExecutionDetail): Promise<void> {
 }
 
 /** Tải và hiển thị bằng chứng cho tất cả các bước. */
-async function loadAllEvidence(body: HTMLElement, execId: string): Promise<void> {
+async function loadAllEvidence(body: HTMLElement, execId: string, dialogRoot: HTMLElement): Promise<void> {
   const sections = body.querySelectorAll<HTMLElement>("[data-evidence-for]");
   await Promise.all(
     Array.from(sections).map(async (sec) => {
       const sid = sec.dataset.evidenceFor!;
       try {
         const { items } = await api.listEvidence(execId, sid);
-        renderEvidenceGrid(sec, execId, sid, items);
+        renderEvidenceGrid(sec, execId, sid, items, dialogRoot);
       } catch {
         // Không chặn hiển thị chính nếu tải bằng chứng lỗi.
       }
@@ -1127,7 +1127,8 @@ function renderEvidenceGrid(
   sec: HTMLElement,
   execId: string,
   sid: string,
-  items: import("../api.js").Evidence[]
+  items: import("../api.js").Evidence[],
+  dialogRoot: HTMLElement
 ): void {
   const grid = sec.querySelector("[data-ev-grid]") as HTMLElement;
   const countEl = sec.querySelector("[data-ev-count]") as HTMLElement;
@@ -1152,12 +1153,13 @@ function renderEvidenceGrid(
     btn.addEventListener("click", async (ev) => {
       ev.preventDefault();
       const evid = btn.closest("[data-evid]")!.getAttribute("data-evid")!;
-      if (!confirm("Xóa bằng chứng này?")) return;
+      const ok = await openConfirmDialog(dialogRoot, "Xóa bằng chứng", "Xóa bằng chứng này? Hành động không thể hoàn tác.", "🗑️ Xóa");
+      if (!ok) return;
       try {
         await api.deleteEvidence(evid);
         toast("Đã xóa bằng chứng.");
         const { items: fresh } = await api.listEvidence(execId, sid);
-        renderEvidenceGrid(sec, execId, sid, fresh);
+        renderEvidenceGrid(sec, execId, sid, fresh, dialogRoot);
       } catch (e) {
         toast(`Lỗi: ${msg(e)}`);
       }
@@ -1170,7 +1172,8 @@ async function uploadEvidenceFiles(
   body: HTMLElement,
   execId: string,
   sid: string,
-  files: File[]
+  files: File[],
+  dialogRoot: HTMLElement
 ): Promise<void> {
   const sec = body.querySelector<HTMLElement>(`[data-evidence-for="${sid}"]`);
   if (!sec) return;
@@ -1208,7 +1211,7 @@ async function uploadEvidenceFiles(
     toast(`Đã tải lên ${done} ảnh${failed > 0 ? `, ${failed} lỗi` : ""}.`);
     try {
       const { items } = await api.listEvidence(execId, sid);
-      renderEvidenceGrid(sec, execId, sid, items);
+      renderEvidenceGrid(sec, execId, sid, items, dialogRoot);
     } catch (e) {
       toast(`Tải lên xong nhưng không refresh được danh sách: ${msg(e)}`);
     }
