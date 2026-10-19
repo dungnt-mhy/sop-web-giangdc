@@ -605,8 +605,10 @@ function renderActions(
     btns.push(`<button class="btn primary" data-ea="resume">Tiếp tục</button>`);
     btns.push(`<button class="btn danger" data-ea="cancel">Hủy lượt</button>`);
   }
-  // Nút xuất Word luôn hiện.
-  btns.push(`<button class="btn" data-ea="export-word">📄 Xuất Word</button>`);
+  // Nút xuất Word chỉ hiện khi lượt đã hoàn thành.
+  if (e.status === "COMPLETED") {
+    btns.push(`<button class="btn" data-ea="export-word">📄 Xuất Word</button>`);
+  }
   el.innerHTML = btns.join("");
   el.onclick = async (ev) => {
     const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-ea]");
