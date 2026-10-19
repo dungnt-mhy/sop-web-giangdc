@@ -819,3 +819,5 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .user-search-item { padding: 10px 12px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
 .user-search-item:hover { background: #f1f5f9; }
 .user-search-empty { padding: 10px 12px; color: #94a3b8; font-size: 13px; }
+.evidence-refresh-btn { margin-left: 8px; }
+.evidence-head { display: flex; align-items: center; gap: 4px; }

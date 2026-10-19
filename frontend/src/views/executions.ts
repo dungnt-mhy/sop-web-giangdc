@@ -605,6 +605,23 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           await uploadEvidenceFiles(body, e.id, sid, files);
         });
       });
+      // Nút tải lại danh sách bằng chứng (hữu ích khi nhiều người cùng upload).
+      body.querySelectorAll<HTMLButtonElement>("[data-ev-refresh]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const sec = btn.closest<HTMLElement>("[data-evidence-for]")!;
+          const sid = sec.dataset.evidenceFor!;
+          btn.disabled = true;
+          try {
+            const { items } = await api.listEvidence(e.id, sid);
+            renderEvidenceGrid(sec, e.id, sid, items);
+            toast(`Đã tải lại (${items.length} bằng chứng).`);
+          } catch (err) {
+            toast(`Lỗi tải lại: ${msg(err)}`);
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
     } catch (err) {
       body.innerHTML = `<p class="empty">Không tải được lượt: ${esc(msg(err))}</p>`;
     }
@@ -1153,8 +1170,12 @@ async function uploadEvidenceFiles(
   }
   if (done > 0) {
     toast(`Đã tải lên ${done} ảnh${failed > 0 ? `, ${failed} lỗi` : ""}.`);
-    const { items } = await api.listEvidence(execId, sid);
-    renderEvidenceGrid(sec, execId, sid, items);
+    try {
+      const { items } = await api.listEvidence(execId, sid);
+      renderEvidenceGrid(sec, execId, sid, items);
+    } catch (e) {
+      toast(`Tải lên xong nhưng không refresh được danh sách: ${msg(e)}`);
+    }
   }
 }
 
@@ -2115,6 +2136,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
             <div class="evidence-section" data-evidence-for="${esc(st.id)}">
               <div class="evidence-head">
                 <span class="evidence-title">📷 Bằng chứng <span class="evidence-count" data-ev-count></span></span>
+                <button class="btn sm evidence-refresh-btn" data-ev-refresh title="Tải lại danh sách">🔄</button>
                 ${canUpload ? `<span class="evidence-upload-group">
                   <label class="btn sm evidence-upload-btn camera-btn">
                     📸 Chụp
