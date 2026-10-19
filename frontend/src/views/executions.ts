@@ -4,6 +4,19 @@
 import { api, type Execution, type ExecutionDetail } from "../api.js";
 import { esc, setLoading, toast } from "../ui.js";
 
+/** Định dạng ngày giờ theo giờ địa phương (dd/mm/yyyy hh:mm). */
+function fmtVn(s: string | null | undefined): string {
+  if (!s) return "—";
+  try {
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return "—";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return "—";
+  }
+}
+
 const EXEC_STATUS_LABELS: Record<string, string> = {
   CREATED: "Mới tạo",
   IN_PROGRESS: "Đang thực hiện",
@@ -82,7 +95,7 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
       tbody.innerHTML = items.map((e) => {
         const p = e.progress;
         const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
-        const fmtDt = (s: string | null | undefined) => s ? s.slice(0, 16).replace("T", " ").split(" ").map((x, i) => i === 0 ? x.split("-").reverse().join("/") : x).join(" ") : "—";
+        const fmtDt = fmtVn;
         // Thời gian tạo: kèm giờ.
         const createdAt = fmtDt(e.created_at);
         // Thời gian bắt đầu (thực tế): thời gian nhấn Bắt đầu; chưa bắt đầu thì hiện dự kiến.
@@ -219,11 +232,24 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
       renderChecks(aprList, aprUsers);
     }, 300);
   });
-  // Mặc định thời gian bắt đầu là hiện tại.
+  // Mặc định thời gian bắt đầu là hiện tại (giờ Việt Nam), hoàn thành dự kiến +3h.
   const startInput = dialogRoot.querySelector<HTMLInputElement>("#exec-start")!;
+  const endInput = dialogRoot.querySelector<HTMLInputElement>("#exec-end")!;
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
-  startInput.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const fmtLocal = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  startInput.value = fmtLocal(now);
+  const endDefault = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+  endInput.value = fmtLocal(endDefault);
+  // Khi đổi giờ bắt đầu, tự cập nhật giờ hoàn thành = +3h (nếu chưa sửa tay).
+  let endTouched = false;
+  endInput.addEventListener("input", () => { endTouched = true; });
+  startInput.addEventListener("input", () => {
+    if (!endTouched && startInput.value) {
+      const s = new Date(startInput.value);
+      if (!isNaN(s.getTime())) endInput.value = fmtLocal(new Date(s.getTime() + 3 * 60 * 60 * 1000));
+    }
+  });
   api.listProcesses({ status: "ACTIVE" }).then(({ items }) => {
     const available = items.filter((p) => p.active_version);
     if (available.length === 0) {
@@ -1265,7 +1291,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
   const p = e.progress;
   const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
   const active = e.status === "IN_PROGRESS";
-  const fmtDt = (s: string | null | undefined) => s ? s.slice(0, 16).replace("T", " ").split(" ").map((x, i) => i === 0 ? x.split("-").reverse().join("/") : x).join(" ") : "—";
+  const fmtDt = fmtVn;
   return `
     <section class="card">
       <h3>Thông tin lượt công việc</h3>

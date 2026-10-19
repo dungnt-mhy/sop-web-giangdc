@@ -209,8 +209,8 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
   const conds: string[] = [];
   const binds: unknown[] = [];
   if (mine) {
-    conds.push(`e.assignee_id = ?`);
-    binds.push(me.user.id);
+    conds.push(`(e.assignee_id = ? OR e.created_by = ? OR e.id IN (SELECT execution_id FROM execution_supervisors WHERE user_id = ?) OR e.id IN (SELECT execution_id FROM execution_approvers WHERE user_id = ?) OR e.id IN (SELECT es.execution_id FROM execution_step_assignees esa JOIN execution_steps es ON es.id = esa.execution_step_id WHERE esa.user_id = ?))`);
+    binds.push(me.user.id, me.user.id, me.user.id, me.user.id, me.user.id);
   }
   if (status) {
     conds.push(`e.status = ?`);
