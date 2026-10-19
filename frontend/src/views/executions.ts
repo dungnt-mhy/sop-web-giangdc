@@ -608,6 +608,7 @@ function renderActions(
   // Nút xuất Word chỉ hiện khi lượt đã hoàn thành.
   if (e.status === "COMPLETED") {
     btns.push(`<button class="btn" data-ea="export-word">📄 Xuất Word</button>`);
+    btns.push(`<button class="btn" data-ea="export-pdf">📕 Xuất PDF</button>`);
   }
   el.innerHTML = btns.join("");
   el.onclick = async (ev) => {
@@ -654,6 +655,17 @@ function renderActions(
         }
         restore();
         return;
+      } else if (act === "export-pdf") {
+        restore();
+        setLoading(btn, true, "Đang xuất…");
+        try {
+          await exportExecutionToPdf(e);
+          toast("Đã mở in PDF. Chọn 'Lưu thành PDF' để tải file.");
+        } catch (err) {
+          toast(`Lỗi xuất PDF: ${msg(err)}`);
+        }
+        restore();
+        return;
       }
       await reload();
     } catch (err) {
@@ -661,6 +673,88 @@ function renderActions(
       restore();
     }
   };
+}
+
+/** Xuất báo cáo lượt công việc ra PDF (qua in ấn). */
+async function exportExecutionToPdf(e: ExecutionDetail): Promise<void> {
+  // Tạo nội dung HTML để in.
+  const printWin = window.open("", "_blank");
+  if (!printWin) throw new Error("Trình duyệt chặn popup. Hãy cho phép popup rồi thử lại.");
+
+  let html = `
+    <html><head><meta charset="utf-8"><title>Báo cáo ${esc(e.code)}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; }
+      h1 { text-align: center; font-size: 20px; }
+      h2 { font-size: 16px; border-bottom: 2px solid #333; padding-bottom: 4px; margin-top: 24px; }
+      h3 { font-size: 14px; margin-top: 16px; }
+      table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+      td, th { border: 1px solid #ccc; padding: 8px; text-align: left; }
+      th { background: #f5f5f5; }
+      img { max-width: 400px; max-height: 300px; margin: 8px 0; display: block; }
+      .step { page-break-inside: avoid; margin-bottom: 20px; border: 1px solid #ddd; padding: 12px; border-radius: 8px; }
+    </style></head><body>
+    <h1>BÁO CÁO LƯỢT CÔNG VIỆC</h1>
+    <h2 style="text-align:center;border:none;">${esc(e.code)} — ${esc(e.title || (e as unknown as Record<string, unknown>).process_name as string || "")}</h2>
+
+    <h2>I. THÔNG TIN CHUNG</h2>
+    <table>
+      <tr><th style="width:30%">Mã lượt</th><td>${esc(e.code)}</td></tr>
+      <tr><th>Quy trình</th><td>${esc((e as unknown as Record<string, unknown>).process_name as string || "")} (${esc((e as unknown as Record<string, unknown>).process_code as string || "")})</td></tr>
+      <tr><th>Trạng thái</th><td>${esc(e.status)}</td></tr>
+      <tr><th>Người tạo</th><td>${esc((e as unknown as Record<string, unknown>).creator_name as string || "—")}</td></tr>
+      <tr><th>Người thực hiện chính</th><td>${esc((e as unknown as Record<string, unknown>).assignee_name as string || "—")}</td></tr>
+    </table>`;
+
+  // Ngoại lệ.
+  try {
+    const { items: exItems } = await api.listExceptions(e.id);
+    if (exItems.length > 0) {
+      html += `<h2>II. NGOẠI LỆ</h2>`;
+      for (const ex of exItems) {
+        html += `<div class="step"><h3>${esc(ex.title)} (${esc(ex.status)})</h3>`;
+        if (ex.description) html += `<p>${esc(ex.description)}</p>`;
+        if (ex.resolution) html += `<p><strong>Cách xử lý:</strong> ${esc(ex.resolution)}</p>`;
+        html += `</div>`;
+      }
+    }
+  } catch { /* bỏ qua */ }
+
+  // Chi tiết bước.
+  html += `<h2>${(await api.listExceptions(e.id).then(r => r.items.length).catch(() => 0)) > 0 ? "III" : "II"}. CHI TIẾT CÁC BƯỚC</h2>`;
+  for (let idx = 0; idx < e.steps.length; idx++) {
+    const st = e.steps[idx] as unknown as Record<string, unknown>;
+    html += `<div class="step"><h3>Bước ${idx + 1}: ${esc(st.code as string)} — ${esc(st.title as string)}</h3>`;
+    html += `<p><strong>Trạng thái:</strong> ${esc(st.status as string)}</p>`;
+    const assignees = (st.assignees as { display_name: string }[] | undefined) || [];
+    if (assignees.length > 0) html += `<p><strong>Người thực hiện:</strong> ${esc(assignees.map((a) => a.display_name).join(", "))}</p>`;
+    if (st.note) html += `<p><strong>Ghi chú:</strong> ${esc(st.note as string)}</p>`;
+    if (st.approved_by_name) html += `<p><strong>Duyệt bởi:</strong> ${esc(st.approved_by_name as string)}</p>`;
+
+    try {
+      const { items } = await api.listEvidence(e.id, st.id as string);
+      const photos = items.filter((ev) => ev.kind === "PHOTO");
+      const files = items.filter((ev) => ev.kind !== "PHOTO");
+      if (photos.length > 0) {
+        html += `<p><strong>Ảnh bằng chứng (${photos.length}):</strong></p>`;
+        for (const photo of photos.slice(0, 10)) {
+          html += `<img src="${esc(api.evidenceDownloadUrl(photo.id))}" alt="${esc(photo.original_name)}" /><p><em>${esc(photo.original_name)}</em></p>`;
+        }
+      }
+      if (files.length > 0) {
+        html += `<p><strong>Tệp đính kèm (${files.length}):</strong></p><ul>`;
+        for (const f of files) html += `<li>📄 ${esc(f.original_name)}</li>`;
+        html += `</ul>`;
+      }
+    } catch { /* bỏ qua */ }
+    html += `</div>`;
+  }
+
+  html += `</body></html>`;
+  printWin.document.write(html);
+  printWin.document.close();
+  printWin.focus();
+  setTimeout(() => { printWin.print(); }, 500);
 }
 
 /** Xuất báo cáo lượt công việc ra file Word. */
@@ -707,8 +801,22 @@ async function exportExecutionToWord(e: ExecutionDetail): Promise<void> {
   }
   children.push(new Paragraph({ text: "" }));
 
+  // Ngoại lệ (nếu có).
+  try {
+    const { items: exItems } = await api.listExceptions(e.id);
+    if (exItems.length > 0) {
+      children.push(new Paragraph({ text: "II. NGOẠI LỆ", heading: HeadingLevel.HEADING_1 }));
+      for (const ex of exItems) {
+        children.push(new Paragraph({ children: [new TextRun({ text: `${ex.title}`, bold: true }), new TextRun(` (${ex.status})`)] }));
+        if (ex.description) children.push(new Paragraph(ex.description));
+        if (ex.resolution) children.push(new Paragraph({ children: [new TextRun({ text: "Cách xử lý: ", bold: true }), new TextRun(ex.resolution)] }));
+        children.push(new Paragraph({ text: "" }));
+      }
+    }
+  } catch { /* bỏ qua */ }
+
   // Chi tiết từng bước.
-  children.push(new Paragraph({ text: "II. CHI TIẾT CÁC BƯỚC", heading: HeadingLevel.HEADING_1 }));
+  children.push(new Paragraph({ text: "III. CHI TIẾT CÁC BƯỚC", heading: HeadingLevel.HEADING_1 }));
   
   for (let idx = 0; idx < e.steps.length; idx++) {
     const st = e.steps[idx] as unknown as Record<string, unknown>;
