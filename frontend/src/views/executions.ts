@@ -431,6 +431,13 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           }
         });
       });
+      // Bấm pill "Bị trả lại" ở cấp lượt để xem chi tiết.
+      root.querySelectorAll<HTMLElement>(".exec-redo-pill").forEach((pill) => {
+        pill.addEventListener("click", () => {
+          const hist = (e as unknown as { reject_history?: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history ?? [];
+          openExecRedoDialog(dialogRoot, hist);
+        });
+      });
       // Tải danh sách ngoại lệ.
       const isActive = e.status === "IN_PROGRESS" || e.status === "PAUSED";
       await loadExceptions(body, dialogRoot, e.id, isActive, reload);
@@ -1128,6 +1135,35 @@ function openResolveDialog(dialogRoot: HTMLElement, exceptionId: string, onDone:
 
 const SHIFT_LABEL: Record<string, string> = { MORNING: "sáng", NOON: "trưa", AFTERNOON: "chiều", NIGHT: "đêm" };
 
+/** Dialog xem chi tiết lịch sử từ chối lượt. */
+function openExecRedoDialog(
+  dialogRoot: HTMLElement,
+  history: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }>
+): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Lịch sử từ chối">
+        <h3>🔄 Lịch sử bị trả lại (${history.length} lần)</h3>
+        <div class="redo-hist-list">
+        ${history.map((h, i) => `
+          <div class="hist-item">
+            <div><span class="hist-action">Lần ${history.length - i}</span>${h.action === "redo" ? ` · 🔄 Yêu cầu làm lại ${h.step_count} bước` : " · 🗑️ Hủy lượt"}</div>
+            <div class="muted small">👤 ${esc(h.by_name ?? "—")} · 🕐 ${esc(formatDateTime(h.at))}</div>
+            <div class="hist-reason">Lý do: ${esc(h.reason ?? "—")}</div>
+          </div>`).join("")}
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="exec-redo-close">Đóng</button>
+        </div>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#exec-redo-close")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+}
+
 /** Dialog xem chi tiết các lần làm lại. */
 function openRedoHistoryDialog(
   dialogRoot: HTMLElement,
@@ -1506,7 +1542,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
     <section class="card">
       <h3>Thông tin lượt công việc</h3>
       <dl class="info-list">
-        <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}${(e.redo_steps ?? 0) > 0 ? ` <span class="pill amber">🔄 Bị trả lại làm lại ${e.redo_steps} bước</span>` : ""}</dd></div>
+        <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}${(e.redo_steps ?? 0) > 0 ? ` <span class="pill amber exec-redo-pill" style="cursor:pointer;" title="Bấm để xem chi tiết">🔄 Bị trả lại làm lại ${e.redo_steps} bước</span>` : ""}</dd></div>
         ${((e as unknown as { reject_history?: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history ?? []).length > 0 ? `
         <div class="info-row"><dt>Lịch sử từ chối (${(e as unknown as { reject_history: Array<unknown> }).reject_history.length} lần)</dt><dd>
           <div style="max-height:180px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px;">
