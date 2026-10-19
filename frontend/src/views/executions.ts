@@ -448,10 +448,10 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       } else if (act === "complete") {
         // Cảnh báo: sau khi hoàn thành không sửa được nữa.
         restore();
-        openCompleteConfirm(dialogRoot, step, async () => {
+        openCompleteConfirm(dialogRoot, step, async (note) => {
           const rb = setLoading(btn, true, "…");
           try {
-            await api.completeStep(execId, sid);
+            await api.completeStep(execId, sid, note);
             toast("Đã hoàn thành bước.");
             await reload();
           } catch (e) {
@@ -693,7 +693,7 @@ function formatDateTime(iso: string): string {
 function openCompleteConfirm(
   dialogRoot: HTMLElement,
   step: import("../api.js").ExecutionStep | undefined,
-  onConfirm: () => void
+  onConfirm: (note: string) => void
 ): void {
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
@@ -702,6 +702,10 @@ function openCompleteConfirm(
         <p>⚠️ Sau khi hoàn thành, <strong>bạn sẽ không thể sửa đổi</strong> bước này nữa
         (không thêm/xóa ảnh, không sửa trạng thái, <strong>không thay đổi người được người thực hiện</strong>).
         Người thực hiện sẽ được cố định. Hãy kiểm tra kỹ bằng chứng và thông tin trước khi xác nhận.</p>
+        <label class="field">
+          <span>📝 Ghi chú hoàn thành <span class="muted small">(tùy chọn)</span></span>
+          <textarea id="cc-note" rows="3" placeholder="VD: Đã kiểm tra đủ số lượng, đóng gói cẩn thận…" style="width:100%;resize:vertical;">${esc(step?.note ?? "")}</textarea>
+        </label>
         <div class="dialog-actions">
           <button type="button" class="btn" id="cc-cancel">Kiểm tra lại</button>
           <button type="button" class="btn primary" id="cc-ok">Xác nhận hoàn thành</button>
@@ -716,8 +720,9 @@ function openCompleteConfirm(
     if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
   });
   dialogRoot.querySelector("#cc-ok")!.addEventListener("click", () => {
+    const note = dialogRoot.querySelector<HTMLTextAreaElement>("#cc-note")!.value.trim();
     close();
-    onConfirm();
+    onConfirm(note);
   });
 }
 
