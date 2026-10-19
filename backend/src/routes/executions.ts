@@ -653,7 +653,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   }
   // Lấy người được phân công và số bằng chứng cho từng bước (cho tab sơ đồ).
   const assigneeMap = new Map<string, { display_name: string }[]>();
-  const supAssigneeMap = new Map<string, { display_name: string }[]>();
+  const supAssigneeMap = new Map<string, { user_id: string; display_name: string }[]>();
   const evidenceMap = new Map<string, number>();
   if (execStepIds.length > 0) {
     const placeholders = execStepIds.map(() => "?").join(",");
@@ -680,7 +680,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
 
     for (const r of supAsgRows.results ?? []) {
       if (!supAssigneeMap.has(r.execution_step_id)) supAssigneeMap.set(r.execution_step_id, []);
-      supAssigneeMap.get(r.execution_step_id)!.push({ display_name: r.display_name });
+      supAssigneeMap.get(r.execution_step_id)!.push({ user_id: r.user_id, display_name: r.display_name });
     }
 
     for (const r of evRows.results ?? []) evidenceMap.set(r.execution_step_id, r.cnt);
