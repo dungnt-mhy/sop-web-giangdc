@@ -414,8 +414,8 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       });
       // Tải bằng chứng cho từng bước.
       await loadAllEvidence(body, e.id);
-      // Tải phân công cho từng bước.
-      await loadAllAssignees(body, e.id);
+      // Hiển thị phân công từ dữ liệu đã có.
+      renderAllAssignees(body, e.steps);
       // Tải lịch sử khi mở.
       bindStepHistory(body, e.id);
       // Bấm pill "Làm lại" để xem chi tiết.
@@ -494,14 +494,45 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         restore();
         const stepPositions = ((step as unknown as Record<string, unknown>)?.positions as { id: string; name: string }[] ?? []);
         await openAssignDialog(dialogRoot, execId, sid, step?.code ?? "", stepPositions, async () => {
-          await loadAllAssignees(body, execId);
+          const e2 = await api.getExecution(execId);
+          current = e2;
+          renderAllAssignees(body, e2.steps);
         });
         return;
       } else if (act === "note") {
         restore();
         openNoteDialog(dialogRoot, step?.code ?? "", step?.note ?? "", async (note) => {
           await api.updateStepNote(execId, sid, note);
-          await reload();
+          // Cập nhật local, không reload toàn bộ.
+          if (step) (step as unknown as Record<string, unknown>).note = note || null;
+          // Cập nhật DOM trực tiếp.
+          const li = body.querySelector(`li[data-sid="${sid}"]`);
+          if (li) {
+            const noteEl = li.querySelector(".step-head-note");
+            const noteTitle = li.querySelector(".step-title > .muted.small");
+            if (note) {
+              if (noteEl) {
+                noteEl.textContent = note;
+              } else {
+                // Thêm mới nếu chưa có.
+                const title = li.querySelector(".step-title");
+                if (title) {
+                  const div1 = document.createElement("div");
+                  div1.className = "muted small";
+                  div1.textContent = "📝 Ghi chú:";
+                  const div2 = document.createElement("div");
+                  div2.className = "step-head-note";
+                  div2.textContent = note;
+                  title.appendChild(div1);
+                  title.appendChild(div2);
+                }
+              }
+            } else {
+              // Xóa nếu ghi chú trống.
+              if (noteEl) noteEl.remove();
+              if (noteTitle && noteTitle.textContent?.includes("Ghi chú")) noteTitle.remove();
+            }
+          }
         });
         return;
       } else if (act === "approve") {
@@ -1175,34 +1206,26 @@ function bindStepHistory(body: HTMLElement, execId: string): void {
   });
 }
 
-/** Tải phân công cho tất cả các bước (song song). */
-async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void> {
+/** Hiển thị phân công từ dữ liệu đã có (không gọi API riêng). */
+function renderAllAssignees(body: HTMLElement, steps: import("../api.js").ExecutionStep[]): void {
   const els = Array.from(body.querySelectorAll<HTMLElement>("[data-assignees-for]"));
-  await Promise.all(els.map(async (el) => {
+  const stepById = new Map(steps.map((s) => [s.id, s]));
+  for (const el of els) {
     const sid = el.dataset.assigneesFor!;
-    try {
-      const [{ items }, { items: supItems }] = await Promise.all([
-        api.listStepAssignees(execId, sid),
-        api.listStepSupervisors(execId, sid),
-      ]);
-      let html = "";
-      if (items.length === 0) {
-        html += `<div class="small" style="color:#2563eb;">Thực hiện: chưa phân công</div>`;
-      } else {
-        html += `<div class="small" style="color:#2563eb;">Thực hiện: ` + items.map((u) =>
-          esc(u.display_name) + (u.position ? ` (${esc(u.position)})` : "")
-        ).join(", ") + `</div>`;
-      }
-      if (supItems.length > 0) {
-        html += `<div class="small" style="color:#7c3aed;">Giám sát: ` + supItems.map((u) =>
-          esc(u.display_name) + (u.position ? ` (${esc(u.position)})` : "")
-        ).join(", ") + `</div>`;
-      }
-      el.innerHTML = html;
-    } catch {
-      el.innerHTML = ``;
+    const st = stepById.get(sid) as unknown as Record<string, unknown> | undefined;
+    const items = (st?.assignees as { display_name: string }[] ?? []);
+    const supItems = (st?.supervisor_assignees as { display_name: string }[] ?? []);
+    let html = "";
+    if (items.length === 0) {
+      html += `<div class="small" style="color:#2563eb;">Thực hiện: chưa phân công</div>`;
+    } else {
+      html += `<div class="small" style="color:#2563eb;">Thực hiện: ` + items.map((u) => esc(u.display_name)).join(", ") + `</div>`;
     }
-  }));
+    if (supItems.length > 0) {
+      html += `<div class="small" style="color:#7c3aed;">Giám sát: ` + supItems.map((u) => esc(u.display_name)).join(", ") + `</div>`;
+    }
+    el.innerHTML = html;
+  }
 }
 
 /** Dialog nhập ghi chú bước. */
