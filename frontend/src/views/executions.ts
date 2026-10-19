@@ -147,7 +147,7 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
           if (items.length === 0) {
             resultsEl.innerHTML = `<div class="user-search-empty">Không tìm thấy</div>`;
           } else {
-            resultsEl.innerHTML = items.slice(0, 10).map((u) => `
+            resultsEl.innerHTML = items.slice(0, 20).map((u) => `
               <div class="user-search-item" data-id="${esc(u.id)}" data-name="${esc(u.display_name || u.username)}">
                 <strong>${esc(u.display_name || u.username)}</strong>
                 <span class="muted small">${esc(u.username)}</span>
