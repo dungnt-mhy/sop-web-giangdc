@@ -572,6 +572,8 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   .step-actions .btn { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
   .flow-node-head { flex-wrap: wrap; }
   .flow-node .pill { font-size: 12px; padding: 3px 10px; }
+  .tbl thead th { white-space: normal; font-size: 11px; padding: 8px 6px; }
+  .tbl th, .tbl td { padding: 8px 6px; font-size: 13px; }
 }
 
 /* Dashboard (Task 1.8: §9.6). */
