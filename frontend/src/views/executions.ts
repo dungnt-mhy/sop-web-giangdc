@@ -737,6 +737,7 @@ async function exportExecutionToWord(e: ExecutionDetail): Promise<void> {
     try {
       const { items } = await api.listEvidence(e.id, st.id as string);
       const photos = items.filter((ev) => ev.kind === "PHOTO");
+      const files = items.filter((ev) => ev.kind !== "PHOTO");
       if (photos.length > 0) {
         children.push(new Paragraph({ children: [new TextRun({ text: `Ảnh bằng chứng (${photos.length}):`, bold: true })] }));
         for (const photo of photos.slice(0, 10)) {
@@ -753,6 +754,12 @@ async function exportExecutionToWord(e: ExecutionDetail): Promise<void> {
             }));
             children.push(new Paragraph({ text: photo.original_name, style: "Caption" }));
           } catch { /* bỏ qua ảnh lỗi */ }
+        }
+      }
+      if (files.length > 0) {
+        children.push(new Paragraph({ children: [new TextRun({ text: `Tệp đính kèm (${files.length}):`, bold: true })] }));
+        for (const f of files) {
+          children.push(new Paragraph({ text: `📄 ${f.original_name}`, bullet: { level: 0 } }));
         }
       }
     } catch { /* bỏ qua */ }

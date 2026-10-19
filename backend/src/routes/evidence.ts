@@ -270,8 +270,9 @@ export async function handleDownloadEvidence(ctx: Ctx, evidenceId: string) {
   const headers = new Headers();
   headers.set("Content-Type", ev.mime);
   headers.set("Content-Length", String(ev.size_bytes));
-  // Hiển thị inline cho ảnh, tải về cho tệp khác.
-  const disp = ev.kind === "PHOTO" ? "inline" : "attachment";
+  // Hiển thị inline cho ảnh và PDF, tải về cho tệp khác.
+  const viewable = ev.kind === "PHOTO" || ev.mime === "application/pdf" || ev.mime.startsWith("text/");
+  const disp = viewable ? "inline" : "attachment";
   headers.set("Content-Disposition", `${disp}; filename="${encodeURIComponent(ev.original_name)}"`);
   headers.set("Cache-Control", "private, max-age=3600");
   return new Response(obj.body, { headers });
