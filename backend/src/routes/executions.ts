@@ -817,6 +817,14 @@ export async function handleSetStepSupervisors(ctx: Ctx, execId: string, stepId:
     );
   }
   await db.batch(stmts);
+  // Lưu lịch sử phân công.
+  const stepRow = await db.prepare(`SELECT code FROM execution_steps WHERE id = ?`).bind(stepId).first<{ code: string }>();
+  const asgNames = userIds.length > 0
+    ? (await db.prepare(`SELECT display_name FROM users WHERE id IN (${userIds.map(() => "?").join(",")})`).bind(...userIds).all<{ display_name: string }>()).results?.map((r) => r.display_name).join(", ") ?? ""
+    : "xóa phân công";
+  await db.prepare(
+    `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, 'ASSIGNED', ?, ?, ?)`
+  ).bind(crypto.randomUUID(), execId, stepId, me.user.id, `Phân công: ${asgNames}`, now).run();
 
   await audit(db, {
     event_type: "STEP_SUPERVISORS_SET",
@@ -870,6 +878,13 @@ export async function handleSetStepAssignees(ctx: Ctx, execId: string, stepId: s
     );
   }
   await db.batch(stmts);
+  // Lưu lịch sử phân công người thực hiện.
+  const asgNames2 = userIds.length > 0
+    ? (await db.prepare(`SELECT display_name FROM users WHERE id IN (${userIds.map(() => "?").join(",")})`).bind(...userIds).all<{ display_name: string }>()).results?.map((r) => r.display_name).join(", ") ?? ""
+    : "xóa phân công";
+  await db.prepare(
+    `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, 'ASSIGNED', ?, ?, ?)`
+  ).bind(crypto.randomUUID(), execId, stepId, me.user.id, `Phân công thực hiện: ${asgNames2}`, now).run();
 
   await audit(db, {
     event_type: "STEP_ASSIGNEES_SET",
@@ -1240,6 +1255,10 @@ export async function handleStartStep(ctx: Ctx, execId: string, stepId: string):
     .prepare(`UPDATE execution_steps SET status = 'IN_PROGRESS', updated_at = ? WHERE id = ?`)
     .bind(now, stepId)
     .run();
+  // Lưu lịch sử bắt đầu.
+  await db.prepare(
+    `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, 'STARTED', ?, NULL, ?)`
+  ).bind(crypto.randomUUID(), execId, stepId, me.user.id, now).run();
   await audit(db, {
     event_type: "EXECUTION_STEP_STARTED",
     actor_id: me.user.id,
@@ -1487,6 +1506,9 @@ export async function handleUpdateStepNote(ctx: Ctx, execId: string, stepId: str
       request_id: ctx.requestId,
       diff: { note },
     }),
+    db.prepare(
+      `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, 'NOTE_UPDATED', ?, ?, ?)`
+    ).bind(crypto.randomUUID(), execId, stepId, me.user.id, note ? `Ghi chú: ${note.substring(0, 100)}` : "Xóa ghi chú", now).run(),
   ]);
   return ok({ updated: true });
 }
@@ -1563,6 +1585,10 @@ export async function handleSkipStep(ctx: Ctx, execId: string, stepId: string): 
     )
     .bind(me.user.id, now, skipReason, now, stepId)
     .run();
+  // Lưu lịch sử bỏ qua.
+  await db.prepare(
+    `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, 'SKIPPED', ?, ?, ?)`
+  ).bind(crypto.randomUUID(), execId, stepId, me.user.id, skipReason, now).run();
   await audit(db, {
     event_type: "EXECUTION_STEP_SKIPPED",
     actor_id: me.user.id,
@@ -1603,6 +1629,10 @@ export async function handleRequestSkip(ctx: Ctx, execId: string, stepId: string
   } catch {
     return apiError("VALIDATION_ERROR", "Đã có yêu cầu đang chờ duyệt.", ctx.requestId);
   }
+  // Lưu lịch sử xin bỏ qua.
+  await db.prepare(
+    `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, 'SKIP_REQUESTED', ?, ?, ?)`
+  ).bind(crypto.randomUUID(), execId, stepId, me.user.id, reason, now).run();
   // Thông báo cho giám sát: ưu tiên giám sát của bước, fallback giám sát của lượt.
   const stepSupRows = await db.prepare(`SELECT user_id FROM execution_step_supervisor_assignees WHERE execution_step_id = ?`).bind(stepId).all<{ user_id: string }>();
   let notifyIds: string[];

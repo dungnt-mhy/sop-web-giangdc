@@ -1127,12 +1127,16 @@ function openRedoHistoryDialog(
 /** Tải lịch sử thao tác khi mở. */
 function bindStepHistory(body: HTMLElement, execId: string): void {
   const ACTION_LABEL: Record<string, string> = {
+    STARTED: "▶️ Bắt đầu",
     REPORTED: "📤 Báo hoàn thành",
     APPROVED: "✅ Duyệt đạt",
     REJECTED: "🔄 Yêu cầu làm lại",
-    STARTED: "▶️ Bắt đầu",
+    ASSIGNED: "👥 Phân công",
+    NOTE_UPDATED: "📝 Cập nhật ghi chú",
     SKIPPED: "⏭️ Bỏ qua",
     SKIP_REQUESTED: "🙏 Xin bỏ qua",
+    SKIP_APPROVED: "✅ Duyệt bỏ qua",
+    SKIP_REJECTED: "❌ Từ chối bỏ qua",
   };
   body.querySelectorAll<HTMLDetailsElement>("details.step-history").forEach((det) => {
     det.addEventListener("toggle", async () => {
