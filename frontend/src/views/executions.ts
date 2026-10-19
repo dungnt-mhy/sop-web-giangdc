@@ -1443,14 +1443,17 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${st.note ? `<div class="muted small">📝 Ghi chú:</div><div class="step-head-note">${esc(st.note)}</div>` : ""}
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? `<div class="muted small" style="color:#b45309;">🔄 Yêu cầu làm lại: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")} (${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")})</div>` : ""}
               </div>
-              <div class="step-actions">
-                ${canStart ? `<button class="btn sm primary" data-step="start">Bắt đầu</button>` : ""}
-                ${canFinish ? `<button class="btn sm primary" data-step="complete">Hoàn thành</button>` : ""}
-                ${canSkip ? `<button class="btn sm" data-step="skip">⏭️ Bỏ qua</button>` : ""}
-                ${canSkip ? `<button class="btn sm secondary" data-step="request-skip">🙏 Xin bỏ qua</button>` : ""}
-                ${active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) && !pendingSkip ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : ""}
-                ${active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) ? `<button class="btn sm" data-step="note">📝 Ghi chú</button>` : ""}
-              </div>
+              ${(() => {
+                const btns = [
+                  canStart ? `<button class="btn sm primary" data-step="start">Bắt đầu</button>` : "",
+                  canFinish ? `<button class="btn sm primary" data-step="complete">Hoàn thành</button>` : "",
+                  canSkip ? `<button class="btn sm" data-step="skip">⏭️ Bỏ qua</button>` : "",
+                  canSkip ? `<button class="btn sm secondary" data-step="request-skip">🙏 Xin bỏ qua</button>` : "",
+                  active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) && !pendingSkip ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : "",
+                  active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) ? `<button class="btn sm" data-step="note">📝 Ghi chú</button>` : "",
+                ].filter(Boolean);
+                return btns.length > 0 ? `<div class="step-actions">${btns.join("")}</div>` : "";
+              })()}
               <div class="step-assignees" data-assignees-for="${esc(st.id)}"><span class="muted small">Đang tải…</span></div>
             </div>
             ${(st as unknown as Record<string, unknown>).prerequisite || (st as unknown as Record<string, unknown>).input_desc || st.instruction || (st as unknown as Record<string, unknown>).expected_result || (st as unknown as Record<string, unknown>).output_desc || (st as unknown as Record<string, unknown>).warning || (st as unknown as Record<string, unknown>).target_duration_min || ((st as unknown as Record<string, unknown>).positions as unknown[] ?? []).length > 0 || (st as unknown as Record<string, unknown>).skip_policy || (st as unknown as Record<string, unknown>).failure_policy || st.note ? `
