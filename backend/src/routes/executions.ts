@@ -1333,6 +1333,10 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
     )
     .bind(me.user.id, now, note, now, stepId)
     .run();
+  // Lưu lịch sử báo hoàn thành.
+  await db.prepare(
+    `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, 'REPORTED', ?, ?, ?)`
+  ).bind(crypto.randomUUID(), execId, stepId, me.user.id, note, now).run();
   await audit(db, {
     event_type: "EXECUTION_STEP_REPORTED",
     actor_id: me.user.id,
@@ -1381,6 +1385,10 @@ export async function handleApproveStep(ctx: Ctx, execId: string, stepId: string
   await db.prepare(
     `UPDATE execution_steps SET status = 'PASSED', approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?`
   ).bind(me.user.id, now, now, stepId).run();
+  // Lưu lịch sử duyệt.
+  await db.prepare(
+    `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, 'APPROVED', ?, NULL, ?)`
+  ).bind(crypto.randomUUID(), execId, stepId, me.user.id, now).run();
   await audit(db, {
     event_type: "EXECUTION_STEP_APPROVED",
     actor_id: me.user.id,
@@ -1423,6 +1431,10 @@ export async function handleRejectStep(ctx: Ctx, execId: string, stepId: string)
   await db.prepare(
     `UPDATE execution_steps SET status = 'IN_PROGRESS', redo_count = redo_count + 1, redo_reason = ?, redo_by = ?, redo_at = ?, updated_at = ? WHERE id = ?`
   ).bind(reason, me.user.id, now, now, stepId).run();
+  // Lưu lịch sử yêu cầu làm lại.
+  await db.prepare(
+    `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, 'REJECTED', ?, ?, ?)`
+  ).bind(crypto.randomUUID(), execId, stepId, me.user.id, reason, now).run();
   await audit(db, {
     event_type: "EXECUTION_STEP_REJECTED",
     actor_id: me.user.id,
@@ -1477,6 +1489,22 @@ export async function handleUpdateStepNote(ctx: Ctx, execId: string, stepId: str
     }),
   ]);
   return ok({ updated: true });
+}
+
+// GET /executions/:id/steps/:stepId/history — lịch sử thao tác trên bước.
+export async function handleGetStepHistory(ctx: Ctx, execId: string, stepId: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const db = ctx.env.sop_demo_db;
+
+  const rows = await db.prepare(
+    `SELECT h.id, h.action, h.reason, h.created_at, u.display_name as actor_name
+     FROM execution_step_history h
+     LEFT JOIN users u ON u.id = h.actor_id
+     WHERE h.execution_id = ? AND h.step_id = ?
+     ORDER BY h.created_at ASC`
+  ).bind(execId, stepId).all();
+  return ok({ items: rows.results ?? [] });
 }
 
 // POST .../{id}/steps/{sid}:skip — bỏ qua bước (chỉ bước không bắt buộc).

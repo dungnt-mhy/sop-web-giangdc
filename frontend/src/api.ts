@@ -629,6 +629,9 @@ export const api = {
   updateStepNote(execId: string, stepId: string, note: string): Promise<{ updated: boolean }> {
     return req("PATCH", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/note`, { note });
   },
+  getStepHistory(execId: string, stepId: string): Promise<{ items: { id: string; action: string; reason: string | null; created_at: string; actor_name: string | null }[] }> {
+    return req("GET", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/history`);
+  },
   // --- Thông báo ---
   listNotifications(limit = 20): Promise<{ items: AppNotification[] }> {
     return req("GET", `/notifications?limit=${limit}`);
