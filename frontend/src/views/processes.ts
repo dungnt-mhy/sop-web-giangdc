@@ -247,10 +247,10 @@ function openProcessDialog(dialogRoot: HTMLElement, onDone: () => void): void {
           <span class="hint">Phân loại quy trình. VD: Kho vận, Sản xuất, Hành chính</span></label>
         <label>Mục đích <textarea class="input" name="purpose" rows="2" placeholder="VD: Đảm bảo hàng xuất đúng, đủ, kịp thời đến đại lý"></textarea>
           <span class="hint">Tại sao cần quy trình này? Kết quả mong muốn là gì?</span></label>
-        <label>Phạm vi áp dụng <textarea class="input" name="scope" rows="2" placeholder="VD: Áp dụng cho tất cả đơn hàng xuất kho tại kho chính"></textarea>
-          <span class="hint">Áp dụng cho đối tượng, địa điểm, thời gian nào?</span></label>
+        <label>Phạm vi áp dụng <textarea class="input" name="scope" rows="2" placeholder="VD: Áp dụng cho tất cả đơn hàng xuất kho tại kho chính"></textarea></label>
         <fieldset class="org-unit-picker">
-          <legend>Đơn vị áp dụng (chọn nhiều)</legend>
+          <legend>Đơn vị áp dụng</legend>
+          <span class="hint">Áp dụng cho đối tượng, địa điểm, thời gian nào?</span>
           <div id="proc-org-units"><p class="empty">Đang tải…</p></div>
         </fieldset>
         <p class="form-error" id="proc-error" role="alert" hidden></p>
