@@ -417,7 +417,7 @@ function route(): void {
   }
   // Mặc định: trang chủ.
   if (hash !== "#/home") window.location.hash = "#/home";
-  renderHome(page, { session, navigate });
+  void renderHome(page, { session, navigate });
 }
 
 // ---- Bắt buộc đổi mật khẩu (lần đầu / khi admin yêu cầu) ----
