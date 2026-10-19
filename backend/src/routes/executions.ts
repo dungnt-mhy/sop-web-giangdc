@@ -706,16 +706,16 @@ export async function handleSetStepAssignees(ctx: Ctx, execId: string, stepId: s
   if (!step || step.execution_id !== execId) {
     return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
   }
-  // Người phân công bị cố định khi bước đã hoàn thành/bỏ qua/hủy.
+  // Người thực hiện bị cố định khi bước đã hoàn thành/bỏ qua/hủy.
   if (["PASSED", "SKIPPED", "CANCELLED"].includes(step.status)) {
-    return apiError("VALIDATION_ERROR", "Bước đã hoàn thành — không thể thay đổi người được phân công.", ctx.requestId);
+    return apiError("VALIDATION_ERROR", "Bước đã hoàn thành — không thể thay đổi người thực hiện.", ctx.requestId);
   }
-  // Chặn đổi phân công khi đang có yêu cầu xin bỏ qua chờ duyệt.
+  // Chặn đổi người thực hiện khi đang có yêu cầu xin bỏ qua chờ duyệt.
   const pendingSkipAssign = await db.prepare(
     `SELECT id FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING' LIMIT 1`
   ).bind(execId, stepId).first();
   if (pendingSkipAssign) {
-    return apiError("VALIDATION_ERROR", "Bước đang chờ duyệt yêu cầu bỏ qua — không thể thay đổi người được phân công.", ctx.requestId);
+    return apiError("VALIDATION_ERROR", "Bước đang chờ duyệt yêu cầu bỏ qua — không thể thay đổi người thực hiện.", ctx.requestId);
   }
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
