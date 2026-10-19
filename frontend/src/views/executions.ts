@@ -700,10 +700,17 @@ async function exportExecutionToPdf(e: ExecutionDetail): Promise<void> {
     <h2>I. THÔNG TIN CHUNG</h2>
     <table>
       <tr><th style="width:30%">Mã lượt</th><td>${esc(e.code)}</td></tr>
-      <tr><th>Quy trình</th><td>${esc((e as unknown as Record<string, unknown>).process_name as string || "")} (${esc((e as unknown as Record<string, unknown>).process_code as string || "")})</td></tr>
+      <tr><th>Tiêu đề</th><td>${esc(e.title || "—")}</td></tr>
+      <tr><th>Quy trình</th><td>${esc((e as unknown as Record<string, unknown>).process_name as string || "")} (${esc((e as unknown as Record<string, unknown>).process_code as string || "")})${(e as unknown as Record<string, unknown>).version_number ? ` · Phiên bản v${(e as unknown as Record<string, unknown>).version_number}` : ""}</td></tr>
       <tr><th>Trạng thái</th><td>${esc(e.status)}</td></tr>
       <tr><th>Người tạo</th><td>${esc((e as unknown as Record<string, unknown>).creator_name as string || "—")}</td></tr>
       <tr><th>Người thực hiện chính</th><td>${esc((e as unknown as Record<string, unknown>).assignee_name as string || "—")}</td></tr>
+      <tr><th>Người giám sát</th><td>${esc((((e as unknown as Record<string, unknown>).supervisor_names as string[]) || []).join(", ") || (e as unknown as Record<string, unknown>).supervisor_name as string || "—")}</td></tr>
+      <tr><th>Bắt đầu dự kiến</th><td>${esc((e as unknown as Record<string, unknown>).expected_start_at ? fmtVn((e as unknown as Record<string, unknown>).expected_start_at as string) : "—")}</td></tr>
+      <tr><th>Hoàn thành dự kiến</th><td>${esc((e as unknown as Record<string, unknown>).expected_end_at ? fmtVn((e as unknown as Record<string, unknown>).expected_end_at as string) : "—")}</td></tr>
+      <tr><th>Bắt đầu thực tế</th><td>${esc((e as unknown as { started_at?: string }).started_at ? fmtVn((e as unknown as { started_at: string }).started_at) : "—")}</td></tr>
+      <tr><th>Hoàn thành thực tế</th><td>${esc((e as unknown as { completed_at?: string }).completed_at ? fmtVn((e as unknown as { completed_at: string }).completed_at) : "—")}</td></tr>
+      ${(e.redo_steps ?? 0) > 0 ? `<tr><th>Số bước bị làm lại</th><td>${e.redo_steps} bước</td></tr>` : ""}
     </table>`;
 
   // Ngoại lệ.
@@ -728,8 +735,11 @@ async function exportExecutionToPdf(e: ExecutionDetail): Promise<void> {
     html += `<p><strong>Trạng thái:</strong> ${esc(st.status as string)}</p>`;
     const assignees = (st.assignees as { display_name: string }[] | undefined) || [];
     if (assignees.length > 0) html += `<p><strong>Người thực hiện:</strong> ${esc(assignees.map((a) => a.display_name).join(", "))}</p>`;
+    const supAssignees = (st.supervisor_assignees as { display_name: string }[] | undefined) || [];
+    if (supAssignees.length > 0) html += `<p><strong>Người giám sát:</strong> ${esc(supAssignees.map((a) => a.display_name).join(", "))}</p>`;
     if (st.note) html += `<p><strong>Ghi chú:</strong> ${esc(st.note as string)}</p>`;
-    if (st.approved_by_name) html += `<p><strong>Duyệt bởi:</strong> ${esc(st.approved_by_name as string)}</p>`;
+    if (st.approved_by_name) html += `<p><strong>Duyệt bởi:</strong> ${esc(st.approved_by_name as string)}${st.approved_at ? ` (${esc(fmtVn(st.approved_at as string))})` : ""}</p>`;
+    if ((st.redo_count as number ?? 0) > 0) html += `<p><strong>Số lần làm lại:</strong> ${st.redo_count} lần${st.redo_reason ? ` — Lý do: ${esc(st.redo_reason as string)}` : ""}</p>`;
 
     try {
       const { items } = await api.listEvidence(e.id, st.id as string);
@@ -743,7 +753,7 @@ async function exportExecutionToPdf(e: ExecutionDetail): Promise<void> {
       }
       if (files.length > 0) {
         html += `<p><strong>Tệp đính kèm (${files.length}):</strong></p><ul>`;
-        for (const f of files) html += `<li>📄 ${esc(f.original_name)}</li>`;
+        for (const f of files) html += `<li>📄 <a href="${esc(api.evidenceDownloadUrl(f.id))}" target="_blank">${esc(f.original_name)}</a></li>`;
         html += `</ul>`;
       }
     } catch { /* bỏ qua */ }
