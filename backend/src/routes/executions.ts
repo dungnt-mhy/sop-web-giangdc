@@ -125,6 +125,7 @@ async function getRejectHistory(db: D1Database, executionId: string): Promise<Ar
   reason: string | null;
   action: string;
   step_count: number;
+  step_names: string[];
 }>> {
   const rows = await db.prepare(
     `SELECT a.occurred_at AS at, a.diff_json, u.display_name AS by_name
@@ -133,18 +134,27 @@ async function getRejectHistory(db: D1Database, executionId: string): Promise<Ar
        AND a.event_type IN ('EXECUTION_CONFIRM_REJECTED_REDO', 'EXECUTION_CONFIRM_REJECTED_CANCEL')
      ORDER BY a.occurred_at DESC`
   ).bind(executionId).all<{ at: string; diff_json: string | null; by_name: string | null }>();
-  return (rows.results ?? []).map((r) => {
+  const result = [];
+  for (const r of rows.results ?? []) {
     let diff: Record<string, unknown> = {};
     try { diff = r.diff_json ? JSON.parse(r.diff_json) : {}; } catch { /* ignore */ }
-    const stepIds = Array.isArray(diff.step_ids) ? diff.step_ids : [];
-    return {
+    const stepIds = Array.isArray(diff.step_ids) ? diff.step_ids as string[] : [];
+    let stepNames: string[] = [];
+    if (stepIds.length > 0) {
+      const ph = stepIds.map(() => "?").join(",");
+      const srows = await db.prepare(`SELECT code, title FROM execution_steps WHERE id IN (${ph})`).bind(...stepIds).all<{ code: string; title: string }>();
+      stepNames = (srows.results ?? []).map((s) => `${s.code} — ${s.title}`);
+    }
+    result.push({
       by_name: r.by_name,
       at: r.at,
       reason: typeof diff.reason === "string" ? diff.reason : null,
       action: stepIds.length > 0 ? "redo" : "cancel",
       step_count: stepIds.length,
-    };
-  });
+      step_names: stepNames,
+    });
+  }
+  return result;
 }
 
 function parsePolicy(raw: string | null): { allowed?: boolean } | null {

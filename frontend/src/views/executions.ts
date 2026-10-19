@@ -1578,9 +1578,10 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
     <section class="card">
       <h3>Lịch sử lượt bị từ chối (${(e as unknown as { reject_history: Array<unknown> }).reject_history.length} lần)</h3>
       <div class="exec-reject-history">
-        ${(e as unknown as { reject_history: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history.map((h, i) => `
+        ${(e as unknown as { reject_history: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number; step_names: string[] }> }).reject_history.map((h, i) => `
           <div class="hist-item">
             <div><span class="hist-action">Lần ${(e as unknown as { reject_history: Array<unknown> }).reject_history.length - i}</span>${h.action === "redo" ? ` · 🔄 Yêu cầu làm lại ${h.step_count} bước` : " · 🗑️ Hủy lượt"}</div>
+            ${h.action === "redo" && h.step_names.length > 0 ? `<div class="muted small" style="margin-top:4px;">📋 Các bước: ${h.step_names.map(esc).join("; ")}</div>` : ""}
             <div class="muted small">👤 ${esc(h.by_name ?? "—")} · 🕐 ${esc(formatDateTime(h.at))}</div>
             <div class="hist-reason">Lý do: ${esc(h.reason ?? "—")}</div>
           </div>`).join("")}
