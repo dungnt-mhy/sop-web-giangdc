@@ -91,6 +91,7 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
   const status = (url.searchParams.get("status") ?? "").trim(); // trạng thái phiên bản ACTIVE
   const from = (url.searchParams.get("from") ?? "").trim();
   const to = (url.searchParams.get("to") ?? "").trim();
+  const orgUnitId = (url.searchParams.get("org_unit_id") ?? "").trim();
 
   const conds: string[] = [];
   const binds: unknown[] = [];
@@ -113,6 +114,10 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
   if (to) {
     conds.push(`date(p.created_at) <= date(?)`);
     binds.push(to);
+  }
+  if (orgUnitId) {
+    conds.push(`EXISTS (SELECT 1 FROM process_org_units pou WHERE pou.process_id = p.id AND pou.org_unit_id = ?)`);
+    binds.push(orgUnitId);
   }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
   const rows = await db

@@ -57,6 +57,9 @@ export async function renderProcesses(root: HTMLElement, canManage: boolean): Pr
       </select>
       <input type="date" id="flt-from" class="input" aria-label="Từ ngày" />
       <input type="date" id="flt-to" class="input" aria-label="Đến ngày" />
+      <select id="flt-org" class="input" aria-label="Đơn vị áp dụng">
+        <option value="">Tất cả đơn vị</option>
+      </select>
       <button class="btn" id="btn-search">Tìm</button>
     </div>
     <div class="table-wrap"><table class="tbl" id="proc-table">
@@ -74,11 +77,17 @@ export async function renderProcesses(root: HTMLElement, canManage: boolean): Pr
   const selStatus = root.querySelector<HTMLSelectElement>("#flt-status")!;
   const fromEl = root.querySelector<HTMLInputElement>("#flt-from")!;
   const toEl = root.querySelector<HTMLInputElement>("#flt-to")!;
+  const selOrg = root.querySelector<HTMLSelectElement>("#flt-org")!;
 
   // Tải danh sách nhóm.
   api.listProcesses().then(({ items }) => {
     const groups = [...new Set(items.map((p) => p.group_name).filter(Boolean))] as string[];
     selGroup.innerHTML = `<option value="">Tất cả nhóm</option>` + groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("");
+  }).catch(() => { /* bỏ qua */ });
+
+  // Tải danh sách đơn vị.
+  api.listOrgUnits().then(({ items }) => {
+    selOrg.innerHTML = `<option value="">Tất cả đơn vị</option>` + items.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join("");
   }).catch(() => { /* bỏ qua */ });
 
   async function reload(): Promise<void> {
@@ -90,6 +99,7 @@ export async function renderProcesses(root: HTMLElement, canManage: boolean): Pr
         status: selStatus.value || undefined,
         from: fromEl.value || undefined,
         to: toEl.value || undefined,
+        org_unit_id: selOrg.value || undefined,
       });
       if (items.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="empty">Chưa có quy trình nào.</td></tr>`;
