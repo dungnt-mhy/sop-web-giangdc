@@ -605,6 +605,8 @@ function renderActions(
     btns.push(`<button class="btn primary" data-ea="resume">Tiếp tục</button>`);
     btns.push(`<button class="btn danger" data-ea="cancel">Hủy lượt</button>`);
   }
+  // Nút xuất Word luôn hiện.
+  btns.push(`<button class="btn" data-ea="export-word">📄 Xuất Word</button>`);
   el.innerHTML = btns.join("");
   el.onclick = async (ev) => {
     const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-ea]");
@@ -639,6 +641,17 @@ function renderActions(
         restore();
         openCancelDialog(dialogRoot, e, async () => { await reload(); });
         return;
+      } else if (act === "export-word") {
+        restore();
+        setLoading(btn, true, "Đang xuất…");
+        try {
+          await exportExecutionToWord(e);
+          toast("Đã xuất file Word.");
+        } catch (err) {
+          toast(`Lỗi xuất Word: ${msg(err)}`);
+        }
+        restore();
+        return;
       }
       await reload();
     } catch (err) {
@@ -646,6 +659,116 @@ function renderActions(
       restore();
     }
   };
+}
+
+/** Xuất báo cáo lượt công việc ra file Word. */
+async function exportExecutionToWord(e: ExecutionDetail): Promise<void> {
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType } = await import("docx");
+
+  const children: InstanceType<typeof Paragraph>[] = [];
+
+  // Tiêu đề.
+  children.push(new Paragraph({
+    text: `BÁO CÁO LƯỢT CÔNG VIỆC`,
+    heading: HeadingLevel.TITLE,
+    alignment: AlignmentType.CENTER,
+  }));
+  children.push(new Paragraph({
+    text: `${e.code} — ${e.title || e.process_name || ""}`,
+    heading: HeadingLevel.HEADING_2,
+    alignment: AlignmentType.CENTER,
+  }));
+  children.push(new Paragraph({ text: "" }));
+
+  // Thông tin chung.
+  const infoRows = [
+    ["Mã lượt", e.code],
+    ["Quy trình", `${e.process_name || ""} (${e.process_code || ""})${(e as unknown as Record<string, unknown>).version_number ? ` v${(e as unknown as Record<string, unknown>).version_number}` : ""}`],
+    ["Trạng thái", e.status],
+    ["Người tạo", (e as unknown as Record<string, unknown>).creator_name as string || "—"],
+    ["Người thực hiện chính", (e as unknown as Record<string, unknown>).assignee_name as string || "—"],
+    ["Thời gian bắt đầu (dự kiến)", (e as unknown as Record<string, unknown>).expected_start_at ? fmtVn((e as unknown as Record<string, unknown>).expected_start_at as string) : "—"],
+    ["Thời gian hoàn thành (dự kiến)", (e as unknown as Record<string, unknown>).expected_end_at ? fmtVn((e as unknown as Record<string, unknown>).expected_end_at as string) : "—"],
+    ["Thời gian bắt đầu (thực tế)", (e as unknown as { started_at?: string }).started_at ? fmtVn((e as unknown as { started_at: string }).started_at) : "—"],
+    ["Thời gian hoàn thành (thực tế)", (e as unknown as { completed_at?: string }).completed_at ? fmtVn((e as unknown as { completed_at: string }).completed_at) : "—"],
+  ];
+  children.push(new Paragraph({ text: "I. THÔNG TIN CHUNG", heading: HeadingLevel.HEADING_1 }));
+  const infoTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: infoRows.map(([k, v]) => new TableRow({
+      children: [
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: k, bold: true })] })], width: { size: 30, type: WidthType.PERCENTAGE } }),
+        new TableCell({ children: [new Paragraph(v)], width: { size: 70, type: WidthType.PERCENTAGE } }),
+      ],
+    })),
+  });
+  // @ts-ignore - Table cần được thêm qua children đặc biệt
+  children.push(infoTable as unknown as Paragraph);
+  children.push(new Paragraph({ text: "" }));
+
+  // Chi tiết từng bước.
+  children.push(new Paragraph({ text: "II. CHI TIẾT CÁC BƯỚC", heading: HeadingLevel.HEADING_1 }));
+  
+  for (let idx = 0; idx < e.steps.length; idx++) {
+    const st = e.steps[idx] as unknown as Record<string, unknown>;
+    children.push(new Paragraph({
+      text: `Bước ${idx + 1}: ${st.code} — ${st.title}`,
+      heading: HeadingLevel.HEADING_2,
+    }));
+    children.push(new Paragraph({ children: [new TextRun({ text: "Trạng thái: ", bold: true }), new TextRun(STEP_STATUS_LABELS[st.status as string] || (st.status as string))] }));
+    
+    const assignees = (st.assignees as { display_name: string }[] | undefined) || [];
+    if (assignees.length > 0) {
+      children.push(new Paragraph({ children: [new TextRun({ text: "Người thực hiện: ", bold: true }), new TextRun(assignees.map((a) => a.display_name).join(", "))] }));
+    }
+    const supAssignees = (st.supervisor_assignees as { display_name: string }[] | undefined) || [];
+    if (supAssignees.length > 0) {
+      children.push(new Paragraph({ children: [new TextRun({ text: "Người giám sát: ", bold: true }), new TextRun(supAssignees.map((a) => a.display_name).join(", "))] }));
+    }
+    if (st.note) {
+      children.push(new Paragraph({ children: [new TextRun({ text: "Ghi chú: ", bold: true }), new TextRun(st.note as string)] }));
+    }
+    if (st.approved_by_name) {
+      children.push(new Paragraph({ children: [new TextRun({ text: "Duyệt bởi: ", bold: true }), new TextRun(`${st.approved_by_name}${st.approved_at ? ` (${fmtVn(st.approved_at as string)})` : ""}`)] }));
+    }
+
+    // Tải ảnh bằng chứng.
+    try {
+      const { items } = await api.listEvidence(e.id, st.id as string);
+      const photos = items.filter((ev) => ev.kind === "PHOTO");
+      if (photos.length > 0) {
+        children.push(new Paragraph({ children: [new TextRun({ text: `Ảnh bằng chứng (${photos.length}):`, bold: true })] }));
+        for (const photo of photos.slice(0, 10)) {
+          try {
+            const resp = await fetch(api.evidenceDownloadUrl(photo.id));
+            const blob = await resp.blob();
+            const arrayBuffer = await blob.arrayBuffer();
+            children.push(new Paragraph({
+              children: [new ImageRun({
+                data: arrayBuffer,
+                transformation: { width: 400, height: 300 },
+                type: "png",
+              })],
+            }));
+            children.push(new Paragraph({ text: photo.original_name, style: "Caption" }));
+          } catch { /* bỏ qua ảnh lỗi */ }
+        }
+      }
+    } catch { /* bỏ qua */ }
+    
+    children.push(new Paragraph({ text: "" }));
+  }
+
+  const doc = new Document({
+    sections: [{ children }],
+  });
+  const blob = await Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `BaoCao_${e.code}.docx`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /** Tải và hiển thị bằng chứng cho tất cả các bước. */
