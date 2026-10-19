@@ -85,9 +85,17 @@ export async function notifyUsers(
   input: Omit<CreateNotificationInput, "user_id">
 ): Promise<void> {
   const unique = [...new Set(userIds.filter(Boolean))];
-  for (const uid of unique) {
-    await createNotification(db, { ...input, user_id: uid });
-  }
+  if (unique.length === 0) return;
+  // Batch insert thay vì từng cái một.
+  const stmts = unique.map((uid) => {
+    const id = newId();
+    const now = nowIso();
+    return db.prepare(
+      `INSERT INTO notifications (id, user_id, type, title, message, link, is_read, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
+    ).bind(id, uid, input.type, input.title, input.message, input.link ?? null, now);
+  });
+  await db.batch(stmts);
 }
 
 // GET /api/v1/notifications — danh sách thông báo của tôi.

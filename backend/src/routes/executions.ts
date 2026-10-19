@@ -1183,31 +1183,30 @@ export async function handleStartStep(ctx: Ctx, execId: string, stepId: string):
   if (step.status !== "NOT_STARTED") {
     return apiError("VALIDATION_ERROR", "Bước đã được bắt đầu.", ctx.requestId);
   }
-  // Chặn bắt đầu khi đang có yêu cầu xin bỏ qua chờ duyệt.
-  const pendingSkip = await db.prepare(
-    `SELECT id FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING' LIMIT 1`
-  ).bind(execId, stepId).first();
+  // Chạy song song các kiểm tra độc lập.
+  const [pendingSkip, asgCount, prev] = await Promise.all([
+    db.prepare(
+      `SELECT id FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING' LIMIT 1`
+    ).bind(execId, stepId).first(),
+    db.prepare(
+      `SELECT COUNT(*) as cnt FROM execution_step_assignees WHERE execution_step_id = ?`
+    ).bind(stepId).first<{ cnt: number }>(),
+    step.sort_order > 1
+      ? db.prepare(`SELECT status FROM execution_steps WHERE execution_id = ? AND sort_order = ?`)
+          .bind(execId, step.sort_order - 1)
+          .first<{ status: string }>()
+      : Promise.resolve(null),
+  ]);
   if (pendingSkip) {
     return apiError("VALIDATION_ERROR", "Bước đang chờ duyệt yêu cầu bỏ qua — không thể bắt đầu.", ctx.requestId);
   }
-  // Người thực hiện là bắt buộc khi bắt đầu bước.
-  const asgCount = await db.prepare(
-    `SELECT COUNT(*) as cnt FROM execution_step_assignees WHERE execution_step_id = ?`
-  ).bind(stepId).first<{ cnt: number }>();
   if (!asgCount || asgCount.cnt === 0) {
     return apiError("VALIDATION_ERROR", "Chưa phân công người thực hiện — không thể bắt đầu bước.", ctx.requestId);
   }
-  // AC-04: bước trước phải PASSED hoặc SKIPPED hợp lệ.
-  if (step.sort_order > 1) {
-    const prev = await db
-      .prepare(`SELECT status FROM execution_steps WHERE execution_id = ? AND sort_order = ?`)
-      .bind(execId, step.sort_order - 1)
-      .first<{ status: string }>();
-    if (!prev || !["PASSED", "SKIPPED"].includes(prev.status)) {
-      return apiError("VALIDATION_ERROR", "Bước trước chưa hoàn thành — không thể bắt đầu bước này.", ctx.requestId, {
-        code: "PREVIOUS_STEP_INCOMPLETE",
-      });
-    }
+  if (step.sort_order > 1 && (!prev || !["PASSED", "SKIPPED"].includes(prev.status))) {
+    return apiError("VALIDATION_ERROR", "Bước trước chưa hoàn thành — không thể bắt đầu bước này.", ctx.requestId, {
+      code: "PREVIOUS_STEP_INCOMPLETE",
+    });
   }
 
   const now = nowIso();
@@ -1252,17 +1251,18 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
   if (step.status !== "IN_PROGRESS") {
     return apiError("VALIDATION_ERROR", "Bước chưa được bắt đầu.", ctx.requestId);
   }
-  // Chặn hoàn thành khi đang có yêu cầu xin bỏ qua chờ duyệt.
-  const pendingSkipComplete = await db.prepare(
-    `SELECT id FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING' LIMIT 1`
-  ).bind(execId, stepId).first();
+  // Chạy song song các kiểm tra độc lập.
+  const [pendingSkipComplete, asgCountComplete] = await Promise.all([
+    db.prepare(
+      `SELECT id FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING' LIMIT 1`
+    ).bind(execId, stepId).first(),
+    db.prepare(
+      `SELECT COUNT(*) as cnt FROM execution_step_assignees WHERE execution_step_id = ?`
+    ).bind(stepId).first<{ cnt: number }>(),
+  ]);
   if (pendingSkipComplete) {
     return apiError("VALIDATION_ERROR", "Bước đang chờ duyệt yêu cầu bỏ qua — không thể hoàn thành.", ctx.requestId);
   }
-  // Người thực hiện là bắt buộc khi hoàn thành bước.
-  const asgCountComplete = await db.prepare(
-    `SELECT COUNT(*) as cnt FROM execution_step_assignees WHERE execution_step_id = ?`
-  ).bind(stepId).first<{ cnt: number }>();
   if (!asgCountComplete || asgCountComplete.cnt === 0) {
     return apiError("VALIDATION_ERROR", "Chưa phân công người thực hiện — không thể hoàn thành bước.", ctx.requestId);
   }
