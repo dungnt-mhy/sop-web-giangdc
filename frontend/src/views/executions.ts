@@ -677,49 +677,37 @@ function renderActions(
 
 /** Xuất báo cáo lượt công việc ra PDF (qua in ấn). */
 async function exportExecutionToPdf(e: ExecutionDetail): Promise<void> {
-  // Tạo nội dung HTML để in.
-  const printWin = window.open("", "_blank");
-  if (!printWin) throw new Error("Trình duyệt chặn popup. Hãy cho phép popup rồi thử lại.");
+  const html2pdf = (window as unknown as Record<string, unknown>).html2pdf as ((el: HTMLElement, opts: unknown) => Promise<void>) | undefined;
+  if (!html2pdf) throw new Error("Chưa tải được thư viện PDF. Hãy kiểm tra mạng và thử lại.");
 
+  // Tạo element ẩn chứa nội dung báo cáo.
+  const container = document.createElement("div");
+  container.style.cssText = "position:absolute;left:-9999px;top:0;width:800px;background:#fff;font-family:Arial,sans-serif;font-size:14px;padding:20px;";
+  
   let html = `
-    <html><head><meta charset="utf-8"><title>Báo cáo ${esc(e.code)}</title>
-    <style>
-      body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; }
-      h1 { text-align: center; font-size: 20px; }
-      h2 { font-size: 16px; border-bottom: 2px solid #333; padding-bottom: 4px; margin-top: 24px; }
-      h3 { font-size: 14px; margin-top: 16px; }
-      table { border-collapse: collapse; width: 100%; margin: 12px 0; }
-      td, th { border: 1px solid #ccc; padding: 8px; text-align: left; }
-      th { background: #f5f5f5; }
-      img { max-width: 400px; max-height: 300px; margin: 8px 0; display: block; }
-      .step { page-break-inside: avoid; margin-bottom: 20px; border: 1px solid #ddd; padding: 12px; border-radius: 8px; }
-    </style></head><body>
-    <h1>BÁO CÁO LƯỢT CÔNG VIỆC</h1>
-    <h2 style="text-align:center;border:none;">${esc(e.code)} — ${esc(e.title || (e as unknown as Record<string, unknown>).process_name as string || "")}</h2>
+    <h1 style="text-align:center;font-size:20px;">BÁO CÁO LƯỢT CÔNG VIỆC</h1>
+    <h2 style="text-align:center;font-size:16px;">${esc(e.code)} — ${esc(e.title || (e as unknown as Record<string, unknown>).process_name as string || "")}</h2>
 
-    <h2>I. THÔNG TIN CHUNG</h2>
-    <table>
-      <tr><th style="width:30%">Mã lượt</th><td>${esc(e.code)}</td></tr>
-      <tr><th>Tiêu đề</th><td>${esc(e.title || "—")}</td></tr>
-      <tr><th>Quy trình</th><td>${esc((e as unknown as Record<string, unknown>).process_name as string || "")} (${esc((e as unknown as Record<string, unknown>).process_code as string || "")})${(e as unknown as Record<string, unknown>).version_number ? ` · Phiên bản v${(e as unknown as Record<string, unknown>).version_number}` : ""}</td></tr>
-      <tr><th>Trạng thái</th><td>${esc(e.status)}</td></tr>
-      <tr><th>Người tạo</th><td>${esc((e as unknown as Record<string, unknown>).creator_name as string || "—")}</td></tr>
-      <tr><th>Người thực hiện chính</th><td>${esc((e as unknown as Record<string, unknown>).assignee_name as string || "—")}</td></tr>
-      <tr><th>Người giám sát</th><td>${esc((((e as unknown as Record<string, unknown>).supervisor_names as string[]) || []).join(", ") || (e as unknown as Record<string, unknown>).supervisor_name as string || "—")}</td></tr>
-      <tr><th>Bắt đầu dự kiến</th><td>${esc((e as unknown as Record<string, unknown>).expected_start_at ? fmtVn((e as unknown as Record<string, unknown>).expected_start_at as string) : "—")}</td></tr>
-      <tr><th>Hoàn thành dự kiến</th><td>${esc((e as unknown as Record<string, unknown>).expected_end_at ? fmtVn((e as unknown as Record<string, unknown>).expected_end_at as string) : "—")}</td></tr>
-      <tr><th>Bắt đầu thực tế</th><td>${esc((e as unknown as { started_at?: string }).started_at ? fmtVn((e as unknown as { started_at: string }).started_at) : "—")}</td></tr>
-      <tr><th>Hoàn thành thực tế</th><td>${esc((e as unknown as { completed_at?: string }).completed_at ? fmtVn((e as unknown as { completed_at: string }).completed_at) : "—")}</td></tr>
-      ${(e.redo_steps ?? 0) > 0 ? `<tr><th>Số bước bị làm lại</th><td>${e.redo_steps} bước</td></tr>` : ""}
+    <h2 style="font-size:16px;border-bottom:2px solid #333;padding-bottom:4px;margin-top:24px;">I. THÔNG TIN CHUNG</h2>
+    <table style="border-collapse:collapse;width:100%;margin:12px 0;">
+      <tr><td style="border:1px solid #ccc;padding:8px;width:30%;background:#f5f5f5;"><strong>Mã lượt</strong></td><td style="border:1px solid #ccc;padding:8px;">${esc(e.code)}</td></tr>
+      <tr><td style="border:1px solid #ccc;padding:8px;background:#f5f5f5;"><strong>Tiêu đề</strong></td><td style="border:1px solid #ccc;padding:8px;">${esc(e.title || "—")}</td></tr>
+      <tr><td style="border:1px solid #ccc;padding:8px;background:#f5f5f5;"><strong>Quy trình</strong></td><td style="border:1px solid #ccc;padding:8px;">${esc((e as unknown as Record<string, unknown>).process_name as string || "")} (${esc((e as unknown as Record<string, unknown>).process_code as string || "")})</td></tr>
+      <tr><td style="border:1px solid #ccc;padding:8px;background:#f5f5f5;"><strong>Trạng thái</strong></td><td style="border:1px solid #ccc;padding:8px;">${esc(e.status)}</td></tr>
+      <tr><td style="border:1px solid #ccc;padding:8px;background:#f5f5f5;"><strong>Người tạo</strong></td><td style="border:1px solid #ccc;padding:8px;">${esc((e as unknown as Record<string, unknown>).creator_name as string || "—")}</td></tr>
+      <tr><td style="border:1px solid #ccc;padding:8px;background:#f5f5f5;"><strong>Người thực hiện chính</strong></td><td style="border:1px solid #ccc;padding:8px;">${esc((e as unknown as Record<string, unknown>).assignee_name as string || "—")}</td></tr>
+      ${(e.redo_steps ?? 0) > 0 ? `<tr><td style="border:1px solid #ccc;padding:8px;background:#f5f5f5;"><strong>Số bước bị làm lại</strong></td><td style="border:1px solid #ccc;padding:8px;">${e.redo_steps} bước</td></tr>` : ""}
     </table>`;
 
   // Ngoại lệ.
+  let hasExceptions = false;
   try {
     const { items: exItems } = await api.listExceptions(e.id);
     if (exItems.length > 0) {
-      html += `<h2>II. NGOẠI LỆ</h2>`;
+      hasExceptions = true;
+      html += `<h2 style="font-size:16px;border-bottom:2px solid #333;padding-bottom:4px;margin-top:24px;">II. NGOẠI LỆ</h2>`;
       for (const ex of exItems) {
-        html += `<div class="step"><h3>${esc(ex.title)} (${esc(ex.status)})</h3>`;
+        html += `<div style="margin-bottom:16px;border:1px solid #ddd;padding:12px;border-radius:8px;"><h3 style="font-size:14px;">${esc(ex.title)} (${esc(ex.status)})</h3>`;
         if (ex.description) html += `<p>${esc(ex.description)}</p>`;
         if (ex.resolution) html += `<p><strong>Cách xử lý:</strong> ${esc(ex.resolution)}</p>`;
         html += `</div>`;
@@ -728,18 +716,15 @@ async function exportExecutionToPdf(e: ExecutionDetail): Promise<void> {
   } catch { /* bỏ qua */ }
 
   // Chi tiết bước.
-  html += `<h2>${(await api.listExceptions(e.id).then(r => r.items.length).catch(() => 0)) > 0 ? "III" : "II"}. CHI TIẾT CÁC BƯỚC</h2>`;
+  html += `<h2 style="font-size:16px;border-bottom:2px solid #333;padding-bottom:4px;margin-top:24px;">${hasExceptions ? "III" : "II"}. CHI TIẾT CÁC BƯỚC</h2>`;
   for (let idx = 0; idx < e.steps.length; idx++) {
     const st = e.steps[idx] as unknown as Record<string, unknown>;
-    html += `<div class="step"><h3>Bước ${idx + 1}: ${esc(st.code as string)} — ${esc(st.title as string)}</h3>`;
+    html += `<div style="margin-bottom:20px;border:1px solid #ddd;padding:12px;border-radius:8px;page-break-inside:avoid;"><h3 style="font-size:14px;">Bước ${idx + 1}: ${esc(st.code as string)} — ${esc(st.title as string)}</h3>`;
     html += `<p><strong>Trạng thái:</strong> ${esc(st.status as string)}</p>`;
     const assignees = (st.assignees as { display_name: string }[] | undefined) || [];
     if (assignees.length > 0) html += `<p><strong>Người thực hiện:</strong> ${esc(assignees.map((a) => a.display_name).join(", "))}</p>`;
-    const supAssignees = (st.supervisor_assignees as { display_name: string }[] | undefined) || [];
-    if (supAssignees.length > 0) html += `<p><strong>Người giám sát:</strong> ${esc(supAssignees.map((a) => a.display_name).join(", "))}</p>`;
     if (st.note) html += `<p><strong>Ghi chú:</strong> ${esc(st.note as string)}</p>`;
-    if (st.approved_by_name) html += `<p><strong>Duyệt bởi:</strong> ${esc(st.approved_by_name as string)}${st.approved_at ? ` (${esc(fmtVn(st.approved_at as string))})` : ""}</p>`;
-    if ((st.redo_count as number ?? 0) > 0) html += `<p><strong>Số lần làm lại:</strong> ${st.redo_count} lần${st.redo_reason ? ` — Lý do: ${esc(st.redo_reason as string)}` : ""}</p>`;
+    if (st.approved_by_name) html += `<p><strong>Duyệt bởi:</strong> ${esc(st.approved_by_name as string)}</p>`;
 
     try {
       const { items } = await api.listEvidence(e.id, st.id as string);
@@ -747,24 +732,45 @@ async function exportExecutionToPdf(e: ExecutionDetail): Promise<void> {
       const files = items.filter((ev) => ev.kind !== "PHOTO");
       if (photos.length > 0) {
         html += `<p><strong>Ảnh bằng chứng (${photos.length}):</strong></p>`;
-        for (const photo of photos.slice(0, 10)) {
-          html += `<img src="${esc(api.evidenceDownloadUrl(photo.id))}" alt="${esc(photo.original_name)}" /><p><em>${esc(photo.original_name)}</em></p>`;
+        for (const photo of photos.slice(0, 5)) {
+          try {
+            const resp = await fetch(api.evidenceDownloadUrl(photo.id), { credentials: "include" });
+            const blob = await resp.blob();
+            const dataUrl = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+            html += `<img src="${dataUrl}" style="max-width:400px;max-height:300px;margin:8px 0;display:block;" /><p><em>${esc(photo.original_name)}</em></p>`;
+          } catch { /* bỏ qua ảnh lỗi */ }
         }
       }
       if (files.length > 0) {
         html += `<p><strong>Tệp đính kèm (${files.length}):</strong></p><ul>`;
-        for (const f of files) html += `<li>📄 <a href="${esc(api.evidenceDownloadUrl(f.id))}" target="_blank">${esc(f.original_name)}</a></li>`;
+        for (const f of files) {
+          const fileUrl = new URL(api.evidenceDownloadUrl(f.id), window.location.origin).href;
+          html += `<li>📄 <a href="${esc(fileUrl)}">${esc(f.original_name)}</a></li>`;
+        }
         html += `</ul>`;
       }
     } catch { /* bỏ qua */ }
     html += `</div>`;
   }
 
-  html += `</body></html>`;
-  printWin.document.write(html);
-  printWin.document.close();
-  printWin.focus();
-  setTimeout(() => { printWin.print(); }, 500);
+  container.innerHTML = html;
+  document.body.appendChild(container);
+
+  try {
+    await html2pdf(container, {
+      margin: 10,
+      filename: `BaoCao_${e.code}.pdf`,
+      image: { type: "jpeg", quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    });
+  } finally {
+    document.body.removeChild(container);
+  }
 }
 
 /** Xuất báo cáo lượt công việc ra file Word. */
