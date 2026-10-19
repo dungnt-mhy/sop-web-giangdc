@@ -55,8 +55,14 @@ type ExecStepRow = {
   status: string;
   completed_by: string | null;
   completed_at: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
   note: string | null;
   skip_reason: string | null;
+  redo_count: number;
+  redo_reason: string | null;
+  redo_by: string | null;
+  redo_at: string | null;
 };
 
 function toPublicExec(e: ExecutionRow, processName?: string, progress?: { total: number; done: number }, redoInfo?: { redo_steps: number; last_redo_by_name: string | null; last_redo_at: string | null; last_redo_reason: string | null }) {
@@ -176,11 +182,14 @@ function toPublicStep(s: ExecStepRow) {
     status: s.status,
     completed_by: s.completed_by,
     completed_at: s.completed_at,
+    approved_by: s.approved_by,
+    approved_at: s.approved_at,
     note: s.note,
     skip_reason: s.skip_reason,
-    redo_count: (s as unknown as Record<string, unknown>).redo_count ?? 0,
-    redo_reason: (s as unknown as Record<string, unknown>).redo_reason ?? null,
-    redo_at: (s as unknown as Record<string, unknown>).redo_at ?? null,
+    redo_count: s.redo_count ?? 0,
+    redo_reason: s.redo_reason ?? null,
+    redo_by: s.redo_by ?? null,
+    redo_at: s.redo_at ?? null,
   };
 }
 
@@ -570,6 +579,20 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   ]);
   const execSupervisorNames = (execSupRows.results ?? []).map((r) => r.display_name);
   const execApproverNames = (execAprRows.results ?? []).map((r) => r.display_name);
+  // Lấy tên người dùng cho các trường lưu vết của bước (completed_by, approved_by, redo_by).
+  const stepUserIds = new Set<string>();
+  for (const s of steps.results ?? []) {
+    if (s.completed_by) stepUserIds.add(s.completed_by);
+    if (s.approved_by) stepUserIds.add(s.approved_by);
+    if (s.redo_by) stepUserIds.add(s.redo_by);
+  }
+  const stepUserNameById = new Map<string, string>();
+  if (stepUserIds.size > 0) {
+    const ids = [...stepUserIds];
+    const ph = ids.map(() => "?").join(",");
+    const urows = await db.prepare(`SELECT id, display_name FROM users WHERE id IN (${ph})`).bind(...ids).all<{ id: string; display_name: string }>();
+    for (const u of urows.results ?? []) stepUserNameById.set(u.id, u.display_name);
+  }
   // Lấy người được phân công và số bằng chứng cho từng bước (cho tab sơ đồ).
   const assigneeMap = new Map<string, { display_name: string }[]>();
   const supAssigneeMap = new Map<string, { display_name: string }[]>();
@@ -626,6 +649,9 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
       assignees: assigneeMap.get(s.id) ?? [],
       supervisor_assignees: supAssigneeMap.get(s.id) ?? [],
       evidence_count: evidenceMap.get(s.id) ?? 0,
+      completed_by_name: s.completed_by ? stepUserNameById.get(s.completed_by) ?? null : null,
+      approved_by_name: s.approved_by ? stepUserNameById.get(s.approved_by) ?? null : null,
+      redo_by_name: s.redo_by ? stepUserNameById.get(s.redo_by) ?? null : null,
     })),
   });
 }
@@ -1353,8 +1379,8 @@ export async function handleApproveStep(ctx: Ctx, execId: string, stepId: string
 
   const now = nowIso();
   await db.prepare(
-    `UPDATE execution_steps SET status = 'PASSED', updated_at = ? WHERE id = ?`
-  ).bind(now, stepId).run();
+    `UPDATE execution_steps SET status = 'PASSED', approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?`
+  ).bind(me.user.id, now, now, stepId).run();
   await audit(db, {
     event_type: "EXECUTION_STEP_APPROVED",
     actor_id: me.user.id,
