@@ -9,6 +9,7 @@ import { renderExecutionDetail, renderMyWork } from "./views/executions.js";
 import { renderProcessDetail, renderProcesses } from "./views/processes.js";
 import { renderUsers } from "./views/users.js";
 import { renderDashboard } from "./views/dashboard.js";
+import { renderProposals } from "./views/proposals.js";
 import { renderAudit, renderExceptions, renderEvidence, renderOrgUnits, renderPositions, renderRoles } from "./views/management.js";
 import { renderStatsDaily, renderStatsPerson, renderStatsProcess, renderStatsShift, renderStatsUnit } from "./views/stats.js";
 
@@ -101,6 +102,7 @@ function renderShell(): void {
       ],
     },
     { hash: "#/my-work", label: "Công việc của tôi", perm: "executions.perform", badgeId: "my-work" },
+    { hash: "#/proposals", label: "💡 Đề xuất lượt", perm: "executions.perform" },
     { hash: "#/processes", label: "Quy trình" },
     { hash: "#/exceptions", label: "Ngoại lệ", perm: "exceptions.handle", badgeId: "exceptions" },
     { hash: "#/evidence", label: "Bằng chứng", perm: "executions.view" },
@@ -454,6 +456,10 @@ function route(): void {
   const em = /^#\/executions\/([0-9a-f-]{36})$/.exec(hash);
   if (em) {
     void renderExecutionDetail(page, em[1]);
+    return;
+  }
+  if (hash.startsWith("#/proposals")) {
+    void renderProposals(page);
     return;
   }
   // Mặc định: trang chủ.

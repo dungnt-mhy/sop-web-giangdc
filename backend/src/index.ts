@@ -29,6 +29,7 @@ import {
   handleForcePasswordChange,
   handleGetUser,
   handleListActiveUsers,
+  handleListApprovers,
   handleListUsers,
   handleLockUser,
   handlePatchUser,
@@ -87,6 +88,12 @@ import {
   handleStartExecution,
   handleStartStep,
 } from "./routes/executions";
+import {
+  handleApproveProposal,
+  handleCreateProposal,
+  handleListProposals,
+  handleRejectProposal,
+} from "./routes/proposals";
 import {
   handleCreatePosition,
   handleDeletePosition,
@@ -300,6 +307,9 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   if (path === "/users/active" && method === "GET") {
     return handleListActiveUsers(ctx);
   }
+  if (path === "/users/approvers" && method === "GET") {
+    return handleListApprovers(ctx);
+  }
   if (path === "/users") {
     if (method === "GET") return handleListUsers(ctx);
     if (method === "POST") return handleCreateUser(ctx);
@@ -394,6 +404,16 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   if (path === "/executions") {
     if (method === "GET") return handleListExecutions(ctx);
     if (method === "POST") return handleCreateExecution(ctx);
+  }
+  // --- Đề xuất lượt (proposals) ---
+  if (path === "/proposals") {
+    if (method === "GET") return handleListProposals(ctx);
+    if (method === "POST") return handleCreateProposal(ctx);
+  }
+  const pmProposal = /^\/proposals\/([^/:]+):(approve|reject)$/.exec(path);
+  if (pmProposal && method === "POST") {
+    if (pmProposal[2] === "approve") return handleApproveProposal(ctx, pmProposal[1]);
+    if (pmProposal[2] === "reject") return handleRejectProposal(ctx, pmProposal[1]);
   }
   const em = /^\/executions\/([^/:]+)((?::(start|pause|resume|cancel|complete|report-complete|confirm-complete|reject-confirmation))?)$/.exec(path);
   if (em) {

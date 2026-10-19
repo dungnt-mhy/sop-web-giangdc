@@ -101,6 +101,32 @@ export interface Execution {
   last_redo_reason?: string | null;
 }
 
+export interface Proposal {
+  id: string;
+  process_id: string;
+  process_name?: string | null;
+  title: string | null;
+  reason: string;
+  proposer_id: string;
+  proposer_name?: string | null;
+  approver_id: string;
+  approver_name?: string | null;
+  expected_start_at: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  reject_reason: string | null;
+  execution_id: string | null;
+  created_at: string;
+  decided_at: string | null;
+}
+
+export interface ApproverUser {
+  id: string;
+  username: string;
+  display_name: string;
+  org_unit_id: string | null;
+  org_unit_name: string | null;
+}
+
 export interface ExecutionStep {
   id: string;
   execution_id: string;
@@ -687,6 +713,29 @@ export const api = {
   },
   statsByShift(params: string): Promise<{ items: Record<string, unknown>[] }> {
     return req("GET", `/dashboard/by-shift${params ? "?" + params : ""}`);
+  },
+  // --- Đề xuất lượt ---
+  listProposals(tab: "received" | "sent" = "received", status?: string): Promise<{ items: Proposal[] }> {
+    const p = new URLSearchParams({ tab });
+    if (status) p.set("status", status);
+    return req("GET", `/proposals?${p.toString()}`);
+  },
+  createProposal(input: {
+    process_id: string; title?: string; reason: string;
+    approver_id: string; expected_start_at?: string;
+  }): Promise<{ id: string }> {
+    return req("POST", `/proposals`, input);
+  },
+  approveProposal(id: string): Promise<{ id: string; status: string; suggest: Record<string, unknown> }> {
+    return req("POST", `/proposals/${encodeURIComponent(id)}:approve`);
+  },
+  rejectProposal(id: string, reason: string): Promise<{ id: string; status: string }> {
+    return req("POST", `/proposals/${encodeURIComponent(id)}:reject`, { reason });
+  },
+  listApprovers(q?: string): Promise<{ items: ApproverUser[] }> {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    return req("GET", `/users/approvers?${p.toString()}`);
   },
 };
 

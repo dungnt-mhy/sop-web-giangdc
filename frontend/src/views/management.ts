@@ -356,6 +356,23 @@ function openOrgUnitDialog(
                 <option value="inactive" ${existing?.status === "inactive" ? "selected" : ""}>Ngừng hoạt động</option>
               </select></label>
           </div>
+          <div class="form-grid">
+            <label>Phạm vi chọn người phê duyệt
+              <select class="input" name="approver_scope">
+                <option value="SAME_UNIT" ${(existing as Record<string, string>)?.approver_scope === "SAME_UNIT" ? "selected" : ""}>Chỉ cùng đơn vị</option>
+                <option value="UP_HIERARCHY" ${!(existing as Record<string, string>)?.approver_scope || (existing as Record<string, string>)?.approver_scope === "UP_HIERARCHY" ? "selected" : ""}>Cùng đơn vị + cấp trên (mặc định)</option>
+                <option value="DIRECT_MANAGER" ${(existing as Record<string, string>)?.approver_scope === "DIRECT_MANAGER" ? "selected" : ""}>Chỉ quản lý trực tiếp</option>
+                <option value="ANY_APPROVER" ${(existing as Record<string, string>)?.approver_scope === "ANY_APPROVER" ? "selected" : ""}>Bất kỳ ai có quyền duyệt</option>
+              </select>
+              <span class="hint">Nhân viên được chọn người phê duyệt trong phạm vi nào</span></label>
+            <label>Phạm vi tạo lượt
+              <select class="input" name="create_scope">
+                <option value="SELF_ONLY" ${(existing as Record<string, string>)?.create_scope === "SELF_ONLY" ? "selected" : ""}>Chỉ đơn vị mình</option>
+                <option value="SELF_AND_CHILDREN" ${!(existing as Record<string, string>)?.create_scope || (existing as Record<string, string>)?.create_scope === "SELF_AND_CHILDREN" ? "selected" : ""}>Đơn vị mình + cấp dưới (mặc định)</option>
+                <option value="ANY" ${(existing as Record<string, string>)?.create_scope === "ANY" ? "selected" : ""}>Mọi đơn vị</option>
+              </select>
+              <span class="hint">Quản lý được tạo lượt cho nhân viên ở phạm vi nào</span></label>
+          </div>
           <label>Mô tả <input class="input" name="description" maxlength="255" value="${existing?.description ? esc(existing.description) : ""}" placeholder="Ghi chú thêm về đơn vị…" /></label>
           <p class="form-error" id="ou-error" role="alert" hidden></p>
           <div class="dialog-actions">

@@ -309,6 +309,16 @@ export async function handlePatchUser(ctx: Ctx, id: string): Promise<Response> {
     binds.push(v);
     diff.position_id = v;
   }
+  if (body?.org_unit_id !== undefined) {
+    const v = typeof body.org_unit_id === "string" && body.org_unit_id.trim() ? body.org_unit_id.trim() : null;
+    if (v) {
+      const ou = await db.prepare(`SELECT id FROM org_units WHERE id = ?`).bind(v).first();
+      if (!ou) return apiError("VALIDATION_ERROR", "Đơn vị không tồn tại.", ctx.requestId);
+    }
+    updates.push("org_unit_id = ?");
+    binds.push(v);
+    diff.org_unit_id = v;
+  }
 
   let roles: string[] | null = null;
   if (body?.roles !== undefined) {
@@ -537,4 +547,101 @@ export async function handleForcePasswordChange(ctx: Ctx, id: string): Promise<R
     request_id: ctx.requestId,
   });
   return ok(await loadFullUser(db, id));
+}
+
+/**
+ * GET /api/v1/users/approvers — danh sách người có thể làm người phê duyệt,
+ * đã lọc theo phạm vi đơn vị của người đang đăng nhập.
+ * Query: q (tìm kiếm), limit (mặc định 20).
+ * Logic:
+ * - Lấy org_unit_id của người dùng + approver_scope của đơn vị đó.
+ * - SAME_UNIT: chỉ người cùng đơn vị.
+ * - UP_HIERARCHY: cùng đơn vị + tất cả đơn vị cha.
+ * - DIRECT_MANAGER: chỉ quản lý trực tiếp (manager_id của đơn vị).
+ * - ANY_APPROVER: tất cả ai có quyền phê duyệt (có vai trò approver/monitor/admin).
+ */
+export async function handleListApprovers(ctx: Ctx): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+  const url = new URL(ctx.request.url);
+  const q = (url.searchParams.get("q") ?? "").trim();
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "20", 10) || 20, 1), 50);
+
+  // Lấy đơn vị + scope của người dùng.
+  const meRow = await db.prepare(`SELECT org_unit_id FROM users WHERE id = ?`).bind(me.user.id)
+    .first<{ org_unit_id: string | null }>();
+  const myUnitId = meRow?.org_unit_id ?? null;
+
+  let scope = "UP_HIERARCHY";
+  let managerId: string | null = null;
+  if (myUnitId) {
+    const scopeRow = await db.prepare(`SELECT approver_scope, manager_id FROM org_units WHERE id = ?`)
+      .bind(myUnitId).first<{ approver_scope: string; manager_id: string | null }>();
+    if (scopeRow) {
+      scope = scopeRow.approver_scope ?? "UP_HIERARCHY";
+      managerId = scopeRow.manager_id;
+    }
+  }
+
+  // Tính danh sách đơn vị được phép.
+  let allowedUnitIds: string[] | null = null; // null = không giới hạn đơn vị
+  let onlyManager = false;
+  if (scope === "DIRECT_MANAGER") {
+    onlyManager = true;
+  } else if (scope === "SAME_UNIT" && myUnitId) {
+    allowedUnitIds = [myUnitId];
+  } else if (scope === "UP_HIERARCHY" && myUnitId) {
+    // Đi lên cây phân cấp.
+    allowedUnitIds = [myUnitId];
+    let cur: string | null = myUnitId;
+    for (let i = 0; i < 10 && cur; i++) {
+      const r: { parent_id: string | null } | null = await db.prepare(
+        `SELECT parent_id FROM org_units WHERE id = ?`).bind(cur).first();
+      if (r?.parent_id) {
+        allowedUnitIds.push(r.parent_id);
+        cur = r.parent_id;
+      } else break;
+    }
+  }
+  // ANY_APPROVER hoặc chưa có đơn vị: không giới hạn đơn vị (chỉ lọc theo vai trò).
+
+  // Người có thể làm phê duyệt: có vai trò approver/monitor/admin hoặc quyền executions.manage.
+  const searchCond = q ? `AND (u.username LIKE ? OR u.display_name LIKE ?)` : "";
+  const searchBinds: string[] = q ? [`%${q}%`, `%${q}%`] : [];
+
+  let unitCond = "";
+  const unitBinds: string[] = [];
+  if (onlyManager && managerId) {
+    unitCond = `AND u.id = ?`;
+    unitBinds.push(managerId);
+  } else if (onlyManager && !managerId) {
+    // Đơn vị chưa gán quản lý → trả rỗng.
+    return ok({ items: [] });
+  } else if (allowedUnitIds) {
+    const placeholders = allowedUnitIds.map(() => "?").join(",");
+    unitCond = `AND u.org_unit_id IN (${placeholders})`;
+    unitBinds.push(...allowedUnitIds);
+  }
+
+  const rows = await db.prepare(
+    `SELECT DISTINCT u.id, u.username, u.display_name, u.org_unit_id, ou.name AS org_unit_name
+     FROM users u
+     LEFT JOIN org_units ou ON ou.id = u.org_unit_id
+     INNER JOIN user_roles ur ON ur.user_id = u.id
+     INNER JOIN roles r ON r.code = ur.role
+     WHERE u.status = 'active' AND u.id != ?
+       AND r.code IN ('approver', 'monitor', 'admin', 'process_owner')
+       ${unitCond} ${searchCond}
+     ORDER BY
+       CASE WHEN u.org_unit_id = ? THEN 0 ELSE 1 END,
+       u.display_name ASC
+     LIMIT ?`
+  ).bind(me.user.id, ...unitBinds, ...searchBinds, myUnitId, limit).all<{
+    id: string; username: string; display_name: string;
+    org_unit_id: string | null; org_unit_name: string | null;
+  }>();
+
+  return ok({ items: rows.results ?? [] });
 }

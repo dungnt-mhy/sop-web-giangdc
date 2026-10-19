@@ -52,10 +52,11 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
   reviewer: ["processes.review", "reports.view"],
   // Phê duyệt/phát hành, xử lý ngoại lệ theo ngưỡng.
   approver: ["processes.approve", "exceptions.handle", "reports.view"],
-  // Tạo/nhận lượt, hoàn thành bước, xem báo cáo của mình.
+  // Tạo/nhận lượt, hoàn thành bước, xem báo cáo của mình (KHÔNG được tạo lượt trực tiếp).
   executor: ["executions.perform", "executions.view", "reports.view"],
-  // Tạo/nhận lượt, bỏ qua/mở lại/huỷ, xử lý ngoại lệ, xem báo cáo/audit theo quyền.
+  // Tạo lượt cho đơn vị mình, bỏ qua/mở lại/huỷ, xử lý ngoại lệ, xem báo cáo/audit theo quyền.
   monitor: [
+    "executions.create",
     "executions.perform",
     "executions.manage",
     "exceptions.handle",

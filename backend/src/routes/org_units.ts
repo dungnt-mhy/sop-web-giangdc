@@ -17,6 +17,8 @@ type OrgUnitRow = {
   email: string | null;
   manager_id: string | null;
   status: string;
+  approver_scope: string | null;
+  create_scope: string | null;
   created_at: string;
 };
 
@@ -46,6 +48,8 @@ function toPublicUnit(r: OrgUnitRow, parentName?: string | null, managerName?: s
     manager_name: managerName ?? null,
     status: r.status,
     status_label: r.status === "active" ? "Đang hoạt động" : "Ngừng hoạt động",
+    approver_scope: r.approver_scope ?? "UP_HIERARCHY",
+    create_scope: r.create_scope ?? "SELF_AND_CHILDREN",
     created_at: r.created_at,
   };
 }
@@ -93,6 +97,12 @@ export async function handleCreateOrgUnit(ctx: Ctx) {
   const email = typeof body?.email === "string" ? body.email.trim() || null : null;
   const managerId = typeof body?.manager_id === "string" && body.manager_id ? body.manager_id : null;
   const status = typeof body?.status === "string" && ["active", "inactive"].includes(body.status) ? body.status : "active";
+  const approverScope = typeof body?.approver_scope === "string" &&
+    ["SAME_UNIT", "UP_HIERARCHY", "DIRECT_MANAGER", "ANY_APPROVER"].includes(body.approver_scope)
+    ? body.approver_scope : "UP_HIERARCHY";
+  const createScope = typeof body?.create_scope === "string" &&
+    ["SELF_ONLY", "SELF_AND_CHILDREN", "ANY"].includes(body.create_scope)
+    ? body.create_scope : "SELF_AND_CHILDREN";
   if (!name) return apiError("VALIDATION_ERROR", "Thiếu tên đơn vị.", ctx.requestId);
   if (!(ORG_UNIT_TYPES as readonly string[]).includes(type)) {
     return apiError("VALIDATION_ERROR", "Loại đơn vị không hợp lệ.", ctx.requestId);
@@ -111,8 +121,8 @@ export async function handleCreateOrgUnit(ctx: Ctx) {
   }
 
   const id = newId();
-  await db.prepare(`INSERT INTO org_units (id, code, name, type, parent_id, description, address, phone, email, manager_id, status, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, code, name, type, parentId, description, address, phone, email, managerId, status, nowIso(), me.user.id).run();
+  await db.prepare(`INSERT INTO org_units (id, code, name, type, parent_id, description, address, phone, email, manager_id, status, approver_scope, create_scope, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, code, name, type, parentId, description, address, phone, email, managerId, status, approverScope, createScope, nowIso(), me.user.id).run();
 
   await audit(db, { event_type: "ORG_UNIT_CREATED", actor_id: me.user.id, object_type: "org_unit", object_id: id, request_id: ctx.requestId });
   const row = await db.prepare(`SELECT * FROM org_units WHERE id = ?`).bind(id).first<OrgUnitRow>();
@@ -181,6 +191,22 @@ export async function handleUpdateOrgUnit(ctx: Ctx, id: string) {
     if (!["active", "inactive"].includes(status)) return apiError("VALIDATION_ERROR", "Trạng thái không hợp lệ.", ctx.requestId);
     updates.push("status = ?");
     binds.push(status);
+  }
+  if (body?.approver_scope !== undefined) {
+    const s = typeof body.approver_scope === "string" ? body.approver_scope : "";
+    if (!["SAME_UNIT", "UP_HIERARCHY", "DIRECT_MANAGER", "ANY_APPROVER"].includes(s)) {
+      return apiError("VALIDATION_ERROR", "Phạm vi phê duyệt không hợp lệ.", ctx.requestId);
+    }
+    updates.push("approver_scope = ?");
+    binds.push(s);
+  }
+  if (body?.create_scope !== undefined) {
+    const s = typeof body.create_scope === "string" ? body.create_scope : "";
+    if (!["SELF_ONLY", "SELF_AND_CHILDREN", "ANY"].includes(s)) {
+      return apiError("VALIDATION_ERROR", "Phạm vi tạo lượt không hợp lệ.", ctx.requestId);
+    }
+    updates.push("create_scope = ?");
+    binds.push(s);
   }
   if (updates.length === 0) return apiError("VALIDATION_ERROR", "Không có gì để cập nhật.", ctx.requestId);
 

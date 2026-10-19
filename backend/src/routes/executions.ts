@@ -337,8 +337,95 @@ function deriveShift(time: string | null): string | null {
   if (h >= 14 && h < 18) return "AFTERNOON";
   return "NIGHT";
 }
+
+/**
+ * Lấy danh sách ID đơn vị: đơn vị của user + tất cả đơn vị cha (đi lên).
+ * Dùng để kiểm tra phạm vi chọn người phê duyệt.
+ */
+async function getUnitAncestors(db: D1Database, unitId: string | null): Promise<string[]> {
+  if (!unitId) return [];
+  const ancestors: string[] = [unitId];
+  let cur: string | null = unitId;
+  // Đi lên tối đa 10 cấp để tránh vòng lặp vô hạn.
+  for (let i = 0; i < 10 && cur; i++) {
+    const row: { parent_id: string | null } | null = await db.prepare(`SELECT parent_id FROM org_units WHERE id = ?`).bind(cur).first();
+    if (row?.parent_id) {
+      ancestors.push(row.parent_id);
+      cur = row.parent_id;
+    } else {
+      break;
+    }
+  }
+  return ancestors;
+}
+
+/**
+ * Lấy danh sách ID đơn vị: đơn vị của user + tất cả đơn vị con (đi xuống).
+ * Dùng để kiểm tra phạm vi tạo lượt.
+ */
+async function getUnitDescendants(db: D1Database, unitId: string | null): Promise<string[]> {
+  if (!unitId) return [];
+  const descendants: string[] = [unitId];
+  const queue: string[] = [unitId];
+  // BFS đi xuống tối đa 100 đơn vị để tránh quá tải.
+  while (queue.length > 0 && descendants.length < 100) {
+    const currentId = queue.shift()!;
+    const rows = await db.prepare(`SELECT id FROM org_units WHERE parent_id = ?`).bind(currentId).all<{ id: string }>();
+    for (const r of rows.results) {
+      if (!descendants.includes(r.id)) {
+        descendants.push(r.id);
+        queue.push(r.id);
+      }
+    }
+  }
+  return descendants;
+}
+
+/**
+ * Kiểm tra người tạo có được tạo lượt cho người được giao không (theo đơn vị).
+ * - Admin (có '*'): luôn được.
+ * - Người chưa gán đơn vị: không được.
+ * - create_scope = 'SELF_ONLY': chỉ cùng đơn vị.
+ * - create_scope = 'SELF_AND_CHILDREN' (mặc định): đơn vị mình + cấp dưới.
+ * - create_scope = 'ANY': mọi đơn vị.
+ */
+async function canCreateForUnit(
+  db: D1Database,
+  creatorId: string,
+  creatorPermissions: string[],
+  assigneeId: string
+): Promise<{ allowed: boolean; reason?: string }> {
+  // Admin bỏ qua kiểm tra đơn vị.
+  if (creatorPermissions.includes("*")) return { allowed: true };
+  // Tự tạo cho mình luôn được.
+  if (creatorId === assigneeId) return { allowed: true };
+
+  const creator = await db.prepare(`SELECT org_unit_id FROM users WHERE id = ?`).bind(creatorId).first<{ org_unit_id: string | null }>();
+  const assignee = await db.prepare(`SELECT org_unit_id FROM users WHERE id = ?`).bind(assigneeId).first<{ org_unit_id: string | null }>();
+
+  if (!creator?.org_unit_id) {
+    return { allowed: false, reason: "Tài khoản của bạn chưa được gán đơn vị công tác — liên hệ admin." };
+  }
+  if (!assignee?.org_unit_id) {
+    return { allowed: false, reason: "Người được giao chưa được gán đơn vị công tác." };
+  }
+
+  const scopeRow = await db.prepare(`SELECT create_scope FROM org_units WHERE id = ?`).bind(creator.org_unit_id).first<{ create_scope: string }>();
+  const scope = scopeRow?.create_scope ?? "SELF_AND_CHILDREN";
+
+  if (scope === "ANY") return { allowed: true };
+  if (scope === "SELF_ONLY") {
+    if (creator.org_unit_id === assignee.org_unit_id) return { allowed: true };
+    return { allowed: false, reason: "Bạn chỉ được tạo lượt cho nhân viên cùng đơn vị." };
+  }
+  // SELF_AND_CHILDREN: đơn vị mình + tất cả cấp dưới.
+  const allowedUnits = await getUnitDescendants(db, creator.org_unit_id);
+  if (allowedUnits.includes(assignee.org_unit_id)) return { allowed: true };
+  return { allowed: false, reason: "Bạn chỉ được tạo lượt cho nhân viên đơn vị mình và cấp dưới trực thuộc." };
+}
+
 export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
-  const s = requirePermission(ctx, "executions.perform");
+  const s = requirePermission(ctx, "executions.create");
   if (s instanceof Response) return s;
   const me = s as SessionInfo;
   const db = ctx.env.sop_demo_db;
@@ -393,6 +480,11 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   const assigneeId = typeof body?.assignee_id === "string" && body.assignee_id.trim()
     ? body.assignee_id.trim()
     : me.user.id;
+  // Kiểm tra phạm vi đơn vị: người tạo chỉ được tạo cho đơn vị mình/cấp dưới.
+  const scopeCheck = await canCreateForUnit(db, me.user.id, me.permissions, assigneeId);
+  if (!scopeCheck.allowed) {
+    return apiError("FORBIDDEN", scopeCheck.reason ?? "Vượt thẩm quyền đơn vị.", ctx.requestId);
+  }
   const dueAt = typeof body?.due_at === "string" ? body.due_at.trim() || null : null;
   // Thời gian bắt đầu (dự kiến) — bắt buộc, định dạng YYYY-MM-DDTHH:mm.
   const expectedStartAt = typeof body?.expected_start_at === "string" ? body.expected_start_at.trim() : "";
