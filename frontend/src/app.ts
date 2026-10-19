@@ -55,11 +55,35 @@ function navigate(hash: string): void {
   else window.location.hash = hash;
 }
 
+/** Cập nhật badge số lượng trên menu. */
+async function updateMenuBadges(): Promise<void> {
+  try {
+    // Công việc của tôi: đếm lượt đang hoạt động.
+    const myWorkBadge = document.querySelector<HTMLElement>('[data-badge="my-work"]');
+    if (myWorkBadge) {
+      try {
+        const { items } = await api.listExecutions({ mine: true });
+        const active = items.filter((e: { status: string }) => ["IN_PROGRESS", "PAUSED", "PENDING_CONFIRMATION"].includes(e.status)).length;
+        if (active > 0) { myWorkBadge.textContent = String(active); myWorkBadge.hidden = false; }
+      } catch { /* bỏ qua */ }
+    }
+    // Ngoại lệ: đếm ngoại lệ đang mở.
+    const exBadge = document.querySelector<HTMLElement>('[data-badge="exceptions"]');
+    if (exBadge) {
+      try {
+        const { items } = await api.listExceptions("");
+        const open = items.filter((x: { status: string }) => ["OPEN", "IN_PROGRESS"].includes(x.status)).length;
+        if (open > 0) { exBadge.textContent = String(open); exBadge.hidden = false; }
+      } catch { /* bỏ qua */ }
+    }
+  } catch { /* bỏ qua */ }
+}
+
 // ---- Khung ứng dụng (sidebar + header) ----
 function renderShell(): void {
   if (!session) return;
   const name = session.user.display_name || session.user.username;
-  type NavItem = { hash: string; label: string; perm?: string; children?: NavItem[] };
+  type NavItem = { hash: string; label: string; perm?: string; badgeId?: string; children?: NavItem[] };
   const navItems: NavItem[] = [
     { hash: "#/home", label: "Tổng quan" },
     {
@@ -73,9 +97,9 @@ function renderShell(): void {
         { hash: "#/stats/daily", label: "Theo ngày", perm: "reports.view" },
       ],
     },
-    { hash: "#/my-work", label: "Công việc của tôi", perm: "executions.perform" },
+    { hash: "#/my-work", label: "Công việc của tôi", perm: "executions.perform", badgeId: "my-work" },
     { hash: "#/processes", label: "Quy trình" },
-    { hash: "#/exceptions", label: "Ngoại lệ", perm: "exceptions.handle" },
+    { hash: "#/exceptions", label: "Ngoại lệ", perm: "exceptions.handle", badgeId: "exceptions" },
     { hash: "#/evidence", label: "Bằng chứng", perm: "executions.view" },
     {
       hash: "#/users", label: "Quản lý người dùng", perm: "users.manage",
@@ -91,26 +115,32 @@ function renderShell(): void {
   const visibleItems = navItems.filter((i) => !i.perm || can(i.perm));
   $("#sidebar-nav").innerHTML = visibleItems
     .map((i) => {
+      const badge = i.badgeId ? `<span class="nav-badge" data-badge="${i.badgeId}" hidden></span>` : "";
       if (i.children) {
         const visibleChildren = i.children.filter((c) => !c.perm || can(c.perm));
         if (visibleChildren.length === 0) return "";
         const isActive = visibleChildren.some((c) => location.hash.startsWith(c.hash));
         return `<div class="nav-group ${isActive ? "open" : ""}">
           <button class="nav-item nav-parent" data-parent>
-            <span class="nav-dot" aria-hidden="true"></span>${esc(i.label)}
+            <span class="nav-dot" aria-hidden="true"></span>${esc(i.label)}${badge}
             <span class="nav-arrow">▾</span>
           </button>
           <div class="nav-children">
-            ${visibleChildren.map((c) => `
+            ${visibleChildren.map((c) => {
+              const cBadge = c.badgeId ? `<span class="nav-badge" data-badge="${c.badgeId}" hidden></span>` : "";
+              return `
               <a href="${c.hash}" data-route="${c.hash}" class="nav-item nav-child">
-                <span class="nav-dot" aria-hidden="true"></span>${esc(c.label)}</a>`).join("")}
+                <span class="nav-dot" aria-hidden="true"></span>${esc(c.label)}${cBadge}</a>`;
+            }).join("")}
           </div>
         </div>`;
       }
       return `<a href="${i.hash}" data-route="${i.hash}" class="nav-item">
-         <span class="nav-dot" aria-hidden="true"></span>${esc(i.label)}</a>`;
+         <span class="nav-dot" aria-hidden="true"></span>${esc(i.label)}${badge}</a>`;
     })
     .join("");
+  // Cập nhật badge số lượng.
+  updateMenuBadges();
   // Toggle menu cha.
   document.querySelectorAll<HTMLButtonElement>("[data-parent]").forEach((btn) => {
     btn.addEventListener("click", () => {

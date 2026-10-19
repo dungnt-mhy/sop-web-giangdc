@@ -217,6 +217,12 @@ legend { font-size: 13px; font-weight: 700; color: var(--muted); padding: 0 6px;
   color: #c6d6e8; text-decoration: none; font-size: 14.5px; font-weight: 600;
   padding: 11px 12px; border-radius: 10px; min-height: 44px;
 }
+.nav-badge {
+  margin-left: auto; background: #ef4444; color: #fff;
+  font-size: 11px; font-weight: 700; min-width: 20px; height: 20px;
+  border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 6px;
+}
 .nav-item:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
 .nav-item.active { background: rgba(255, 255, 255, 0.14); color: #fff; }
 .nav-dot { width: 8px; height: 8px; border-radius: 50%; background: #7fa8d0; flex: 0 0 auto; }
