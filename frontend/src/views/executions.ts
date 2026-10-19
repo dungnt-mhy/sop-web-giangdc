@@ -431,11 +431,10 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           }
         });
       });
-      // Bấm pill "Bị trả lại" ở cấp lượt để xem chi tiết.
+      // Bấm pill "Bị trả lại" ở cấp lượt để xem chi tiết các bước.
       root.querySelectorAll<HTMLElement>(".exec-redo-pill").forEach((pill) => {
         pill.addEventListener("click", () => {
-          const hist = (e as unknown as { reject_history?: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history ?? [];
-          openExecRedoDialog(dialogRoot, hist);
+          openExecRedoDialog(dialogRoot, e.steps);
         });
       });
       // Tải danh sách ngoại lệ.
@@ -1135,22 +1134,26 @@ function openResolveDialog(dialogRoot: HTMLElement, exceptionId: string, onDone:
 
 const SHIFT_LABEL: Record<string, string> = { MORNING: "sáng", NOON: "trưa", AFTERNOON: "chiều", NIGHT: "đêm" };
 
-/** Dialog xem chi tiết lịch sử từ chối lượt. */
+/** Dialog xem chi tiết các bước bị trả lại (tổng hợp cấp bước). */
 function openExecRedoDialog(
   dialogRoot: HTMLElement,
-  history: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }>
+  steps: import("../api.js").ExecutionStep[]
 ): void {
+  const redone = steps.filter((s) => ((s as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0);
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
-      <div class="dialog" role="dialog" aria-modal="true" aria-label="Lịch sử lượt bị từ chối">
-        <h3>🔄 Lịch sử lượt bị từ chối (${history.length} lần)</h3>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Các bước bị trả lại">
+        <h3>🔄 Các bước bị trả lại làm lại (${redone.length} bước)</h3>
         <div class="redo-hist-list">
-        ${history.map((h, i) => `
+        ${redone.length === 0 ? `<p class="muted">Không có bước nào.</p>` : redone.map((s) => {
+          const r = s as unknown as Record<string, unknown>;
+          return `
           <div class="hist-item">
-            <div><span class="hist-action">Lần ${history.length - i}</span>${h.action === "redo" ? ` · 🔄 Yêu cầu làm lại ${h.step_count} bước` : " · 🗑️ Hủy lượt"}</div>
-            <div class="muted small">👤 ${esc(h.by_name ?? "—")} · 🕐 ${esc(formatDateTime(h.at))}</div>
-            <div class="hist-reason">Lý do: ${esc(h.reason ?? "—")}</div>
-          </div>`).join("")}
+            <div><span class="hist-action">${esc(s.code)}</span> — ${esc(s.title)} <span class="pill amber">Làm lại ${r.redo_count} lần</span></div>
+            <div class="muted small">👤 ${esc((r.redo_by_name as string) ?? "—")} · 🕐 ${esc(r.redo_at ? formatDateTime(r.redo_at as string) : "—")}</div>
+            <div class="hist-reason">Lý do: ${esc((r.redo_reason as string) ?? "—")}</div>
+          </div>`;
+        }).join("")}
         </div>
         <div class="dialog-actions">
           <button type="button" class="btn" id="exec-redo-close">Đóng</button>
@@ -1543,18 +1546,6 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
       <h3>Thông tin lượt công việc</h3>
       <dl class="info-list">
         <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}${(e.redo_steps ?? 0) > 0 ? ` <span class="pill amber exec-redo-pill" style="cursor:pointer;" title="Bấm để xem chi tiết">🔄 Bị trả lại làm lại ${e.redo_steps} bước</span>` : ""}</dd></div>
-        ${((e as unknown as { reject_history?: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history ?? []).length > 0 ? `
-        <div class="info-row"><dt>Lịch sử lượt bị từ chối (${(e as unknown as { reject_history: Array<unknown> }).reject_history.length} lần)</dt><dd>
-          <div style="max-height:180px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px;">
-            ${(e as unknown as { reject_history: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history.map((h, i) => `
-              <div style="margin-bottom:8px;padding-bottom:8px;${i < (e as unknown as { reject_history: Array<unknown> }).reject_history.length - 1 ? "border-bottom:1px solid var(--line);" : ""}">
-                <strong>Lần ${ (e as unknown as { reject_history: Array<unknown> }).reject_history.length - i}</strong>
-                ${h.action === "redo" ? ` · 🔄 Yêu cầu làm lại ${h.step_count} bước` : " · 🗑️ Hủy lượt"}<br/>
-                <span class="muted small">👤 ${esc(h.by_name ?? "—")} · 🕐 ${esc(h.at)}</span><br/>
-                <span>Lý do: ${esc(h.reason ?? "—")}</span>
-              </div>`).join("")}
-          </div>
-        </dd></div>` : ""}
         <div class="info-row"><dt style="color:#c2410c;">Quy trình</dt><dd style="color:#2563eb;">${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})${(e as unknown as Record<string, unknown>).version_number ? ` · Phiên bản v${(e as unknown as Record<string, unknown>).version_number}` : ""}</dd></div>
         ${(e as unknown as Record<string, unknown>).expected_start_at ? `<div class="info-row"><dt>Thời gian bắt đầu (dự kiến)</dt><dd>${fmtDt((e as unknown as Record<string, unknown>).expected_start_at as string)}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>` : ""}
         ${(e as unknown as Record<string, unknown>).expected_end_at ? `<div class="info-row"><dt>Thời gian hoàn thành (dự kiến)</dt><dd>${fmtDt((e as unknown as Record<string, unknown>).expected_end_at as string)}</dd></div>` : ""}
@@ -1571,6 +1562,18 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
         ${e.cancel_reason ? `<div class="info-row"><dt style="color:#dc2626;">Lý do hủy</dt><dd>${esc(e.cancel_reason)}</dd></div>` : ""}
       </dl>
     </section>
+    ${((e as unknown as { reject_history?: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history ?? []).length > 0 ? `
+    <section class="card">
+      <h3>Lịch sử lượt bị từ chối (${(e as unknown as { reject_history: Array<unknown> }).reject_history.length} lần)</h3>
+      <div class="exec-reject-history">
+        ${(e as unknown as { reject_history: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history.map((h, i) => `
+          <div class="hist-item">
+            <div><span class="hist-action">Lần ${(e as unknown as { reject_history: Array<unknown> }).reject_history.length - i}</span>${h.action === "redo" ? ` · 🔄 Yêu cầu làm lại ${h.step_count} bước` : " · 🗑️ Hủy lượt"}</div>
+            <div class="muted small">👤 ${esc(h.by_name ?? "—")} · 🕐 ${esc(formatDateTime(h.at))}</div>
+            <div class="hist-reason">Lý do: ${esc(h.reason ?? "—")}</div>
+          </div>`).join("")}
+      </div>
+    </section>` : ""}
     <section class="card">
       <div class="steps-toolbar">
         <h3>Các bước (${e.steps.length})</h3>

@@ -444,6 +444,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .hist-action { font-weight: 600; }
 .hist-reason { color: #64748b; margin-top: 2px; white-space: pre-wrap; }
 .redo-hist-list { max-height: 300px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.exec-reject-history { max-height: 220px; overflow-y: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
 /* Viền rõ nét cho mỗi bước trong lượt thực hiện. */
 .exec-step-item {
   border: 2px solid #3b82f6; border-radius: 12px;
