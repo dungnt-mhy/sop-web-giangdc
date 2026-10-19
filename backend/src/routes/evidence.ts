@@ -234,6 +234,28 @@ export async function handleDeleteEvidence(ctx: Ctx, evidenceId: string) {
     request_id: ctx.requestId,
     diff: { execution_id: ev.execution_id, step_id: ev.execution_step_id },
   });
+
+  // Thông báo cho những người cùng thực hiện bước (trừ người vừa xóa).
+  try {
+    const stepRow = await db.prepare(`SELECT code FROM execution_steps WHERE id = ?`).bind(ev.execution_step_id).first<{ code: string }>();
+    const execRow = await db.prepare(`SELECT code FROM executions WHERE id = ?`).bind(ev.execution_id).first<{ code: string }>();
+    const assigneeRows = await db.prepare(
+      `SELECT DISTINCT user_id FROM execution_step_assignees WHERE execution_step_id = ?`
+    ).bind(ev.execution_step_id).all<{ user_id: string }>();
+    const notifyIds = (assigneeRows.results ?? [])
+      .map((r) => r.user_id)
+      .filter((uid) => uid && uid !== me.user.id);
+    if (notifyIds.length > 0) {
+      await notifyUsers(db, notifyIds, {
+        type: "EVIDENCE_DELETED",
+        title: `Đã xóa bằng chứng ở bước ${stepRow?.code ?? ""}`,
+        message: `${me.user.display_name} vừa xóa "${ev.original_name.slice(0, 50)}" ở bước ${stepRow?.code ?? ""} (${execRow?.code ?? ""}).`,
+        link: `#/executions/${ev.execution_id}`,
+      }, ctx.env);
+    }
+  } catch {
+    // Không chặn xóa nếu gửi thông báo lỗi.
+  }
   return ok({ deleted: true });
 }
 
