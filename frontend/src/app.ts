@@ -120,9 +120,9 @@ function renderShell(): void {
     .map((i) => {
       let badge = "";
       if (i.badgeId) {
-        badge = `<span class="nav-badge" data-badge="${i.badgeId}" hidden></span>`;
+        badge = `<span class="nav-badge" data-badge="${i.badgeId}" title="Số việc cần bạn hành động" hidden></span>`;
         // Badge xanh cho "đang chờ" của Công việc của tôi.
-        if (i.badgeId === "my-work") badge += `<span class="nav-badge blue" data-badge="my-work-wait" hidden></span>`;
+        if (i.badgeId === "my-work") badge += `<span class="nav-badge blue" data-badge="my-work-wait" title="Số việc đang chờ người khác duyệt" hidden></span>`;
       }
       if (i.children) {
         const visibleChildren = i.children.filter((c) => !c.perm || can(c.perm));
