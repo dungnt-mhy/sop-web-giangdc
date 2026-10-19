@@ -587,9 +587,9 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 
 /* Bằng chứng ảnh (Task 1.7: EVD-001..013). */
 .evidence-section { margin: 10px 0 0 44px; padding: 10px 12px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; }
-.evidence-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.evidence-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.evidence-upload-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.evidence-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.evidence-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.evidence-upload-group { display: flex; align-items: center; gap: 6px; }
 .evidence-refresh-btn { flex-shrink: 0; }
 .evidence-title { font-size: 13.5px; font-weight: 700; color: #334155; }
 .evidence-upload-btn { cursor: pointer; margin: 0; text-align: center; }
@@ -822,11 +822,12 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .user-search-item { padding: 10px 12px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
 .user-search-item:hover { background: #f1f5f9; }
 .user-search-empty { padding: 10px 12px; color: #94a3b8; font-size: 13px; }
-/* Mobile: evidence header gọn đẹp */
+/* Mobile: evidence header gọn trên 1 hàng */
 @media (max-width: 640px) {
   .evidence-head { gap: 6px; }
-  .evidence-title { font-size: 13px; }
-  .evidence-actions { gap: 4px; }
+  .evidence-title { font-size: 12.5px; white-space: nowrap; }
+  .evidence-actions { gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .evidence-actions::-webkit-scrollbar { display: none; }
   .evidence-upload-group { gap: 4px; }
-  .evidence-upload-btn, .evidence-refresh-btn { padding: 6px 10px; font-size: 12.5px; }
+  .evidence-upload-btn, .evidence-refresh-btn { padding: 5px 8px; font-size: 12px; white-space: nowrap; }
 }
