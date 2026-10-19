@@ -667,7 +667,7 @@ function openCompleteConfirm(
       <div class="dialog" role="dialog" aria-modal="true" aria-label="Xác nhận hoàn thành">
         <h3>Hoàn thành bước "${esc(step?.code ?? "")}"?</h3>
         <p>⚠️ Sau khi hoàn thành, <strong>bạn sẽ không thể sửa đổi</strong> bước này nữa
-        (không thêm/xóa ảnh, không sửa trạng thái, <strong>không thay đổi người được phân công</strong>).
+        (không thêm/xóa ảnh, không sửa trạng thái, không thay đổi người được người thực hiện).
         Người thực hiện sẽ được cố định. Hãy kiểm tra kỹ bằng chứng và thông tin trước khi xác nhận.</p>
         <div class="dialog-actions">
           <button type="button" class="btn" id="cc-cancel">Kiểm tra lại</button>
