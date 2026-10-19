@@ -1015,7 +1015,8 @@ async function loadExceptions(
               await loadExceptions(body, dialogRoot, execId, active, reload);
             });
           } else if (act === "close") {
-            const note = prompt("Ghi chú khi đóng (tùy chọn):") ?? "";
+            const note = await openReasonDialog(dialogRoot, "Đóng ngoại lệ", "Ghi chú khi đóng (tùy chọn)");
+            if (note === null) return;
             try {
               await api.closeException(exid, note || undefined);
               toast("Đã đóng ngoại lệ.");
