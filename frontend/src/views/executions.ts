@@ -1104,12 +1104,18 @@ function bindStepHistory(body: HTMLElement, execId: string): void {
         if (items.length === 0) {
           bodyEl.innerHTML = `<span class="muted small">Chưa có thao tác nào.</span>`;
         } else {
-          bodyEl.innerHTML = items.map((h) =>
-            `<div class="hist-item"><span class="hist-action">${esc(ACTION_LABEL[h.action] ?? h.action)}</span> ` +
+          let rejectCount = 0;
+          bodyEl.innerHTML = items.map((h) => {
+            let label = ACTION_LABEL[h.action] ?? h.action;
+            if (h.action === "REJECTED") {
+              rejectCount++;
+              label = `🔄 Yêu cầu làm lại lần ${rejectCount}`;
+            }
+            return `<div class="hist-item"><span class="hist-action">${esc(label)}</span> ` +
             `<span class="muted small">👤 ${esc(h.actor_name ?? "—")} · 🕐 ${esc(formatDateTime(h.created_at))}</span>` +
             (h.reason ? `<div class="hist-reason">${esc(h.reason)}</div>` : "") +
-            `</div>`
-          ).join("");
+            `</div>`;
+          }).join("");
         }
         bodyEl.dataset.loaded = "1";
       } catch {
