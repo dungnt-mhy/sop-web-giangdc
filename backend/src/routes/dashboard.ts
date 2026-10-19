@@ -247,37 +247,31 @@ export async function handleDashboardDaily(ctx: Ctx) {
     from = d.toISOString().slice(0, 10);
   }
 
-  // Lượt tạo mới theo ngày.
-  const created = await db.prepare(
-    `SELECT date(created_at) as d, COUNT(*) as cnt FROM executions
-     WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
-  ).bind(from, to).all<{ d: string; cnt: number }>();
-
-  // Lượt hoàn thành theo ngày.
-  const completed = await db.prepare(
-    `SELECT date(completed_at) as d, COUNT(*) as cnt FROM executions
-     WHERE status = 'COMPLETED' AND date(completed_at) BETWEEN ? AND ?
-     GROUP BY d`
-  ).bind(from, to).all<{ d: string; cnt: number }>();
-
-  // Ngoại lệ mới theo ngày.
-  const excOpened = await db.prepare(
-    `SELECT date(created_at) as d, COUNT(*) as cnt FROM exceptions
-     WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
-  ).bind(from, to).all<{ d: string; cnt: number }>();
-
-  // Ngoại lệ đóng theo ngày (resolved_at hoặc updated_at khi status = CLOSED).
-  const excClosed = await db.prepare(
-    `SELECT date(updated_at) as d, COUNT(*) as cnt FROM exceptions
-     WHERE status IN ('RESOLVED','CLOSED') AND date(updated_at) BETWEEN ? AND ?
-     GROUP BY d`
-  ).bind(from, to).all<{ d: string; cnt: number }>();
-
-  // Bằng chứng tải lên theo ngày.
-  const evidence = await db.prepare(
-    `SELECT date(created_at) as d, COUNT(*) as cnt FROM evidence
-     WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
-  ).bind(from, to).all<{ d: string; cnt: number }>();
+  // Chạy song song 5 query thống kê theo ngày.
+  const [created, completed, excOpened, excClosed, evidence] = await Promise.all([
+    db.prepare(
+      `SELECT date(created_at) as d, COUNT(*) as cnt FROM executions
+       WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
+    ).bind(from, to).all<{ d: string; cnt: number }>(),
+    db.prepare(
+      `SELECT date(completed_at) as d, COUNT(*) as cnt FROM executions
+       WHERE status = 'COMPLETED' AND date(completed_at) BETWEEN ? AND ?
+       GROUP BY d`
+    ).bind(from, to).all<{ d: string; cnt: number }>(),
+    db.prepare(
+      `SELECT date(created_at) as d, COUNT(*) as cnt FROM exceptions
+       WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
+    ).bind(from, to).all<{ d: string; cnt: number }>(),
+    db.prepare(
+      `SELECT date(updated_at) as d, COUNT(*) as cnt FROM exceptions
+       WHERE status IN ('RESOLVED','CLOSED') AND date(updated_at) BETWEEN ? AND ?
+       GROUP BY d`
+    ).bind(from, to).all<{ d: string; cnt: number }>(),
+    db.prepare(
+      `SELECT date(created_at) as d, COUNT(*) as cnt FROM evidence
+       WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
+    ).bind(from, to).all<{ d: string; cnt: number }>(),
+  ]);
 
   // Gộp theo ngày.
   const dayMap = new Map<string, { created: number; completed: number; exc_opened: number; exc_closed: number; evidence: number }>();
