@@ -75,9 +75,9 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
     </div>
     <div class="table-wrap"><table class="tbl clickable-rows" id="exec-table">
       <thead><tr>
-        <th>Mã lượt</th><th>Quy trình</th><th>Thời gian tạo</th><th>Thời gian bắt đầu (thực tế)</th><th>Thời gian hoàn thành (thực tế)</th><th>Tiến độ</th><th>Trạng thái</th>
+        <th>Mã lượt</th><th>Quy trình</th><th>Người tạo</th><th>Người thực hiện</th><th>Thời gian tạo</th><th>Bắt đầu (dự kiến)</th><th>Bắt đầu (thực tế)</th><th>Hoàn thành (thực tế)</th><th>Tiến độ</th><th>Trạng thái</th>
       </tr></thead>
-      <tbody><tr><td colspan="7" class="empty">Đang tải…</td></tr></tbody>
+      <tbody><tr><td colspan="10" class="empty">Đang tải…</td></tr></tbody>
     </table></div>
     <div class="pagination" id="exec-pagination" style="display:flex;gap:8px;justify-content:center;align-items:center;margin-top:12px;"></div>
     <div id="exec-dialog-root"></div>`;
@@ -94,25 +94,27 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
     try {
       const { items, total, totalPages } = await api.listExecutions({ mine: true, status: selStatus.value || undefined, page: currentPage, limit: PAGE_SIZE });
       if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="empty">Chưa có lượt nào được giao cho bạn.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="empty">Chưa có lượt nào được giao cho bạn.</td></tr>`;
         return;
       }
       tbody.innerHTML = items.map((e) => {
         const p = e.progress;
         const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
         const fmtDt = fmtVn;
-        // Thời gian tạo: kèm giờ.
-        const createdAt = fmtDt(e.created_at);
-        // Thời gian bắt đầu (thực tế): thời gian nhấn Bắt đầu; chưa bắt đầu thì hiện dự kiến.
         const ex = e as unknown as Record<string, unknown>;
-        const startedAt = e.started_at ? fmtDt(e.started_at)
-          : (ex.expected_start_at ? fmtDt(ex.expected_start_at as string) + ' <span class="muted small">(dự kiến)</span>' : "—");
-        // Thời gian hoàn thành (thực tế).
-        const completedAt = fmtDt(e.completed_at);
+        const createdAt = fmtDt(e.created_at);
+        const expectedStart = ex.expected_start_at ? fmtDt(ex.expected_start_at as string) : "—";
+        const startedAt = e.started_at ? fmtDt(e.started_at) : "—";
+        const completedAt = e.completed_at ? fmtDt(e.completed_at) : "—";
+        const creatorName = (ex.creator_name as string) || (ex.creator_display_name as string) || "—";
+        const assigneeName = (ex.assignee_name as string) || "—";
         return `<tr data-id="${esc(e.id)}">
           <td><strong>${esc(e.code)}</strong>${e.title ? `<div class="muted small">${esc(e.title)}</div>` : ""}</td>
           <td>${esc(e.process_name ?? "—")}</td>
+          <td>${esc(creatorName)}</td>
+          <td>${esc(assigneeName)}</td>
           <td class="muted small">${createdAt}</td>
+          <td class="muted small">${expectedStart}</td>
           <td>${startedAt}</td>
           <td class="muted small">${completedAt}</td>
           <td><div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
