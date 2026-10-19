@@ -496,8 +496,9 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
       execSupMap.get(r.execution_step_id)!.push({ id: r.id, name: r.name });
     }
     // Fallback cho lượt cũ (tạo trước khi có snapshot): đọc từ process_step_supervisors theo mã bước.
-    const missingSteps = (steps.results ?? []).filter((s) => !execSupMap.has(s.id) || (execSupMap.get(s.id) ?? []).length === 0);
-    if (missingSteps.length > 0 && e.version_id) {
+    const missingSupSteps = (steps.results ?? []).filter((s) => !execSupMap.has(s.id) || (execSupMap.get(s.id) ?? []).length === 0);
+    const missingPosSteps = (steps.results ?? []).filter((s) => !execPosMap.has(s.id) || (execPosMap.get(s.id) ?? []).length === 0);
+    if ((missingSupSteps.length > 0 || missingPosSteps.length > 0) && e.version_id) {
       const procSteps = await db.prepare(
         `SELECT id, code FROM process_steps WHERE version_id = ?`
       ).bind(e.version_id).all<{ id: string; code: string }>();
@@ -506,19 +507,37 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
       const procStepIds = [...procStepIdByCode.values()];
       if (procStepIds.length > 0) {
         const ph2 = procStepIds.map(() => "?").join(",");
-        const fbRows = await db.prepare(
-          `SELECT pss.step_id, p.id, p.name FROM process_step_supervisors pss
-           JOIN positions p ON p.id = pss.position_id
-           WHERE pss.step_id IN (${ph2}) ORDER BY p.name ASC`
-        ).bind(...procStepIds).all<{ step_id: string; id: string; name: string }>();
-        const fbByProcStep = new Map<string, { id: string; name: string }[]>();
-        for (const r of fbRows.results ?? []) {
-          if (!fbByProcStep.has(r.step_id)) fbByProcStep.set(r.step_id, []);
-          fbByProcStep.get(r.step_id)!.push({ id: r.id, name: r.name });
+        if (missingSupSteps.length > 0) {
+          const fbRows = await db.prepare(
+            `SELECT pss.step_id, p.id, p.name FROM process_step_supervisors pss
+             JOIN positions p ON p.id = pss.position_id
+             WHERE pss.step_id IN (${ph2}) ORDER BY p.name ASC`
+          ).bind(...procStepIds).all<{ step_id: string; id: string; name: string }>();
+          const fbByProcStep = new Map<string, { id: string; name: string }[]>();
+          for (const r of fbRows.results ?? []) {
+            if (!fbByProcStep.has(r.step_id)) fbByProcStep.set(r.step_id, []);
+            fbByProcStep.get(r.step_id)!.push({ id: r.id, name: r.name });
+          }
+          for (const s of missingSupSteps) {
+            const pid = procStepIdByCode.get(s.code);
+            if (pid && fbByProcStep.has(pid)) execSupMap.set(s.id, fbByProcStep.get(pid)!);
+          }
         }
-        for (const s of missingSteps) {
-          const pid = procStepIdByCode.get(s.code);
-          if (pid && fbByProcStep.has(pid)) execSupMap.set(s.id, fbByProcStep.get(pid)!);
+        if (missingPosSteps.length > 0) {
+          const fbPosRows = await db.prepare(
+            `SELECT psp.step_id, p.id, p.name FROM process_step_positions psp
+             JOIN positions p ON p.id = psp.position_id
+             WHERE psp.step_id IN (${ph2}) ORDER BY p.name ASC`
+          ).bind(...procStepIds).all<{ step_id: string; id: string; name: string }>();
+          const fbPosByProcStep = new Map<string, { id: string; name: string }[]>();
+          for (const r of fbPosRows.results ?? []) {
+            if (!fbPosByProcStep.has(r.step_id)) fbPosByProcStep.set(r.step_id, []);
+            fbPosByProcStep.get(r.step_id)!.push({ id: r.id, name: r.name });
+          }
+          for (const s of missingPosSteps) {
+            const pid = procStepIdByCode.get(s.code);
+            if (pid && fbPosByProcStep.has(pid)) execPosMap.set(s.id, fbPosByProcStep.get(pid)!);
+          }
         }
       }
     }
