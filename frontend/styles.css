@@ -223,6 +223,9 @@ legend { font-size: 13px; font-weight: 700; color: var(--muted); padding: 0 6px;
   border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;
   padding: 0 6px;
 }
+.nav-badge.blue { background: #3b82f6; margin-left: 4px; }
+.nav-item .nav-badge:first-of-type { margin-left: auto; }
+.nav-item .nav-badge.blue { margin-left: 4px; }
 .nav-item:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
 .nav-item.active { background: rgba(255, 255, 255, 0.14); color: #fff; }
 .nav-dot { width: 8px; height: 8px; border-radius: 50%; background: #7fa8d0; flex: 0 0 auto; }

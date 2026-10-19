@@ -58,13 +58,16 @@ function navigate(hash: string): void {
 /** Cập nhật badge số lượng trên menu. */
 async function updateMenuBadges(): Promise<void> {
   try {
-    // Công việc của tôi: đếm lượt đang hoạt động.
+    // Công việc của tôi: badge đỏ = cần hành động, badge xanh = đang chờ người khác.
     const myWorkBadge = document.querySelector<HTMLElement>('[data-badge="my-work"]');
-    if (myWorkBadge) {
+    const myWorkWaitBadge = document.querySelector<HTMLElement>('[data-badge="my-work-wait"]');
+    if (myWorkBadge || myWorkWaitBadge) {
       try {
         const { items } = await api.listExecutions({ mine: true });
-        const active = items.filter((e: { status: string }) => ["IN_PROGRESS", "PAUSED", "PENDING_CONFIRMATION"].includes(e.status)).length;
-        if (active > 0) { myWorkBadge.textContent = String(active); myWorkBadge.hidden = false; }
+        const needAction = items.filter((e: { status: string }) => ["CREATED", "IN_PROGRESS", "PAUSED"].includes(e.status)).length;
+        const waiting = items.filter((e: { status: string }) => e.status === "PENDING_CONFIRMATION").length;
+        if (myWorkBadge && needAction > 0) { myWorkBadge.textContent = String(needAction); myWorkBadge.hidden = false; }
+        if (myWorkWaitBadge && waiting > 0) { myWorkWaitBadge.textContent = String(waiting); myWorkWaitBadge.hidden = false; }
       } catch { /* bỏ qua */ }
     }
     // Ngoại lệ: đếm ngoại lệ đang mở.
@@ -115,7 +118,12 @@ function renderShell(): void {
   const visibleItems = navItems.filter((i) => !i.perm || can(i.perm));
   $("#sidebar-nav").innerHTML = visibleItems
     .map((i) => {
-      const badge = i.badgeId ? `<span class="nav-badge" data-badge="${i.badgeId}" hidden></span>` : "";
+      let badge = "";
+      if (i.badgeId) {
+        badge = `<span class="nav-badge" data-badge="${i.badgeId}" hidden></span>`;
+        // Badge xanh cho "đang chờ" của Công việc của tôi.
+        if (i.badgeId === "my-work") badge += `<span class="nav-badge blue" data-badge="my-work-wait" hidden></span>`;
+      }
       if (i.children) {
         const visibleChildren = i.children.filter((c) => !c.perm || can(c.perm));
         if (visibleChildren.length === 0) return "";
