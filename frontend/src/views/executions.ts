@@ -4,7 +4,8 @@
 import { api, type Execution, type ExecutionDetail } from "../api.js";
 import { esc, setLoading, toast } from "../ui.js";
 
-/** Interval tự động tải lại bằng chứng (dọn dẹp khi chuyển trang). */
+/** Interval tự động tải lại bằng chứng — TẠM TẮT để tiết kiệm quota Cloudflare (100 users).
+ * Thay bằng: refresh khi quay lại tab + khi cuộn tới + nút bấm tay. */
 let evidenceRefreshTimer: number | null = null;
 function stopEvidenceAutoRefresh(): void {
   if (evidenceRefreshTimer !== null) {
@@ -12,28 +13,10 @@ function stopEvidenceAutoRefresh(): void {
     evidenceRefreshTimer = null;
   }
 }
-/** Bật tự động tải lại bằng chứng mỗi 15s (chỉ khi tab đang hiển thị). */
-function startEvidenceAutoRefresh(body: HTMLElement, execId: string, dialogRoot: HTMLElement): void {
+/** (Tắt) Bật tự động tải lại bằng chứng — giữ hàm để không vỡ code gọi. */
+function startEvidenceAutoRefresh(_body: HTMLElement, _execId: string, _dialogRoot: HTMLElement): void {
   stopEvidenceAutoRefresh();
-  evidenceRefreshTimer = window.setInterval(async () => {
-    if (document.hidden) return;
-    if (!body.isConnected) { stopEvidenceAutoRefresh(); return; }
-    const sections = body.querySelectorAll<HTMLElement>("[data-evidence-for]");
-    for (const sec of Array.from(sections)) {
-      const sid = sec.dataset.evidenceFor!;
-      try {
-        const { items } = await api.listEvidence(execId, sid);
-        const countEl = sec.querySelector("[data-ev-count]");
-        const currentCount = countEl?.textContent?.match(/\d+/)?.[0];
-        // Chỉ render lại khi số lượng thay đổi (tránh nhấp nháy).
-        if (currentCount !== String(items.length)) {
-          renderEvidenceGrid(sec, execId, sid, items, dialogRoot);
-        }
-      } catch {
-        // Bỏ qua lỗi khi tự động refresh.
-      }
-    }
-  }, 15000);
+  // Không chạy interval nữa để tránh vượt quota Cloudflare với ~100 users.
 }
 
 /** Định dạng ngày giờ theo giờ địa phương (dd/mm/yyyy hh:mm). */
@@ -591,6 +574,20 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       await loadAllEvidence(body, e.id, dialogRoot);
       // Tự động tải lại bằng chứng mỗi 15s (2 người cùng upload đều thấy).
       startEvidenceAutoRefresh(body, e.id, dialogRoot);
+      // Tải lại bằng chứng khi quay lại tab (tiết kiệm request hơn polling liên tục).
+      const onVisibility = async () => {
+        if (document.hidden || !body.isConnected) return;
+        await loadAllEvidence(body, e.id, dialogRoot);
+      };
+      document.addEventListener("visibilitychange", onVisibility);
+      // Dọn dẹp listener khi render lại (tránh dồn nhiều listener).
+      const observer = new MutationObserver(() => {
+        if (!body.isConnected) {
+          document.removeEventListener("visibilitychange", onVisibility);
+          observer.disconnect();
+        }
+      });
+      observer.observe(root, { childList: true });
       // Hiển thị phân công từ dữ liệu đã có.
       renderAllAssignees(body, e.steps);
       // Tải lịch sử khi mở.
