@@ -65,9 +65,9 @@ export async function createNotification(
       input.link ?? null,
       nowIso()
     ).run();
-    // Gửi Telegram nếu user đã liên kết (không chặn luồng chính).
+    // Gửi Telegram nếu user đã liên kết (await để đảm bảo gửi xong).
     if (env) {
-      notifyTelegram(env, input.user_id, input.title, input.message, input.link).catch(() => {});
+      await notifyTelegram(env, input.user_id, input.title, input.message, input.link).catch(() => {});
     }
     // Gửi email nếu user có email (trừ khi tắt explicitly). Đang đóng băng.
     if (EMAIL_ENABLED && input.sendEmail !== false) {
@@ -110,11 +110,13 @@ export async function notifyUsers(
     ).bind(id, uid, input.type, input.title, input.message, input.link ?? null, now);
   });
   await db.batch(stmts);
-  // Gửi Telegram cho từng user đã liên kết.
+  // Gửi Telegram cho từng user đã liên kết (await để đảm bảo gửi xong trước khi Worker tắt).
   if (env) {
-    for (const uid of unique) {
-      notifyTelegram(env, uid, input.title, input.message, input.link).catch(() => {});
-    }
+    await Promise.all(
+      unique.map((uid) =>
+        notifyTelegram(env, uid, input.title, input.message, input.link).catch(() => {})
+      )
+    );
   }
 }
 
