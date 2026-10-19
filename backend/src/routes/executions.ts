@@ -545,6 +545,15 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   const progress = await getProgress(db, id);
   const redoInfo = await getRedoInfo(db, id);
   const rejectHistory = await getRejectHistory(db, id);
+  // Lấy danh sách người giám sát / phê duyệt của lượt (chọn nhiều).
+  const execSupRows = await db.prepare(
+    `SELECT u.display_name FROM execution_supervisors es JOIN users u ON u.id = es.user_id WHERE es.execution_id = ? ORDER BY u.display_name ASC`
+  ).bind(id).all<{ display_name: string }>();
+  const execAprRows = await db.prepare(
+    `SELECT u.display_name FROM execution_approvers ea JOIN users u ON u.id = ea.user_id WHERE ea.execution_id = ? ORDER BY u.display_name ASC`
+  ).bind(id).all<{ display_name: string }>();
+  const execSupervisorNames = (execSupRows.results ?? []).map((r) => r.display_name);
+  const execApproverNames = (execAprRows.results ?? []).map((r) => r.display_name);
   // Lấy người được phân công và số bằng chứng cho từng bước (cho tab sơ đồ).
   const assigneeMap = new Map<string, { display_name: string }[]>();
   const supAssigneeMap = new Map<string, { display_name: string }[]>();
@@ -583,6 +592,8 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     creator_name: creatorId ? nameById[creatorId] ?? null : null,
     creator_position_name: creatorPositionName,
     supervisor_name: e.supervisor_id ? nameById[e.supervisor_id] ?? null : null,
+    supervisor_names: execSupervisorNames,
+    approver_names: execApproverNames,
     approver_id: (e as unknown as Record<string, unknown>).approver_id ?? null,
     approver_name: (e as unknown as Record<string, unknown>).approver_id ? nameById[(e as unknown as Record<string, unknown>).approver_id as string] ?? null : null,
     approved_by_name: (e as unknown as Record<string, unknown>).approved_by ? nameById[(e as unknown as Record<string, unknown>).approved_by as string] ?? null : null,
@@ -1158,6 +1169,13 @@ export async function handleStartStep(ctx: Ctx, execId: string, stepId: string):
   ).bind(execId, stepId).first();
   if (pendingSkip) {
     return apiError("VALIDATION_ERROR", "Bước đang chờ duyệt yêu cầu bỏ qua — không thể bắt đầu.", ctx.requestId);
+  }
+  // Người thực hiện là bắt buộc khi bắt đầu bước.
+  const asgCount = await db.prepare(
+    `SELECT COUNT(*) as cnt FROM execution_step_assignees WHERE execution_step_id = ?`
+  ).bind(stepId).first<{ cnt: number }>();
+  if (!asgCount || asgCount.cnt === 0) {
+    return apiError("VALIDATION_ERROR", "Chưa phân công người thực hiện — không thể bắt đầu bước.", ctx.requestId);
   }
   // AC-04: bước trước phải PASSED hoặc SKIPPED hợp lệ.
   if (step.sort_order > 1) {
