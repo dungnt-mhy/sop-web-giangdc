@@ -1156,8 +1156,8 @@ async function openExecRedoDialog(
   const redone = steps.filter((s) => ((s as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0);
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
-      <div class="dialog" role="dialog" aria-modal="true" aria-label="Các bước bị trả lại">
-        <h3>🔄 Các bước bị trả lại làm lại (${redone.length} bước)</h3>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Các bước bị làm lại">
+        <h3>🔄 Các bước bị làm lại (${redone.length} bước)</h3>
         <div class="redo-hist-list"><span class="muted small">Đang tải…</span></div>
         <div class="dialog-actions">
           <button type="button" class="btn" id="exec-redo-close">Đóng</button>
