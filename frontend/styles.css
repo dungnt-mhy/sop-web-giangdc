@@ -587,10 +587,10 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 
 /* Bằng chứng ảnh (Task 1.7: EVD-001..013). */
 .evidence-section { margin: 10px 0 0 44px; padding: 10px 12px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; }
-.evidence-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-.evidence-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.evidence-upload-group { display: flex; align-items: center; gap: 6px; }
-.evidence-refresh-btn { flex-shrink: 0; }
+.evidence-head { display: flex; justify-content: space-between; align-items: stretch; gap: 8px; margin-bottom: 8px; }
+.evidence-actions { display: flex; align-items: stretch; gap: 6px; flex-shrink: 0; }
+.evidence-upload-group { display: flex; align-items: stretch; gap: 6px; }
+.evidence-refresh-btn { flex-shrink: 0; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; }
 .evidence-title { font-size: 13.5px; font-weight: 700; color: #334155; }
 .evidence-upload-btn { cursor: pointer; margin: 0; text-align: center; }
 .evidence-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; max-height: 220px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -823,7 +823,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .user-search-item:hover { background: #f1f5f9; }
 .user-search-empty { padding: 10px 12px; color: #94a3b8; font-size: 13px; }
 /* Tiêu đề bằng chứng: icon trên, chữ dưới */
-.evidence-title { display: inline-flex; flex-direction: column; align-items: center; text-align: center; line-height: 1.3; }
+.evidence-title { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; line-height: 1.3; }
 .evidence-title .ev-icon { font-size: 16px; }
 .evidence-title .ev-label { font-size: 11px; font-weight: 700; color: #334155; }
 /* Nút bằng chứng: cỡ chữ đồng bộ */
