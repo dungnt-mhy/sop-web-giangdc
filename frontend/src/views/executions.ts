@@ -1035,14 +1035,24 @@ async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void
     const el = els[i];
     const sid = el.dataset.assigneesFor!;
     try {
-      const { items } = await api.listStepAssignees(execId, sid);
+      const [{ items }, { items: supItems }] = await Promise.all([
+        api.listStepAssignees(execId, sid),
+        api.listStepSupervisors(execId, sid),
+      ]);
+      let html = "";
       if (items.length === 0) {
-        el.innerHTML = `<span class="small" style="color:#2563eb;">Người thực hiện: chưa phân công</span>`;
+        html += `<div class="small" style="color:#2563eb;">Người thực hiện: chưa phân công</div>`;
       } else {
-        el.innerHTML = `<span class="small" style="color:#2563eb;">Người thực hiện: ` + items.map((u) =>
+        html += `<div class="small" style="color:#2563eb;">Người thực hiện: ` + items.map((u) =>
           esc(u.display_name) + (u.position ? ` (${esc(u.position)})` : "")
-        ).join(", ") + `</span>`;
+        ).join(", ") + `</div>`;
       }
+      if (supItems.length > 0) {
+        html += `<div class="small" style="color:#7c3aed;">👁️ Giám sát: ` + supItems.map((u) =>
+          esc(u.display_name) + (u.position ? ` (${esc(u.position)})` : "")
+        ).join(", ") + `</div>`;
+      }
+      el.innerHTML = html;
     } catch {
       el.innerHTML = ``;
     }
@@ -1115,11 +1125,13 @@ async function openAssignDialog(
   stepPositions: { id: string; name: string }[],
   onDone: () => void
 ): Promise<void> {
-  const [{ items: current }, { items: users }] = await Promise.all([
+  const [{ items: current }, { items: currentSup }, { items: users }] = await Promise.all([
     api.listStepAssignees(execId, stepId),
+    api.listStepSupervisors(execId, stepId),
     api.listActiveUsers(),
   ]);
   const currentIds = new Set(current.map((u) => u.id));
+  const currentSupIds = new Set(currentSup.map((u) => u.id));
   const active = users ?? [];
   const stepPosIds = new Set(stepPositions.map((p) => p.id));
   // Ưu tiên người có chức vụ phù hợp với bước lên đầu.
@@ -1129,22 +1141,28 @@ async function openAssignDialog(
     return aMatch - bMatch;
   });
   const posNames = stepPositions.map((p) => p.name).join(", ");
+  const renderUserList = (name: string, checkedIds: Set<string>) => `
+    <div class="assign-list">
+      ${sorted.map((u) => {
+        const isMatch = u.position_id && stepPosIds.has(u.position_id);
+        return `
+        <label class="assign-item ${isMatch ? "assign-match" : ""}">
+          <input type="checkbox" name="${name}" value="${esc(u.id)}" ${checkedIds.has(u.id) ? "checked" : ""} />
+          <span>${esc(u.display_name)}${u.position_name ? ` <span class="muted small">— ${esc(u.position_name)}</span>` : ""}${isMatch ? ` <span class="pill green">Phù hợp</span>` : ""}</span>
+        </label>`;
+      }).join("")}
+    </div>`;
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
       <div class="dialog" role="dialog" aria-modal="true" aria-label="Phân công bước">
         <h3>👥 Phân công bước "${esc(stepCode)}"</h3>
-        ${posNames ? `<p class="muted small">Vai trò người thực hiện: <strong>${esc(posNames)}</strong> — người phù hợp được hiện đầu danh sách.</p>` : `<p class="muted small">Chọn một hoặc nhiều người thực hiện bước này.</p>`}
+        ${posNames ? `<p class="muted small">Vai trò người thực hiện: <strong>${esc(posNames)}</strong> — người phù hợp được hiện đầu danh sách.</p>` : ""}
         <form id="assign-form">
-          <div class="assign-list">
-            ${sorted.map((u) => {
-              const isMatch = u.position_id && stepPosIds.has(u.position_id);
-              return `
-              <label class="assign-item ${isMatch ? "assign-match" : ""}">
-                <input type="checkbox" name="user_ids" value="${esc(u.id)}" ${currentIds.has(u.id) ? "checked" : ""} />
-                <span>${esc(u.display_name)}${u.position_name ? ` <span class="muted small">— ${esc(u.position_name)}</span>` : ""}${isMatch ? ` <span class="pill green">Phù hợp</span>` : ""}</span>
-              </label>`;
-            }).join("")}
-          </div>
+          <h4 style="margin:12px 0 8px;">👤 Người thực hiện</h4>
+          ${renderUserList("user_ids", currentIds)}
+          <h4 style="margin:16px 0 8px;">👁️ Người giám sát / duyệt <span class="muted small">(không bắt buộc)</span></h4>
+          <p class="muted small">Yêu cầu xin bỏ qua sẽ gửi cho người này trước.</p>
+          ${renderUserList("supervisor_ids", currentSupIds)}
           <p class="form-error" id="assign-error" role="alert" hidden></p>
           <div class="dialog-actions">
             <button type="button" class="btn" id="assign-cancel">Huỷ</button>
@@ -1162,10 +1180,12 @@ async function openAssignDialog(
     ev.preventDefault();
     const fd = new FormData(ev.target as HTMLFormElement);
     const userIds = fd.getAll("user_ids").map(String);
+    const supervisorIds = fd.getAll("supervisor_ids").map(String);
     const errEl = dialogRoot.querySelector<HTMLElement>("#assign-error")!;
     try {
       await api.setStepAssignees(execId, stepId, userIds);
-      toast(`Đã phân công ${userIds.length} người.`);
+      await api.setStepSupervisors(execId, stepId, supervisorIds);
+      toast(`Đã phân công ${userIds.length} người thực hiện, ${supervisorIds.length} giám sát.`);
       close();
       onDone();
     } catch (e) {
@@ -1361,6 +1381,7 @@ function renderExecDiagram(steps: import("../api.js").ExecutionStep[], pendingSk
           ${positions.length > 0 ? `<div class="flow-meta">👤 Thực hiện: ${positions.map((p) => esc(p.name)).join(", ")}</div>` : ""}
           ${supervisors.length > 0 ? `<div class="flow-meta">👁️ Giám sát: ${supervisors.map((p) => esc(p.name)).join(", ")}</div>` : ""}
           ${assignees.length > 0 ? `<div class="flow-meta" style="color:#2563eb;">Người thực hiện: ${assignees.map((a) => esc(a.display_name)).join(", ")}</div>` : `<div class="flow-meta" style="color:#2563eb;">Người thực hiện: chưa phân công</div>`}
+          ${((st as unknown as Record<string, unknown>).supervisor_assignees as { display_name: string }[] ?? []).length > 0 ? `<div class="flow-meta" style="color:#7c3aed;">👁️ Duyệt: ${((st as unknown as Record<string, unknown>).supervisor_assignees as { display_name: string }[]).map((a) => esc(a.display_name)).join(", ")}</div>` : ""}
           ${evCount > 0 ? `<div class="flow-meta">📷 ${evCount} bằng chứng</div>` : ""}
           ${st.completed_at ? `<div class="flow-meta muted small">Xong: ${esc(st.completed_at.slice(0, 16).replace("T", " "))}</div>` : ""}
         </div>`;

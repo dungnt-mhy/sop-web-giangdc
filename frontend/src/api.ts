@@ -614,6 +614,12 @@ export const api = {
   setStepAssignees(execId: string, stepId: string, user_ids: string[]): Promise<{ assigned: number }> {
     return req("PUT", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/assignees`, { user_ids });
   },
+  listStepSupervisors(execId: string, stepId: string): Promise<{ items: { id: string; username: string; display_name: string; position: string | null }[] }> {
+    return req("GET", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/supervisors`);
+  },
+  setStepSupervisors(execId: string, stepId: string, user_ids: string[]): Promise<{ assigned: number }> {
+    return req("PUT", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/supervisors`, { user_ids });
+  },
   // --- Thông báo ---
   listNotifications(limit = 20): Promise<{ items: AppNotification[] }> {
     return req("GET", `/notifications?limit=${limit}`);

@@ -547,6 +547,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   const rejectHistory = await getRejectHistory(db, id);
   // Lấy người được phân công và số bằng chứng cho từng bước (cho tab sơ đồ).
   const assigneeMap = new Map<string, { display_name: string }[]>();
+  const supAssigneeMap = new Map<string, { display_name: string }[]>();
   const evidenceMap = new Map<string, number>();
   if (execStepIds.length > 0) {
     const placeholders = execStepIds.map(() => "?").join(",");
@@ -558,6 +559,15 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     for (const r of asgRows.results ?? []) {
       if (!assigneeMap.has(r.execution_step_id)) assigneeMap.set(r.execution_step_id, []);
       assigneeMap.get(r.execution_step_id)!.push({ display_name: r.display_name });
+    }
+    const supAsgRows = await db.prepare(
+      `SELECT essa.execution_step_id, u.display_name
+       FROM execution_step_supervisor_assignees essa JOIN users u ON u.id = essa.user_id
+       WHERE essa.execution_step_id IN (${placeholders})`
+    ).bind(...execStepIds).all<{ execution_step_id: string; display_name: string }>();
+    for (const r of supAsgRows.results ?? []) {
+      if (!supAssigneeMap.has(r.execution_step_id)) supAssigneeMap.set(r.execution_step_id, []);
+      supAssigneeMap.get(r.execution_step_id)!.push({ display_name: r.display_name });
     }
     const evRows = await db.prepare(
       `SELECT execution_step_id, COUNT(*) as cnt FROM evidence
@@ -583,6 +593,7 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
       positions: execPosMap.get(s.id) ?? [],
       supervisors: execSupMap.get(s.id) ?? [],
       assignees: assigneeMap.get(s.id) ?? [],
+      supervisor_assignees: supAssigneeMap.get(s.id) ?? [],
       evidence_count: evidenceMap.get(s.id) ?? 0,
     })),
   });
@@ -694,6 +705,71 @@ export async function handleListStepAssignees(ctx: Ctx, execId: string, stepId: 
     ORDER BY a.assigned_at ASC
   `).bind(stepId).all();
   return ok({ items: rows.results ?? [] });
+}
+
+/** GET /executions/{eid}/steps/{sid}/supervisors — danh sách người giám sát được gán. */
+export async function handleListStepSupervisors(ctx: Ctx, execId: string, stepId: string) {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const db = ctx.env.sop_demo_db;
+  const rows = await db.prepare(`
+    SELECT u.id, u.username, u.display_name, u.position, a.assigned_at
+    FROM execution_step_supervisor_assignees a
+    JOIN users u ON u.id = a.user_id
+    WHERE a.execution_step_id = ?
+    ORDER BY a.assigned_at ASC
+  `).bind(stepId).all();
+  return ok({ items: rows.results ?? [] });
+}
+
+/** PUT /executions/{eid}/steps/{sid}/supervisors — gán danh sách người giám sát (thay thế toàn bộ). */
+export async function handleSetStepSupervisors(ctx: Ctx, execId: string, stepId: string) {
+  const me = await requirePermission(ctx, "executions.execute");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+
+  const step = await db.prepare(`SELECT id, execution_id, status FROM execution_steps WHERE id = ?`).bind(stepId).first<{ id: string; execution_id: string; status: string }>();
+  if (!step || step.execution_id !== execId) {
+    return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
+  }
+  if (["PASSED", "SKIPPED", "CANCELLED"].includes(step.status)) {
+    return apiError("VALIDATION_ERROR", "Bước đã hoàn thành — không thể thay đổi người giám sát.", ctx.requestId);
+  }
+  const pendingSkip = await db.prepare(
+    `SELECT id FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING' LIMIT 1`
+  ).bind(execId, stepId).first();
+  if (pendingSkip) {
+    return apiError("VALIDATION_ERROR", "Bước đang chờ duyệt yêu cầu bỏ qua — không thể thay đổi người giám sát.", ctx.requestId);
+  }
+
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const userIds = Array.isArray(body?.user_ids) ? body.user_ids.filter((x): x is string => typeof x === "string") : [];
+  for (const uid of userIds) {
+    const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(uid).first();
+    if (!u) return apiError("VALIDATION_ERROR", `Người dùng không tồn tại: ${uid}`, ctx.requestId);
+  }
+
+  const now = nowIso();
+  const stmts: D1PreparedStatement[] = [
+    db.prepare(`DELETE FROM execution_step_supervisor_assignees WHERE execution_step_id = ?`).bind(stepId),
+  ];
+  for (const uid of [...new Set(userIds)]) {
+    stmts.push(
+      db.prepare(`INSERT INTO execution_step_supervisor_assignees (execution_step_id, user_id, assigned_at, assigned_by) VALUES (?, ?, ?, ?)`)
+        .bind(stepId, uid, now, me.user.id)
+    );
+  }
+  await db.batch(stmts);
+
+  await audit(db, {
+    event_type: "STEP_SUPERVISORS_SET",
+    actor_id: me.user.id,
+    object_type: "execution_step",
+    object_id: stepId,
+    request_id: ctx.requestId,
+    diff: { user_ids: userIds },
+  });
+  return ok({ assigned: [...new Set(userIds)].length });
 }
 
 /** PUT /executions/{eid}/steps/{sid}/assignees — gán danh sách người (thay thế toàn bộ). */
@@ -1293,9 +1369,15 @@ export async function handleRequestSkip(ctx: Ctx, execId: string, stepId: string
   } catch {
     return apiError("VALIDATION_ERROR", "Đã có yêu cầu đang chờ duyệt.", ctx.requestId);
   }
-  // Thông báo cho giám sát.
-  const supRows = await db.prepare(`SELECT user_id FROM execution_supervisors WHERE execution_id = ?`).bind(execId).all<{ user_id: string }>();
-  const notifyIds = [...new Set((supRows.results ?? []).map((r) => r.user_id))].filter((x) => x !== me.user.id);
+  // Thông báo cho giám sát: ưu tiên giám sát của bước, fallback giám sát của lượt.
+  const stepSupRows = await db.prepare(`SELECT user_id FROM execution_step_supervisor_assignees WHERE execution_step_id = ?`).bind(stepId).all<{ user_id: string }>();
+  let notifyIds: string[];
+  if ((stepSupRows.results ?? []).length > 0) {
+    notifyIds = [...new Set((stepSupRows.results ?? []).map((r) => r.user_id))].filter((x) => x !== me.user.id);
+  } else {
+    const supRows = await db.prepare(`SELECT user_id FROM execution_supervisors WHERE execution_id = ?`).bind(execId).all<{ user_id: string }>();
+    notifyIds = [...new Set((supRows.results ?? []).map((r) => r.user_id))].filter((x) => x !== me.user.id);
+  }
   if (notifyIds.length > 0) {
     await notifyUsers(db, notifyIds, {
       type: "SKIP_REQUESTED",
