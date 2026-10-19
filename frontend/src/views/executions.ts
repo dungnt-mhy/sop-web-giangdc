@@ -2108,7 +2108,8 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
           const canStart = active && st.status === "NOT_STARTED" && !pendingSkip;
           const canFinish = active && st.status === "IN_PROGRESS" && !pendingSkip;
           const skipAllowed = ((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed === true;
-          const canSkip = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") && skipAllowed && !pendingSkip;
+          // Bước tùy chọn (không bắt buộc) cũng được bỏ qua — khớp logic backend.
+          const canSkip = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") && (skipAllowed || !st.is_required) && !pendingSkip;
           const canAssign = active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) && !pendingSkip;
           const canRefresh = !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status);
           const canUpload = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS");
