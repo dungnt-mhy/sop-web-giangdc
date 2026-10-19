@@ -418,6 +418,19 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       await loadAllAssignees(body, e.id);
       // Tải lịch sử khi mở.
       bindStepHistory(body, e.id);
+      // Bấm pill "Làm lại" để xem chi tiết.
+      body.querySelectorAll<HTMLElement>(".redo-pill").forEach((pill) => {
+        pill.addEventListener("click", async () => {
+          const sid = pill.dataset.redoFor!;
+          const step = e.steps.find((s) => s.id === sid);
+          try {
+            const { items } = await api.getStepHistory(e.id, sid);
+            openRedoHistoryDialog(dialogRoot, step?.code ?? "", items as { reason: string | null; created_at: string; actor_name: string | null; action: string }[]);
+          } catch {
+            toast("Không tải được lịch sử làm lại.");
+          }
+        });
+      });
       // Tải danh sách ngoại lệ.
       const isActive = e.status === "IN_PROGRESS" || e.status === "PAUSED";
       await loadExceptions(body, dialogRoot, e.id, isActive, reload);
@@ -1083,6 +1096,34 @@ function openResolveDialog(dialogRoot: HTMLElement, exceptionId: string, onDone:
 
 const SHIFT_LABEL: Record<string, string> = { MORNING: "sáng", NOON: "trưa", AFTERNOON: "chiều", NIGHT: "đêm" };
 
+/** Dialog xem chi tiết các lần làm lại. */
+function openRedoHistoryDialog(
+  dialogRoot: HTMLElement,
+  stepCode: string,
+  items: { action: string; reason: string | null; created_at: string; actor_name: string | null }[]
+): void {
+  const rejected = items.filter((h) => h.action === "REJECTED");
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Lịch sử làm lại">
+        <h3>🔄 Lịch sử làm lại — bước "${esc(stepCode)}"</h3>
+        ${rejected.length === 0 ? `<p class="muted">Chưa có lần làm lại nào.</p>` : rejected.map((h, i) => `
+          <div class="hist-item">
+            <div><span class="hist-action">Lần ${i + 1}</span> <span class="muted small">👤 ${esc(h.actor_name ?? "—")} · 🕐 ${esc(formatDateTime(h.created_at))}</span></div>
+            ${h.reason ? `<div class="hist-reason">Lý do: ${esc(h.reason)}</div>` : ""}
+          </div>`).join("")}
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="redo-hist-close">Đóng</button>
+        </div>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#redo-hist-close")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+}
+
 /** Tải lịch sử thao tác khi mở. */
 function bindStepHistory(body: HTMLElement, execId: string): void {
   const ACTION_LABEL: Record<string, string> = {
@@ -1495,7 +1536,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${pendingSkip ? ' <span class="pill amber">🙏 Chờ duyệt bỏ qua</span>' : ""}
                 <span class="pill ${st.status === "PASSED" ? "green" : st.status === "SKIPPED" ? "gray" : st.status === "IN_PROGRESS" ? "blue" : st.status === "PENDING_REVIEW" ? "amber" : "gray"}">${esc(STEP_STATUS_LABELS[st.status] ?? st.status)}</span>
                 ${minPhotos > 0 ? ` <span class="pill orange" title="Yêu cầu ít nhất ${minPhotos} ảnh">📷 ${minPhotos} ảnh</span>` : ""}
-                ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? ` <span class="pill amber" title="Lý do: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")}&#10;Lúc: ${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")}">🔄 Làm lại ${esc(String((st as unknown as Record<string, unknown>).redo_count))} lần</span>` : ""}
+                ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? ` <span class="pill amber redo-pill" data-redo-for="${esc(st.id)}" style="cursor:pointer;" title="Bấm để xem chi tiết các lần làm lại">🔄 Làm lại ${esc(String((st as unknown as Record<string, unknown>).redo_count))} lần</span>` : ""}
                 ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👤 Thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
                 ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👁️ Giám sát: ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
                 ${st.skip_reason ? `<div class="muted small">Lý do bỏ qua: ${esc(st.skip_reason)}</div>` : ""}
