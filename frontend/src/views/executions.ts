@@ -433,8 +433,8 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       });
       // Bấm pill "Bị trả lại" ở cấp lượt để xem chi tiết các bước.
       root.querySelectorAll<HTMLElement>(".exec-redo-pill").forEach((pill) => {
-        pill.addEventListener("click", () => {
-          openExecRedoDialog(dialogRoot, e.steps);
+        pill.addEventListener("click", async () => {
+          await openExecRedoDialog(dialogRoot, e.id, e.steps);
         });
       });
       // Tải danh sách ngoại lệ.
@@ -1135,26 +1135,17 @@ function openResolveDialog(dialogRoot: HTMLElement, exceptionId: string, onDone:
 const SHIFT_LABEL: Record<string, string> = { MORNING: "sáng", NOON: "trưa", AFTERNOON: "chiều", NIGHT: "đêm" };
 
 /** Dialog xem chi tiết các bước bị trả lại (tổng hợp cấp bước). */
-function openExecRedoDialog(
+async function openExecRedoDialog(
   dialogRoot: HTMLElement,
+  execId: string,
   steps: import("../api.js").ExecutionStep[]
-): void {
+): Promise<void> {
   const redone = steps.filter((s) => ((s as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0);
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
       <div class="dialog" role="dialog" aria-modal="true" aria-label="Các bước bị trả lại">
         <h3>🔄 Các bước bị trả lại làm lại (${redone.length} bước)</h3>
-        <div class="redo-hist-list">
-        ${redone.length === 0 ? `<p class="muted">Không có bước nào.</p>` : redone.map((s) => {
-          const r = s as unknown as Record<string, unknown>;
-          return `
-          <div class="hist-item">
-            <div><span class="hist-action">${esc(s.code)}</span> — ${esc(s.title)} <span class="pill amber">Làm lại ${r.redo_count} lần</span></div>
-            <div class="muted small">👤 ${esc((r.redo_by_name as string) ?? "—")} · 🕐 ${esc(r.redo_at ? formatDateTime(r.redo_at as string) : "—")}</div>
-            <div class="hist-reason">Lý do: ${esc((r.redo_reason as string) ?? "—")}</div>
-          </div>`;
-        }).join("")}
-        </div>
+        <div class="redo-hist-list"><span class="muted small">Đang tải…</span></div>
         <div class="dialog-actions">
           <button type="button" class="btn" id="exec-redo-close">Đóng</button>
         </div>
@@ -1165,6 +1156,27 @@ function openExecRedoDialog(
   dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
     if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
   });
+  // Tải lịch sử đầy đủ cho từng bước.
+  const listEl = dialogRoot.querySelector<HTMLElement>(".redo-hist-list")!;
+  try {
+    const histories = await Promise.all(redone.map((s) => api.getStepHistory(execId, s.id)));
+    listEl.innerHTML = redone.map((s, idx) => {
+      const r = s as unknown as Record<string, unknown>;
+      const items = histories[idx].items.filter((h) => h.action === "REJECTED");
+      const total = items.length;
+      return `
+      <div class="hist-item" style="margin-bottom:12px;">
+        <div><span class="hist-action">${esc(s.code)}</span> — ${esc(s.title)} <span class="pill amber">Làm lại ${r.redo_count} lần</span></div>
+        ${items.map((h, i) => `
+          <div style="margin-top:6px;padding-left:12px;border-left:2px solid #f59e0b;">
+            <div><strong>Lần ${total - i}</strong> <span class="muted small">👤 ${esc(h.actor_name ?? "—")} · 🕐 ${esc(formatDateTime(h.created_at))}</span></div>
+            <div class="hist-reason">Lý do: ${esc(h.reason ?? "—")}</div>
+          </div>`).join("")}
+      </div>`;
+    }).join("");
+  } catch {
+    listEl.innerHTML = `<span class="muted small">Không tải được chi tiết.</span>`;
+  }
 }
 
 /** Dialog xem chi tiết các lần làm lại. */
