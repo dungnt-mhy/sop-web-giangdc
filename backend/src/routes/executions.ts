@@ -1524,7 +1524,7 @@ export async function handleGetStepHistory(ctx: Ctx, execId: string, stepId: str
      FROM execution_step_history h
      LEFT JOIN users u ON u.id = h.actor_id
      WHERE h.execution_id = ? AND h.step_id = ?
-     ORDER BY h.created_at ASC`
+     ORDER BY h.created_at DESC`
   ).bind(execId, stepId).all();
   return ok({ items: rows.results ?? [] });
 }

@@ -1149,12 +1149,14 @@ function bindStepHistory(body: HTMLElement, execId: string): void {
         if (items.length === 0) {
           bodyEl.innerHTML = `<span class="muted small">Chưa có thao tác nào.</span>`;
         } else {
-          let rejectCount = 0;
+          // Đánh số lần làm lại theo thứ tự thời gian (cũ nhất = lần 1).
+          const rejectedTotal = items.filter((h) => h.action === "REJECTED").length;
+          let rejectSeen = 0;
           bodyEl.innerHTML = items.map((h) => {
             let label = ACTION_LABEL[h.action] ?? h.action;
             if (h.action === "REJECTED") {
-              rejectCount++;
-              label = `🔄 Yêu cầu làm lại lần ${rejectCount}`;
+              rejectSeen++;
+              label = `🔄 Yêu cầu làm lại lần ${rejectedTotal - rejectSeen + 1}`;
             }
             return `<div class="hist-item"><span class="hist-action">${esc(label)}</span> ` +
             `<span class="muted small">👤 ${esc(h.actor_name ?? "—")} · 🕐 ${esc(formatDateTime(h.created_at))}</span>` +
