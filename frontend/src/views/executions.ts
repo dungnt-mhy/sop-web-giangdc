@@ -1196,7 +1196,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
               </div>`).join("")}
           </div>
         </dd></div>` : ""}
-        <div class="info-row"><dt>Quy trình</dt><dd style="color:#2563eb;font-weight:600;">${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})${(e as unknown as Record<string, unknown>).version_number ? ` · Phiên bản v${(e as unknown as Record<string, unknown>).version_number}` : ""}</dd></div>
+        <div class="info-row"><dt style="color:#c2410c;">Quy trình</dt><dd style="color:#2563eb;">${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})${(e as unknown as Record<string, unknown>).version_number ? ` · Phiên bản v${(e as unknown as Record<string, unknown>).version_number}` : ""}</dd></div>
         ${(e as unknown as Record<string, unknown>).expected_start_at ? `<div class="info-row"><dt>Thời gian bắt đầu (dự kiến)</dt><dd>${fmtDt((e as unknown as Record<string, unknown>).expected_start_at as string)}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>` : ""}
         ${(e as unknown as Record<string, unknown>).expected_end_at ? `<div class="info-row"><dt>Thời gian hoàn thành (dự kiến)</dt><dd>${fmtDt((e as unknown as Record<string, unknown>).expected_end_at as string)}</dd></div>` : ""}
         ${e.started_at ? `<div class="info-row"><dt>Thời gian bắt đầu (thực tế)</dt><dd>${fmtDt(e.started_at)}</dd></div>` : ""}
@@ -1209,7 +1209,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
         <div class="info-row"><dt>Tiến độ</dt><dd>
           <div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
           ${p?.done ?? 0}/${p?.total ?? 0} bước (${pct}%)</dd></div>
-        ${e.cancel_reason ? `<div class="info-row"><dt style="color:#dc2626;">Lý do hủy</dt><dd style="color:#dc2626;">${esc(e.cancel_reason)}</dd></div>` : ""}
+        ${e.cancel_reason ? `<div class="info-row"><dt style="color:#dc2626;">Lý do hủy</dt><dd>${esc(e.cancel_reason)}</dd></div>` : ""}
       </dl>
     </section>
     <section class="card">
