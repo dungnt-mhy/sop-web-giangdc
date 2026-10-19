@@ -1269,19 +1269,35 @@ async function openAssignDialog(
   });
   dialogRoot.querySelector<HTMLFormElement>("#assign-form")!.addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    const fd = new FormData(ev.target as HTMLFormElement);
-    const userIds = fd.getAll("user_ids").map(String);
-    const supervisorIds = fd.getAll("supervisor_ids").map(String);
+    const form = ev.target as HTMLFormElement;
+    const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    const cancelBtn = dialogRoot.querySelector<HTMLButtonElement>("#assign-cancel")!;
+    const fd = new FormData(form);
+    // Gộp cả 2 danh sách đã chọn (kể cả ở trang khác/tìm kiếm).
+    preserveChecked();
+    const userIds = [...currentIds];
+    const supervisorIds = [...currentSupIds];
     const errEl = dialogRoot.querySelector<HTMLElement>("#assign-error")!;
+    // Hiện spinner, khóa nút.
+    const origLabel = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    cancelBtn.disabled = true;
+    submitBtn.innerHTML = `<span class="spinner"></span> Đang lưu…`;
     try {
-      await api.setStepAssignees(execId, stepId, userIds);
-      await api.setStepSupervisors(execId, stepId, supervisorIds);
+      // Chạy song song 2 API.
+      await Promise.all([
+        api.setStepAssignees(execId, stepId, userIds),
+        api.setStepSupervisors(execId, stepId, supervisorIds),
+      ]);
       toast(`Đã phân công ${userIds.length} người thực hiện, ${supervisorIds.length} giám sát.`);
       close();
       onDone();
     } catch (e) {
       errEl.textContent = msg(e);
       errEl.hidden = false;
+      submitBtn.disabled = false;
+      cancelBtn.disabled = false;
+      submitBtn.innerHTML = origLabel;
     }
   });
 }
