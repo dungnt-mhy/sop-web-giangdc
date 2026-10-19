@@ -71,6 +71,11 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
         <option value="COMPLETED">Hoàn thành</option>
         <option value="CANCELLED">Đã hủy</option>
       </select>
+      <input type="date" id="flt-from" class="input" aria-label="Từ ngày" />
+      <input type="date" id="flt-to" class="input" aria-label="Đến ngày" />
+      <select id="flt-creator" class="input" aria-label="Người tạo">
+        <option value="">Tất cả người tạo</option>
+      </select>
       <button class="btn" id="btn-filter">Lọc</button>
     </div>
     <div class="table-wrap"><table class="tbl clickable-rows" id="exec-table">
@@ -85,14 +90,30 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
   const tbody = root.querySelector<HTMLTableSectionElement>("#exec-table tbody")!;
   const dialogRoot = root.querySelector<HTMLElement>("#exec-dialog-root")!;
   const selStatus = root.querySelector<HTMLSelectElement>("#flt-status")!;
+  const fromEl = root.querySelector<HTMLInputElement>("#flt-from")!;
+  const toEl = root.querySelector<HTMLInputElement>("#flt-to")!;
+  const creatorEl = root.querySelector<HTMLSelectElement>("#flt-creator")!;
   const paginationEl = root.querySelector<HTMLElement>("#exec-pagination")!;
   let currentPage = 1;
   const PAGE_SIZE = 20;
 
+  // Tải danh sách người tạo.
+  api.listUsers().then(({ items }) => {
+    creatorEl.innerHTML = `<option value="">Tất cả người tạo</option>` + items.map((u) => `<option value="${esc(u.id)}">${esc(u.display_name || u.username)}</option>`).join("");
+  }).catch(() => { /* bỏ qua */ });
+
   async function reload(): Promise<void> {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty">Đang tải…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">Đang tải…</td></tr>`;
     try {
-      const { items, total, totalPages } = await api.listExecutions({ mine: true, status: selStatus.value || undefined, page: currentPage, limit: PAGE_SIZE });
+      const { items, total, totalPages } = await api.listExecutions({
+        mine: true,
+        status: selStatus.value || undefined,
+        from: fromEl.value || undefined,
+        to: toEl.value || undefined,
+        creator_id: creatorEl.value || undefined,
+        page: currentPage,
+        limit: PAGE_SIZE,
+      });
       if (items.length === 0) {
         tbody.innerHTML = `<tr><td colspan="10" class="empty">Chưa có lượt nào được giao cho bạn.</td></tr>`;
         return;

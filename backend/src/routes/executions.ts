@@ -224,6 +224,9 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
   const url = new URL(ctx.request.url);
   const mine = url.searchParams.get("mine") === "1";
   const status = (url.searchParams.get("status") ?? "").trim();
+  const from = (url.searchParams.get("from") ?? "").trim();
+  const to = (url.searchParams.get("to") ?? "").trim();
+  const creatorId = (url.searchParams.get("creator_id") ?? "").trim();
   const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "20", 10) || 20));
   const offset = (page - 1) * limit;
@@ -237,6 +240,18 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
   if (status) {
     conds.push(`e.status = ?`);
     binds.push(status);
+  }
+  if (from) {
+    conds.push(`date(e.created_at) >= date(?)`);
+    binds.push(from);
+  }
+  if (to) {
+    conds.push(`date(e.created_at) <= date(?)`);
+    binds.push(to);
+  }
+  if (creatorId) {
+    conds.push(`e.created_by = ?`);
+    binds.push(creatorId);
   }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
   const rows = await db
