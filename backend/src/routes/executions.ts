@@ -1621,7 +1621,7 @@ export async function handleSkipStep(ctx: Ctx, execId: string, stepId: string): 
   // Chỉ giám sát (hoặc người có quyền manage) mới được bỏ qua trực tiếp.
   // Người thực hiện chỉ được "xin bỏ qua" (qua skip_requests).
   const isSupervisor = await db.prepare(
-    `SELECT 1 FROM execution_step_supervisors WHERE execution_step_id = ? AND user_id = ? LIMIT 1`
+    `SELECT 1 FROM execution_step_supervisor_assignees WHERE execution_step_id = ? AND user_id = ? LIMIT 1`
   ).bind(stepId, me.user.id).first();
   const isManager = me.permissions.includes("*") || me.permissions.includes("executions.manage");
   if (!isSupervisor && !isManager) {
