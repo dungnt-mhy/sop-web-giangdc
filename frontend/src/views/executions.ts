@@ -1142,8 +1142,8 @@ function openExecRedoDialog(
 ): void {
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
-      <div class="dialog" role="dialog" aria-modal="true" aria-label="Lịch sử từ chối">
-        <h3>🔄 Lịch sử bị trả lại (${history.length} lần)</h3>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Lịch sử lượt bị từ chối">
+        <h3>🔄 Lịch sử lượt bị từ chối (${history.length} lần)</h3>
         <div class="redo-hist-list">
         ${history.map((h, i) => `
           <div class="hist-item">
@@ -1544,7 +1544,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
       <dl class="info-list">
         <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}${(e.redo_steps ?? 0) > 0 ? ` <span class="pill amber exec-redo-pill" style="cursor:pointer;" title="Bấm để xem chi tiết">🔄 Bị trả lại làm lại ${e.redo_steps} bước</span>` : ""}</dd></div>
         ${((e as unknown as { reject_history?: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history ?? []).length > 0 ? `
-        <div class="info-row"><dt>Lịch sử từ chối (${(e as unknown as { reject_history: Array<unknown> }).reject_history.length} lần)</dt><dd>
+        <div class="info-row"><dt>Lịch sử lượt bị từ chối (${(e as unknown as { reject_history: Array<unknown> }).reject_history.length} lần)</dt><dd>
           <div style="max-height:180px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px;">
             ${(e as unknown as { reject_history: Array<{ by_name: string | null; at: string; reason: string | null; action: string; step_count: number }> }).reject_history.map((h, i) => `
               <div style="margin-bottom:8px;padding-bottom:8px;${i < (e as unknown as { reject_history: Array<unknown> }).reject_history.length - 1 ? "border-bottom:1px solid var(--line);" : ""}">
