@@ -815,6 +815,10 @@ async function transitionExecution(
     await db.prepare(
       `UPDATE execution_steps SET status = 'CANCELLED', updated_at = ? WHERE execution_id = ? AND status IN ('NOT_STARTED', 'IN_PROGRESS')`
     ).bind(now, id).run();
+    // Hủy tất cả yêu cầu xin bỏ qua đang chờ duyệt.
+    await db.prepare(
+      `UPDATE skip_requests SET status = 'REJECTED', reject_reason = 'Lượt công việc bị hủy', reviewed_by = ?, reviewed_at = ? WHERE execution_id = ? AND status = 'PENDING'`
+    ).bind(me.user.id, now, id).run();
   }
   binds.push(id);
   await db.prepare(`UPDATE executions SET ${updates.join(", ")} WHERE id = ?`).bind(...binds).run();
