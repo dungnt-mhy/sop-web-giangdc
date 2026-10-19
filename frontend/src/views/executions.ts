@@ -437,6 +437,19 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           await openExecRedoDialog(dialogRoot, e.id, e.steps);
         });
       });
+      // Bấm pill "Duyệt bởi" để xem lịch sử duyệt.
+      body.querySelectorAll<HTMLElement>(".approve-pill").forEach((pill) => {
+        pill.addEventListener("click", async () => {
+          const sid = pill.dataset.approveFor!;
+          const step = e.steps.find((s) => s.id === sid);
+          try {
+            const { items } = await api.getStepHistory(e.id, sid);
+            openApproveHistoryDialog(dialogRoot, step?.code ?? "", items);
+          } catch {
+            toast("Không tải được lịch sử duyệt.");
+          }
+        });
+      });
       // Tải danh sách ngoại lệ.
       const isActive = e.status === "IN_PROGRESS" || e.status === "PAUSED";
       await loadExceptions(body, dialogRoot, e.id, isActive, reload);
@@ -1179,6 +1192,36 @@ async function openExecRedoDialog(
   }
 }
 
+/** Dialog xem lịch sử duyệt bước. */
+function openApproveHistoryDialog(
+  dialogRoot: HTMLElement,
+  stepCode: string,
+  items: { action: string; reason: string | null; created_at: string; actor_name: string | null }[]
+): void {
+  const approved = items.filter((h) => h.action === "APPROVED");
+  const total = approved.length;
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Lịch sử duyệt">
+        <h3>✅ Lịch sử duyệt — bước "${esc(stepCode)}" (${total} lần)</h3>
+        <div class="redo-hist-list">
+        ${approved.length === 0 ? `<p class="muted">Chưa có lần duyệt nào.</p>` : approved.map((h, i) => `
+          <div class="hist-item">
+            <div><span class="hist-action">Lần ${total - i}</span> <span class="muted small">👤 ${esc(h.actor_name ?? "—")} · 🕐 ${esc(formatDateTime(h.created_at))}</span></div>
+          </div>`).join("")}
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="approve-hist-close">Đóng</button>
+        </div>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#approve-hist-close")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+}
+
 /** Dialog xem chi tiết các lần làm lại. */
 function openRedoHistoryDialog(
   dialogRoot: HTMLElement,
@@ -1627,7 +1670,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${st.skip_reason ? `<div class="muted small">Lý do bỏ qua: ${esc(st.skip_reason)}</div>` : ""}
                 ${st.note ? `<div class="muted small">📝 Ghi chú:</div><div class="step-head-note">${esc(st.note)}</div>` : ""}
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 && st.status !== "PASSED" ? `<div class="muted small" style="color:#b45309;">🔄 Yêu cầu làm lại: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")} (${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")})${(st as unknown as Record<string, unknown>).redo_by_name ? ` — bởi ${esc((st as unknown as Record<string, unknown>).redo_by_name as string)}` : ""}</div>` : ""}
-                ${(st as unknown as Record<string, unknown>).approved_by_name ? `<div class="muted small" style="color:#15803d;">✅ Duyệt bởi: ${esc((st as unknown as Record<string, unknown>).approved_by_name as string)}${(st as unknown as Record<string, unknown>).approved_at ? ` (${esc(formatDateTime((st as unknown as Record<string, unknown>).approved_at as string))})` : ""}</div>` : ""}
+                ${(st as unknown as Record<string, unknown>).approved_by_name ? `<div class="muted small"><span class="pill green approve-pill" data-approve-for="${esc(st.id)}" style="cursor:pointer;" title="Bấm để xem lịch sử duyệt">✅ Duyệt bởi: ${esc((st as unknown as Record<string, unknown>).approved_by_name as string)}${(st as unknown as Record<string, unknown>).approved_at ? ` (${esc(formatDateTime((st as unknown as Record<string, unknown>).approved_at as string))})` : ""}</span></div>` : ""}
               </div>
               ${(() => {
                 const canReview = active && st.status === "PENDING_REVIEW";
