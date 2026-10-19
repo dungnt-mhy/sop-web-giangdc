@@ -877,7 +877,17 @@ async function exportExecutionToWord(e: ExecutionDetail): Promise<void> {
       if (files.length > 0) {
         children.push(new Paragraph({ children: [new TextRun({ text: `Tệp đính kèm (${files.length}):`, bold: true })] }));
         for (const f of files) {
-          children.push(new Paragraph({ text: `📄 ${f.original_name}`, bullet: { level: 0 } }));
+          const fileUrl = api.evidenceDownloadUrl(f.id);
+          children.push(new Paragraph({
+            children: [
+              new TextRun("📄 "),
+              new (docxLib as any).ExternalHyperlink({
+                children: [new TextRun({ text: f.original_name, style: "Hyperlink" })],
+                link: fileUrl,
+              }),
+            ],
+            bullet: { level: 0 },
+          }));
         }
       }
     } catch { /* bỏ qua */ }
