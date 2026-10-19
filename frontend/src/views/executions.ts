@@ -1107,11 +1107,13 @@ function openRedoHistoryDialog(
     <div class="dialog-backdrop" data-close>
       <div class="dialog" role="dialog" aria-modal="true" aria-label="Lịch sử làm lại">
         <h3>🔄 Lịch sử làm lại — bước "${esc(stepCode)}"</h3>
+        <div class="redo-hist-list">
         ${rejected.length === 0 ? `<p class="muted">Chưa có lần làm lại nào.</p>` : rejected.map((h, i) => `
           <div class="hist-item">
             <div><span class="hist-action">Lần ${i + 1}</span> <span class="muted small">👤 ${esc(h.actor_name ?? "—")} · 🕐 ${esc(formatDateTime(h.created_at))}</span></div>
             ${h.reason ? `<div class="hist-reason">Lý do: ${esc(h.reason)}</div>` : ""}
           </div>`).join("")}
+        </div>
         <div class="dialog-actions">
           <button type="button" class="btn" id="redo-hist-close">Đóng</button>
         </div>
