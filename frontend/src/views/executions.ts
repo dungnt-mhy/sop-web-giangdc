@@ -2188,7 +2188,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                     <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple hidden data-ev-input data-ev-kind="file" />
                   </label>
                 </span>` : ""}
-                ${canRefresh ? `<button class="btn sm evidence-refresh-btn" data-ev-refresh title="Tải lại danh sách"><span class="ev-icon">🔄</span><span class="ev-label">Tải<br/>lại</span></button>` : ""}
+                ${canRefresh ? `<button class="btn sm evidence-refresh-btn" data-ev-refresh title="Tải lại danh sách"><span class="ev-icon">🔄</span><span class="ev-label">Tải lại</span></button>` : ""}
                 </span>
               </div>
               <div class="evidence-grid" data-ev-grid></div>
