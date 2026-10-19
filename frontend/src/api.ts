@@ -297,8 +297,11 @@ export const api = {
   changePassword(current_password: string, new_password: string): Promise<{ ok: boolean }> {
     return req("POST", "/auth/change-password", { current_password, new_password });
   },
-  listUsers(cursor?: string | null): Promise<{ items: PublicUser[]; next_cursor: string | null }> {
-    return req("GET", "/users?limit=25" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : ""));
+  listUsers(cursor?: string | null, q?: string): Promise<{ items: PublicUser[]; next_cursor: string | null }> {
+    const params = new URLSearchParams({ limit: "25" });
+    if (cursor) params.set("cursor", cursor);
+    if (q) params.set("q", q);
+    return req("GET", "/users?" + params.toString());
   },
   listActiveUsers(q?: string, role?: string): Promise<{ items: { id: string; username: string; display_name: string; position: string | null; position_id: string | null; position_name: string | null }[] }> {
     const params = new URLSearchParams();

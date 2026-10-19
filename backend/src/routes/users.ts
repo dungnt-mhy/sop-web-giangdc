@@ -120,18 +120,22 @@ export async function handleListUsers(ctx: Ctx): Promise<Response> {
   const url = new URL(ctx.request.url);
   const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "25", 10) || 25, 1), 100);
   const cursor = url.searchParams.get("cursor");
+  const q = (url.searchParams.get("q") ?? "").trim();
 
   const db = ctx.env.sop_demo_db;
+  const searchCond = q ? `AND (u.username LIKE ? OR u.display_name LIKE ?)` : "";
+  const searchBinds = q ? [`%${q}%`, `%${q}%`] : [];
   const rows = await db
     .prepare(
       `SELECT u.*, p.name as position_name FROM users u
        LEFT JOIN positions p ON p.id = u.position_id
        WHERE (? IS NULL OR (u.created_at > (SELECT created_at FROM users WHERE id = ?)
              OR (u.created_at = (SELECT created_at FROM users WHERE id = ?) AND u.id > ?)))
+       ${searchCond}
        ORDER BY u.created_at ASC, u.id ASC
        LIMIT ?`
     )
-    .bind(cursor, cursor, cursor, cursor, limit + 1)
+    .bind(cursor, cursor, cursor, cursor, ...searchBinds, limit + 1)
     .all<{
       id: string; username: string; display_name: string; email: string | null;
       status: string; position: string | null; position_id: string | null; position_name: string | null;

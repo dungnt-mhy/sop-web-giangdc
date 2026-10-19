@@ -89,15 +89,16 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
       </select>
       <input type="date" id="flt-from" class="input" aria-label="Từ ngày" />
       <input type="date" id="flt-to" class="input" aria-label="Đến ngày" />
-      <div class="user-picker">
-        <input type="text" id="flt-assignee-search" class="input" placeholder="🔍 Người thực hiện..." aria-label="Tìm người thực hiện" />
-        <select id="flt-assignee" class="input" aria-label="Người thực hiện">
-          <option value="">Tất cả người thực hiện</option>
-        </select>
+      <div class="user-search-wrap">
+        <input type="text" id="flt-assignee-search" class="input" placeholder="🔍 Người thực hiện..." aria-label="Tìm người thực hiện" autocomplete="off" />
+        <div id="flt-assignee-results" class="user-search-results" hidden></div>
+        <input type="hidden" id="flt-assignee" />
       </div>
-      <select id="flt-creator" class="input" aria-label="Người tạo">
-        <option value="">Tất cả người tạo</option>
-      </select>
+      <div class="user-search-wrap">
+        <input type="text" id="flt-creator-search" class="input" placeholder="🔍 Người tạo..." aria-label="Tìm người tạo" autocomplete="off" />
+        <div id="flt-creator-results" class="user-search-results" hidden></div>
+        <input type="hidden" id="flt-creator" />
+      </div>
       <button class="btn" id="btn-filter">Lọc</button>
     </div>
     <div class="table-wrap"><table class="tbl clickable-rows" id="exec-table">
@@ -114,33 +115,83 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
   const selStatus = root.querySelector<HTMLSelectElement>("#flt-status")!;
   const fromEl = root.querySelector<HTMLInputElement>("#flt-from")!;
   const toEl = root.querySelector<HTMLInputElement>("#flt-to")!;
-  const creatorEl = root.querySelector<HTMLSelectElement>("#flt-creator")!;
   const searchEl = root.querySelector<HTMLInputElement>("#flt-search")!;
   const processEl = root.querySelector<HTMLSelectElement>("#flt-process")!;
   const shiftEl = root.querySelector<HTMLSelectElement>("#flt-shift")!;
   const redoEl = root.querySelector<HTMLSelectElement>("#flt-redo")!;
-  const assigneeSearchEl = root.querySelector<HTMLInputElement>("#flt-assignee-search")!;
-  const assigneeEl = root.querySelector<HTMLSelectElement>("#flt-assignee")!;
   const paginationEl = root.querySelector<HTMLElement>("#exec-pagination")!;
   let currentPage = 1;
   const PAGE_SIZE = 20;
-  let allUsers: { id: string; display_name: string; username: string }[] = [];
 
-  // Tải danh sách người dùng cho bộ lọc.
-  api.listUsers().then(({ items }) => {
-    allUsers = items;
-    const opts = items.map((u) => `<option value="${esc(u.id)}">${esc(u.display_name || u.username)}</option>`).join("");
-    creatorEl.innerHTML = `<option value="">Tất cả người tạo</option>` + opts;
-    assigneeEl.innerHTML = `<option value="">Tất cả người thực hiện</option>` + opts;
-  }).catch(() => { /* bỏ qua */ });
+  // Component tìm kiếm người dùng (hỗ trợ 10.000+ người — tìm kiếm qua API).
+  function setupUserSearch(
+    searchInput: HTMLInputElement,
+    resultsEl: HTMLElement,
+    hiddenInput: HTMLInputElement
+  ): void {
+    let debounce: ReturnType<typeof setTimeout>;
+    let selectedId = "";
+    searchInput.addEventListener("input", () => {
+      clearTimeout(debounce);
+      const q = searchInput.value.trim();
+      // Xóa lựa chọn khi người dùng sửa text.
+      if (selectedId && searchInput.dataset.selectedName !== q) {
+        selectedId = "";
+        hiddenInput.value = "";
+        delete searchInput.dataset.selectedName;
+      }
+      if (q.length < 2) { resultsEl.hidden = true; return; }
+      debounce = setTimeout(async () => {
+        try {
+          const { items } = await api.listUsers(null, q);
+          if (items.length === 0) {
+            resultsEl.innerHTML = `<div class="user-search-empty">Không tìm thấy</div>`;
+          } else {
+            resultsEl.innerHTML = items.slice(0, 10).map((u) => `
+              <div class="user-search-item" data-id="${esc(u.id)}" data-name="${esc(u.display_name || u.username)}">
+                <strong>${esc(u.display_name || u.username)}</strong>
+                <span class="muted small">${esc(u.username)}</span>
+              </div>`).join("");
+          }
+          resultsEl.hidden = false;
+        } catch { resultsEl.hidden = true; }
+      }, 300);
+    });
+    resultsEl.addEventListener("click", (ev) => {
+      const item = (ev.target as HTMLElement).closest<HTMLElement>(".user-search-item");
+      if (!item) return;
+      selectedId = item.dataset.id!;
+      hiddenInput.value = selectedId;
+      searchInput.value = item.dataset.name!;
+      searchInput.dataset.selectedName = item.dataset.name!;
+      resultsEl.hidden = true;
+    });
+    // Ẩn kết quả khi bấm ra ngoài.
+    document.addEventListener("click", (ev) => {
+      if (!searchInput.contains(ev.target as Node) && !resultsEl.contains(ev.target as Node)) {
+        resultsEl.hidden = true;
+      }
+    });
+    // Xóa lựa chọn.
+    searchInput.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" || (ev.key === "Backspace" && searchInput.value === "")) {
+        selectedId = "";
+        hiddenInput.value = "";
+        delete searchInput.dataset.selectedName;
+        resultsEl.hidden = true;
+      }
+    });
+  }
 
-  // Tìm kiếm người thực hiện.
-  assigneeSearchEl.addEventListener("input", () => {
-    const f = assigneeSearchEl.value.trim().toLowerCase();
-    const filtered = f ? allUsers.filter((u) => (u.display_name || u.username).toLowerCase().includes(f)) : allUsers;
-    const currentVal = assigneeEl.value;
-    assigneeEl.innerHTML = `<option value="">Tất cả người thực hiện</option>` + filtered.map((u) => `<option value="${esc(u.id)}"${u.id === currentVal ? " selected" : ""}>${esc(u.display_name || u.username)}</option>`).join("");
-  });
+  const assigneeSearchEl = root.querySelector<HTMLInputElement>("#flt-assignee-search")!;
+  const assigneeResultsEl = root.querySelector<HTMLElement>("#flt-assignee-results")!;
+  const assigneeHiddenEl = root.querySelector<HTMLInputElement>("#flt-assignee")!;
+  const creatorSearchEl = root.querySelector<HTMLInputElement>("#flt-creator-search")!;
+  const creatorResultsEl = root.querySelector<HTMLElement>("#flt-creator-results")!;
+  const creatorHiddenEl = root.querySelector<HTMLInputElement>("#flt-creator")!;
+  setupUserSearch(assigneeSearchEl, assigneeResultsEl, assigneeHiddenEl);
+  setupUserSearch(creatorSearchEl, creatorResultsEl, creatorHiddenEl);
+
 
   // Tải danh sách quy trình.
   api.listProcesses().then(({ items }) => {
@@ -155,8 +206,8 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
         status: selStatus.value || undefined,
         from: fromEl.value || undefined,
         to: toEl.value || undefined,
-        creator_id: creatorEl.value || undefined,
-        assignee_id: assigneeEl.value || undefined,
+        creator_id: creatorHiddenEl.value || undefined,
+        assignee_id: assigneeHiddenEl.value || undefined,
         process_id: processEl.value || undefined,
         shift: shiftEl.value || undefined,
         q: searchEl.value.trim() || undefined,
