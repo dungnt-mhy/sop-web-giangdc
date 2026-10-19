@@ -1239,6 +1239,13 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
   if (pendingSkipComplete) {
     return apiError("VALIDATION_ERROR", "Bước đang chờ duyệt yêu cầu bỏ qua — không thể hoàn thành.", ctx.requestId);
   }
+  // Người thực hiện là bắt buộc khi hoàn thành bước.
+  const asgCountComplete = await db.prepare(
+    `SELECT COUNT(*) as cnt FROM execution_step_assignees WHERE execution_step_id = ?`
+  ).bind(stepId).first<{ cnt: number }>();
+  if (!asgCountComplete || asgCountComplete.cnt === 0) {
+    return apiError("VALIDATION_ERROR", "Chưa phân công người thực hiện — không thể hoàn thành bước.", ctx.requestId);
+  }
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
   const note = typeof body?.note === "string" ? body.note.trim() || null : null;
