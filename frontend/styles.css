@@ -570,6 +570,7 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   .step-head { flex-wrap: wrap; }
   .step-actions { flex-wrap: wrap; width: 100%; margin-top: 8px; }
   .step-actions .btn { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
+  .step-assignees { width: 100%; margin-top: 4px; }
   .flow-node-head { flex-wrap: wrap; }
   .flow-node .pill { font-size: 12px; padding: 3px 10px; }
   .tbl thead th { white-space: normal; font-size: 11px; padding: 8px 6px; }

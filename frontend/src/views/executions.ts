@@ -337,7 +337,8 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           body.insertAdjacentHTML("afterbegin", srHtml);
           body.querySelectorAll<HTMLButtonElement>("[data-skip-approve]").forEach((b) => {
             b.addEventListener("click", async () => {
-              if (!confirm("Duyệt yêu cầu bỏ qua bước này?")) return;
+              const ok = await openConfirmDialog(dialogRoot, "Duyệt yêu cầu", "Duyệt yêu cầu bỏ qua bước này?", "✅ Duyệt");
+              if (!ok) return;
               await api.approveSkip(execId, b.dataset.skipApprove!);
               toast("Đã duyệt bỏ qua.");
               await reload();
@@ -345,8 +346,8 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           });
           body.querySelectorAll<HTMLButtonElement>("[data-skip-reject]").forEach((b) => {
             b.addEventListener("click", async () => {
-              const reason = prompt("Lý do từ chối:");
-              if (reason === null) return;
+              const reason = await openReasonDialog(dialogRoot, "Từ chối yêu cầu bỏ qua", "VD: Bước này bắt buộc phải thực hiện...");
+              if (!reason) return;
               await api.rejectSkip(execId, b.dataset.skipReject!, reason);
               toast("Đã từ chối.");
               await reload();
@@ -758,7 +759,7 @@ function openCancelDialog(
         <h3>🗑️ Hủy lượt "${esc(e.code)}"?</h3>
         <p>⚠️ Lượt bị hủy sẽ <strong>không thể tiếp tục</strong>. Hãy nhập lý do hủy bên dưới.</p>
         <form id="cancel-form">
-          <label>Lý do hủy <span class="req">*</span>
+          <label style="color:#dc2626;font-weight:600;">Lý do hủy <span class="req">*</span>
             <textarea class="input" name="reason" maxlength="500" rows="3"
               placeholder="VD: Nhập sai quy trình, tạo lại lượt mới…"></textarea></label>
           <p class="form-error" id="cancel-error" role="alert" hidden></p>
@@ -1045,6 +1046,29 @@ async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void
       el.innerHTML = ``;
     }
   }
+}
+
+/** Dialog xác nhận (thay cho confirm trình duyệt). */
+function openConfirmDialog(dialogRoot: HTMLElement, title: string, message: string, okLabel = "Xác nhận"): Promise<boolean> {
+  return new Promise((resolve) => {
+    dialogRoot.innerHTML = `
+      <div class="dialog-backdrop">
+        <div class="dialog" role="dialog" aria-modal="true">
+          <h3>${esc(title)}</h3>
+          <p>${esc(message)}</p>
+          <div class="dialog-actions">
+            <button class="btn" id="cf-cancel">Hủy</button>
+            <button class="btn primary" id="cf-ok">${esc(okLabel)}</button>
+          </div>
+        </div>
+      </div>`;
+    const close = (v: boolean) => { dialogRoot.innerHTML = ""; resolve(v); };
+    dialogRoot.querySelector("#cf-cancel")!.addEventListener("click", () => close(false));
+    dialogRoot.querySelector(".dialog-backdrop")!.addEventListener("click", (ev) => {
+      if ((ev.target as HTMLElement).classList.contains("dialog-backdrop")) close(false);
+    });
+    dialogRoot.querySelector("#cf-ok")!.addEventListener("click", () => close(true));
+  });
 }
 
 /** Dialog nhập lý do (thay cho prompt trình duyệt). Trả về lý do đã trim, hoặc null nếu hủy. */
