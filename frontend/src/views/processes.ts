@@ -249,8 +249,6 @@ function openProcessDialog(dialogRoot: HTMLElement, onDone: () => void): void {
           <span class="hint">Tại sao cần quy trình này? Kết quả mong muốn là gì?</span></label>
         <label>Phạm vi áp dụng <textarea class="input" name="scope" rows="2" placeholder="VD: Áp dụng cho tất cả đơn hàng xuất kho tại kho chính"></textarea>
           <span class="hint">Áp dụng cho đối tượng, địa điểm, thời gian nào?</span></label>
-        <label>Đơn vị áp dụng <input class="input" name="applying_unit" maxlength="200" placeholder="VD: Kho chính, Chi nhánh Hà Nội" />
-          <span class="hint">Bộ phận, kho, chi nhánh nào thực hiện quy trình này?</span></label>
         <fieldset class="org-unit-picker">
           <legend>Đơn vị áp dụng (chọn nhiều)</legend>
           <div id="proc-org-units"><p class="empty">Đang tải…</p></div>
@@ -290,7 +288,7 @@ function openProcessDialog(dialogRoot: HTMLElement, onDone: () => void): void {
     errEl.hidden = true;
     const fd = new FormData(form);
     const input: Record<string, unknown> = {};
-    for (const k of ["code", "name", "group_name", "purpose", "scope", "applying_unit"]) {
+    for (const k of ["code", "name", "group_name", "purpose", "scope"]) {
       const s = String(fd.get(k) ?? "").trim();
       if (s) input[k] = s;
     }
