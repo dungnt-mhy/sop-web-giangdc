@@ -680,6 +680,11 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .hbar-list { display: flex; flex-direction: column; gap: 10px; }
 .hbar-row { display: grid; grid-template-columns: 1fr 2fr 40px; gap: 8px; align-items: center; }
 .hbar-label { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) {
+  .hbar-row { grid-template-columns: 1fr; gap: 4px; }
+  .hbar-label { white-space: normal; overflow: visible; text-overflow: clip; font-size: 13px; }
+  .hbar-value { font-size: 14px; font-weight: 700; }
+}
 .hbar-track { background: #f3f4f6; border-radius: 6px; height: 18px; overflow: hidden; }
 .hbar-fill { height: 100%; border-radius: 6px; transition: width 0.5s; }
 .hbar-value { text-align: right; font-weight: 700; }
