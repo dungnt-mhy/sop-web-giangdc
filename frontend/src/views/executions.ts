@@ -1054,11 +1054,10 @@ function openResolveDialog(dialogRoot: HTMLElement, exceptionId: string, onDone:
 
 const SHIFT_LABEL: Record<string, string> = { MORNING: "sáng", NOON: "trưa", AFTERNOON: "chiều", NIGHT: "đêm" };
 
-/** Tải phân công cho tất cả các bước. */
+/** Tải phân công cho tất cả các bước (song song). */
 async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void> {
-  const els = body.querySelectorAll<HTMLElement>("[data-assignees-for]");
-  for (let i = 0; i < els.length; i++) {
-    const el = els[i];
+  const els = Array.from(body.querySelectorAll<HTMLElement>("[data-assignees-for]"));
+  await Promise.all(els.map(async (el) => {
     const sid = el.dataset.assigneesFor!;
     try {
       const [{ items }, { items: supItems }] = await Promise.all([
@@ -1082,7 +1081,7 @@ async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void
     } catch {
       el.innerHTML = ``;
     }
-  }
+  }));
 }
 
 /** Dialog xác nhận (thay cho confirm trình duyệt). */
