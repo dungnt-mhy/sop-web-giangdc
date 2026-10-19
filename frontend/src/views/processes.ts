@@ -248,11 +248,14 @@ function openProcessDialog(dialogRoot: HTMLElement, onDone: () => void): void {
         <label>Mục đích <textarea class="input" name="purpose" rows="2" placeholder="VD: Đảm bảo hàng xuất đúng, đủ, kịp thời đến đại lý"></textarea>
           <span class="hint">Tại sao cần quy trình này? Kết quả mong muốn là gì?</span></label>
         <label>Phạm vi áp dụng <textarea class="input" name="scope" rows="2" placeholder="VD: Áp dụng cho tất cả đơn hàng xuất kho tại kho chính"></textarea></label>
-        <fieldset class="org-unit-picker">
-          <legend>Đơn vị áp dụng</legend>
+        <div class="field">
+          <label class="field-label">Đơn vị áp dụng</label>
           <span class="hint">Áp dụng cho đối tượng, địa điểm, thời gian nào?</span>
-          <div id="proc-org-units"><p class="empty">Đang tải…</p></div>
-        </fieldset>
+          <div class="org-unit-box">
+            <input class="input" id="proc-org-search" placeholder="🔍 Tìm đơn vị..." />
+            <div id="proc-org-units"><p class="empty">Đang tải…</p></div>
+          </div>
+        </div>
         <p class="form-error" id="proc-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button type="button" class="btn" id="proc-cancel">Huỷ</button>
@@ -273,14 +276,37 @@ function openProcessDialog(dialogRoot: HTMLElement, onDone: () => void): void {
 
   // Tải danh sách đơn vị cho checkbox chọn nhiều.
   const ouBox = dialogRoot.querySelector<HTMLElement>("#proc-org-units")!;
+  const ouSearch = dialogRoot.querySelector<HTMLInputElement>("#proc-org-search")!;
+  let allUnits: { id: string; name: string; type_label: string }[] = [];
+  const checkedIds = new Set<string>();
+  const renderUnits = (filter: string) => {
+    // Lưu trạng thái đã chọn trước khi render lại.
+    ouBox.querySelectorAll<HTMLInputElement>('input[name="org_unit_ids"]').forEach((cb) => {
+      if (cb.checked) checkedIds.add(cb.value); else checkedIds.delete(cb.value);
+    });
+    const f = filter.trim().toLowerCase();
+    const items = f ? allUnits.filter((u) => u.name.toLowerCase().includes(f)) : allUnits;
+    ouBox.innerHTML = items.length === 0
+      ? `<p class="empty">Không tìm thấy đơn vị.</p>`
+      : items.map((u) => `
+      <label class="check"><input type="checkbox" name="org_unit_ids" value="${esc(u.id)}"${checkedIds.has(u.id) ? " checked" : ""} />
+        ${esc(u.name)} <span class="muted small">(${esc(u.type_label)})</span></label>`).join("");
+  };
+  ouSearch.addEventListener("input", () => renderUnits(ouSearch.value));
+  // Lưu checked khi bấm trực tiếp (không qua tìm kiếm).
+  ouBox.addEventListener("change", (ev) => {
+    const cb = (ev.target as HTMLElement).closest('input[name="org_unit_ids"]') as HTMLInputElement | null;
+    if (!cb) return;
+    if (cb.checked) checkedIds.add(cb.value); else checkedIds.delete(cb.value);
+  });
   api.listOrgUnits().then(({ items }) => {
     if (items.length === 0) {
       ouBox.innerHTML = `<p class="empty">Chưa có đơn vị nào. <a href="#/org-units">Thêm đơn vị</a></p>`;
+      ouSearch.style.display = "none";
       return;
     }
-    ouBox.innerHTML = items.map((u) => `
-      <label class="check"><input type="checkbox" name="org_unit_ids" value="${esc(u.id)}" />
-        ${esc(u.name)} <span class="muted small">(${esc(u.type_label)})</span></label>`).join("");
+    allUnits = items;
+    renderUnits("");
   }).catch(() => { ouBox.innerHTML = `<p class="empty">Không tải được danh sách đơn vị.</p>`; });
 
   form.addEventListener("submit", async (ev) => {

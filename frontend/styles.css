@@ -721,6 +721,10 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .org-unit-picker { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 14px; }
 .org-unit-picker legend { font-size: 14px; font-weight: 600; padding: 0 6px; }
 .org-unit-picker .check { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; }
+.org-unit-box { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 14px; }
+.org-unit-box .input { margin-bottom: 8px; }
+.org-unit-box .check { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; }
+.field-label { font-size: 14px; font-weight: 600; display: block; margin-bottom: 4px; }
 
 /* Chuông thông báo */
 #btn-notif { position: relative; }
