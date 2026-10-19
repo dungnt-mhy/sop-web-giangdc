@@ -4,6 +4,38 @@
 import { api, type Execution, type ExecutionDetail } from "../api.js";
 import { esc, setLoading, toast } from "../ui.js";
 
+/** Interval tự động tải lại bằng chứng (dọn dẹp khi chuyển trang). */
+let evidenceRefreshTimer: number | null = null;
+function stopEvidenceAutoRefresh(): void {
+  if (evidenceRefreshTimer !== null) {
+    clearInterval(evidenceRefreshTimer);
+    evidenceRefreshTimer = null;
+  }
+}
+/** Bật tự động tải lại bằng chứng mỗi 15s (chỉ khi tab đang hiển thị). */
+function startEvidenceAutoRefresh(body: HTMLElement, execId: string): void {
+  stopEvidenceAutoRefresh();
+  evidenceRefreshTimer = window.setInterval(async () => {
+    if (document.hidden) return;
+    if (!body.isConnected) { stopEvidenceAutoRefresh(); return; }
+    const sections = body.querySelectorAll<HTMLElement>("[data-evidence-for]");
+    for (const sec of Array.from(sections)) {
+      const sid = sec.dataset.evidenceFor!;
+      try {
+        const { items } = await api.listEvidence(execId, sid);
+        const countEl = sec.querySelector("[data-ev-count]");
+        const currentCount = countEl?.textContent?.match(/\d+/)?.[0];
+        // Chỉ render lại khi số lượng thay đổi (tránh nhấp nháy).
+        if (currentCount !== String(items.length)) {
+          renderEvidenceGrid(sec, execId, sid, items);
+        }
+      } catch {
+        // Bỏ qua lỗi khi tự động refresh.
+      }
+    }
+  }, 15000);
+}
+
 /** Định dạng ngày giờ theo giờ địa phương (dd/mm/yyyy hh:mm). */
 function fmtVn(s: string | null | undefined): string {
   if (!s) return "—";
@@ -455,6 +487,8 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
 
 /** Trang chi tiết lượt thực hiện (#/executions/{id}) — thực hiện từng bước. */
 export async function renderExecutionDetail(root: HTMLElement, execId: string): Promise<void> {
+  // Dừng auto-refresh cũ (nếu có) khi chuyển sang lượt khác.
+  stopEvidenceAutoRefresh();
   root.innerHTML = `
     <div class="page-head">
       <div><a href="#/my-work" class="link back">← Công việc của tôi</a>
@@ -555,6 +589,8 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       });
       // Tải bằng chứng cho từng bước.
       await loadAllEvidence(body, e.id);
+      // Tự động tải lại bằng chứng mỗi 15s (2 người cùng upload đều thấy).
+      startEvidenceAutoRefresh(body, e.id);
       // Hiển thị phân công từ dữ liệu đã có.
       renderAllAssignees(body, e.steps);
       // Tải lịch sử khi mở.
