@@ -321,10 +321,10 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
         <label>Người giám sát <span class="hint">(chọn nhiều)</span></label>
         <input class="input" type="search" id="exec-sup-search" placeholder="🔍 Tìm theo tên…" style="margin-bottom:6px" />
         <div class="check-list" id="exec-supervisors" style="max-height:120px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
-        <label>Người phê duyệt hoàn thành <span class="hint">(chọn nhiều)</span></label>
+        <label>Người phê duyệt hoàn thành <span class="required">*</span> <span class="hint">(chọn nhiều)</span></label>
         <input class="input" type="search" id="exec-apr-search" placeholder="🔍 Tìm theo tên…" style="margin-bottom:6px" />
         <div class="check-list" id="exec-approvers" style="max-height:120px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
-        <span class="hint">Nếu chọn cụ thể: chỉ những người đó (hoặc quản trị viên) mới được phê duyệt hoàn thành. Để trống: giám sát/quản lý duyệt.</span>
+        <span class="hint">Bắt buộc chọn ít nhất 1 người (không được chọn chính mình). Bất kỳ ai trong danh sách cũng xác nhận được.</span>
         <p class="form-error" id="exec-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button type="button" class="btn" id="exec-cancel">Huỷ</button>
@@ -452,7 +452,13 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
     const supervisor_ids = Array.from(dialogRoot.querySelectorAll<HTMLInputElement>('#exec-supervisors input:checked')).map((c) => c.value);
     if (supervisor_ids.length > 0) (input as Record<string, unknown>).supervisor_ids = supervisor_ids;
     const approver_ids = Array.from(dialogRoot.querySelectorAll<HTMLInputElement>('#exec-approvers input:checked')).map((c) => c.value);
-    if (approver_ids.length > 0) (input as Record<string, unknown>).approver_ids = approver_ids;
+    // Bắt buộc chọn ít nhất 1 người phê duyệt (chống spam lượt).
+    if (approver_ids.length === 0) {
+      errEl.textContent = "Vui lòng chọn ít nhất 1 người phê duyệt cho lượt công việc.";
+      errEl.hidden = false;
+      return;
+    }
+    (input as Record<string, unknown>).approver_ids = approver_ids;
     setLoading(submitBtn, true, "Đang tạo…");
     try {
       const created = await api.createExecution(input as { process_id: string; title?: string; expected_start_at: string; expected_end_at?: string; assignee_id?: string; supervisor_ids?: string[]; approver_ids?: string[] });
@@ -2143,13 +2149,34 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? ` <span class="pill amber redo-pill" data-redo-for="${esc(st.id)}" style="cursor:pointer;" title="Bấm để xem chi tiết các lần làm lại">🔄 Làm lại ${esc(String((st as unknown as Record<string, unknown>).redo_count))} lần</span>` : ""}
                 ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👤 Thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
                 ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👁️ Giám sát: ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
+                ${(() => {
+                  const sRec = st as unknown as Record<string, unknown>;
+                  const assignedSups = (sRec.supervisor_assignees as { display_name?: string }[] | undefined) ?? [];
+                  if (assignedSups.length > 0) {
+                    return `<div class="muted small" style="color:#7c3aed;">👁️ Người duyệt: ${assignedSups.map((a) => esc(a.display_name ?? "")).join(", ")}</div>`;
+                  }
+                  // Fallback: hiển thị người phê duyệt lượt.
+                  const eRec2 = e as unknown as Record<string, unknown>;
+                  const aprNames = (eRec2.approver_names as string[] | undefined) ?? [];
+                  if (aprNames.length > 0) {
+                    return `<div class="muted small" style="color:#7c3aed;">👁️ Người duyệt: ${aprNames.map(esc).join(", ")} <span class="hint">(người phê duyệt lượt)</span></div>`;
+                  }
+                  return "";
+                })()}
                 ${st.skip_reason ? `<div class="muted small">Lý do bỏ qua: ${esc(st.skip_reason)}</div>` : ""}
                 ${st.note ? `<div class="muted small">📝 Ghi chú:</div><div class="step-head-note">${esc(st.note)}</div>` : ""}
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 && st.status !== "PASSED" ? `<div class="muted small" style="color:#b45309;">🔄 Yêu cầu làm lại: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")} (${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")})${(st as unknown as Record<string, unknown>).redo_by_name ? ` — bởi ${esc((st as unknown as Record<string, unknown>).redo_by_name as string)}` : ""}</div>` : ""}
                 ${(st as unknown as Record<string, unknown>).approved_by_name ? `<div class="muted small" style="margin-top:8px;"><span class="pill green approve-pill" data-approve-for="${esc(st.id)}" style="cursor:pointer;font-weight:400;border-radius:6px;" title="Bấm để xem lịch sử duyệt">✅ Duyệt bởi: ${esc((st as unknown as Record<string, unknown>).approved_by_name as string)}${(st as unknown as Record<string, unknown>).approved_at ? ` (${esc(formatDateTime((st as unknown as Record<string, unknown>).approved_at as string))})` : ""}</span></div>` : ""}
               </div>
               ${(() => {
-                const canReview = active && st.status === "PENDING_REVIEW";
+                // Kiểm tra quyền duyệt theo chuỗi fallback: giám sát bước → giám sát lượt → phê duyệt → admin.
+                // (Backend cũng kiểm tra lại, đây chỉ để ẩn/hiện nút cho đúng.)
+                const eRec = e as unknown as Record<string, unknown>;
+                const stepSupIds = (((st as unknown as Record<string, unknown>).supervisor_assignees as { user_id?: string }[] | undefined) ?? []).map((a) => a.user_id).filter(Boolean);
+                const execSupIds = ((eRec.supervisor_ids as string[] | undefined) ?? []).filter(Boolean);
+                const execAprIds = ((eRec.approver_ids as string[] | undefined) ?? []).filter(Boolean);
+                const canReviewUser = currentUserId !== "" && (stepSupIds.includes(currentUserId) || execSupIds.includes(currentUserId) || execAprIds.includes(currentUserId));
+                const canReview = active && st.status === "PENDING_REVIEW" && canReviewUser;
                 const btns = [
                   canStart ? `<button class="btn sm primary" data-step="start">Bắt đầu</button>` : "",
                   canFinish ? `<button class="btn sm primary" data-step="complete">Báo hoàn thành</button>` : "",

@@ -417,16 +417,24 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   }
   // Người tạo: luôn là người đang đăng nhập (không cho chọn).
   const creatorId = me.user.id;
-  // Người phê duyệt (tùy chọn, chọn nhiều).
+  // Người phê duyệt (BẮT BUỘC ít nhất 1 người — chống spam lượt, đảm bảo có người kiểm soát).
   const approverIds: string[] = [];
   const aprRaw = body?.approver_ids ?? body?.approver_id;
   const aprArr = Array.isArray(aprRaw) ? aprRaw : (aprRaw ? [aprRaw] : []);
   for (const a of aprArr) {
     if (typeof a === "string" && a.trim()) approverIds.push(a.trim());
   }
+  if (approverIds.length === 0) {
+    return apiError("VALIDATION_ERROR", "Vui lòng chọn ít nhất 1 người phê duyệt cho lượt công việc.", ctx.requestId);
+  }
+  const isAdmin = me.permissions.includes("*");
   for (const aid of approverIds) {
     const apr = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(aid).first();
     if (!apr) return apiError("VALIDATION_ERROR", "Người phê duyệt không tồn tại.", ctx.requestId);
+    // Chặn tự chọn mình làm người phê duyệt (trừ admin) — tránh tự duyệt.
+    if (aid === creatorId && !isAdmin) {
+      return apiError("VALIDATION_ERROR", "Người phê duyệt không được là chính người tạo lượt.", ctx.requestId);
+    }
   }
   for (const sid of supervisorIds) {
     const sup = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(sid).first();
@@ -517,6 +525,15 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
       type: "EXECUTION_ASSIGNED",
       title: `Bạn được giao lượt ${code}`,
       message: `${me.user.display_name} đã tạo lượt công việc "${pname?.name ?? ""}" và giao cho bạn.`,
+      link: `#/executions/${execId}`,
+    }, ctx.env);
+  }
+  // Thông báo cho tất cả người phê duyệt khi lượt được tạo.
+  if (approverIds.length > 0) {
+    await notifyUsers(db, approverIds.filter((x) => x !== me.user.id), {
+      type: "EXECUTION_CREATED",
+      title: `Lượt mới cần phê duyệt: ${code}`,
+      message: `${me.user.display_name} vừa tạo lượt "${pname?.name ?? ""}" (${code}). Bạn được chỉ định làm người phê duyệt.`,
       link: `#/executions/${execId}`,
     }, ctx.env);
   }
@@ -629,14 +646,16 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     getRedoInfo(db, id),
     getRejectHistory(db, id),
     db.prepare(
-      `SELECT u.display_name FROM execution_supervisors es JOIN users u ON u.id = es.user_id WHERE es.execution_id = ? ORDER BY u.display_name ASC`
-    ).bind(id).all<{ display_name: string }>(),
+      `SELECT es.user_id, u.display_name FROM execution_supervisors es JOIN users u ON u.id = es.user_id WHERE es.execution_id = ? ORDER BY u.display_name ASC`
+    ).bind(id).all<{ user_id: string; display_name: string }>(),
     db.prepare(
-      `SELECT u.display_name FROM execution_approvers ea JOIN users u ON u.id = ea.user_id WHERE ea.execution_id = ? ORDER BY u.display_name ASC`
-    ).bind(id).all<{ display_name: string }>(),
+      `SELECT ea.user_id, u.display_name FROM execution_approvers ea JOIN users u ON u.id = ea.user_id WHERE ea.execution_id = ? ORDER BY u.display_name ASC`
+    ).bind(id).all<{ user_id: string; display_name: string }>(),
   ]);
   const execSupervisorNames = (execSupRows.results ?? []).map((r) => r.display_name);
+  const execSupervisorIds = (execSupRows.results ?? []).map((r) => r.user_id);
   const execApproverNames = (execAprRows.results ?? []).map((r) => r.display_name);
+  const execApproverIds = (execAprRows.results ?? []).map((r) => r.user_id);
   // Lấy tên người dùng cho các trường lưu vết của bước (completed_by, approved_by, redo_by).
   const stepUserIds = new Set<string>();
   for (const s of steps.results ?? []) {
@@ -694,7 +713,9 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     creator_position_name: creatorPositionName,
     supervisor_name: e.supervisor_id ? nameById[e.supervisor_id] ?? null : null,
     supervisor_names: execSupervisorNames,
+    supervisor_ids: execSupervisorIds,
     approver_names: execApproverNames,
+    approver_ids: execApproverIds,
     approver_id: (e as unknown as Record<string, unknown>).approver_id ?? null,
     approver_name: (e as unknown as Record<string, unknown>).approver_id ? nameById[(e as unknown as Record<string, unknown>).approver_id as string] ?? null : null,
     approved_by_name: (e as unknown as Record<string, unknown>).approved_by ? nameById[(e as unknown as Record<string, unknown>).approved_by as string] ?? null : null,
@@ -984,7 +1005,17 @@ async function transitionExecution(
   // Người được giao hoặc người có quyền executions.manage mới được thao tác.
   const canManage = me.permissions.includes("*") || me.permissions.includes("executions.manage");
   if (!canManage && e.assignee_id !== me.user.id) {
-    return apiError("FORBIDDEN", "Bạn không được giao lượt này.", ctx.requestId);
+    // Ngoại lệ: Báo hoàn thành lượt (→ PENDING_CONFIRMATION) cho phép thêm
+    // người tạo và giám sát lượt bấm.
+    if (to === "PENDING_CONFIRMATION") {
+      const isCreator = e.created_by === me.user.id || (e as unknown as Record<string, unknown>).creator_id === me.user.id;
+      const supRow = await db.prepare(`SELECT 1 FROM execution_supervisors WHERE execution_id = ? AND user_id = ? LIMIT 1`).bind(id, me.user.id).first();
+      if (!isCreator && !supRow) {
+        return apiError("FORBIDDEN", "Chỉ người được giao, người tạo hoặc giám sát mới được báo hoàn thành lượt.", ctx.requestId);
+      }
+    } else {
+      return apiError("FORBIDDEN", "Bạn không được giao lượt này.", ctx.requestId);
+    }
   }
 
   const now = nowIso();
@@ -1103,11 +1134,17 @@ async function transitionExecution(
       }, ctx.env);
     }
   } else if (to === "COMPLETED") {
-    // Xác nhận hoàn thành → thông báo cho người tạo và người được giao.
-    const notifyIds = [e.created_by, e.assignee_id, (e as unknown as Record<string, unknown>).creator_id as string | null]
-      .filter((x): x is string => !!x && x !== me.user.id);
-    if (notifyIds.length > 0) {
-      await notifyUsers(db, notifyIds, {
+    // Xác nhận hoàn thành → thông báo cho người tạo, người được giao và các phê duyệt còn lại.
+    const aprRows = await db.prepare(`SELECT user_id FROM execution_approvers WHERE execution_id = ?`).bind(id).all<{ user_id: string }>();
+    const notifyIds = [
+      e.created_by,
+      e.assignee_id,
+      (e as unknown as Record<string, unknown>).creator_id as string | null,
+      ...(aprRows.results ?? []).map((r) => r.user_id),
+    ].filter((x): x is string => !!x && x !== me.user.id);
+    const uniqueNotifyIds = [...new Set(notifyIds)];
+    if (uniqueNotifyIds.length > 0) {
+      await notifyUsers(db, uniqueNotifyIds, {
         type: "EXECUTION_CONFIRMED",
         title: `Lượt ${execCode} đã hoàn thành`,
         message: `${me.user.display_name} đã xác nhận hoàn thành lượt ${execCode}.`,
@@ -1369,6 +1406,15 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
   if (!asgCountComplete || asgCountComplete.cnt === 0) {
     return apiError("VALIDATION_ERROR", "Chưa phân công người thực hiện — không thể hoàn thành bước.", ctx.requestId);
   }
+  // Kiểm tra có ít nhất 1 người trong chuỗi duyệt (tránh kẹt ở PENDING_REVIEW).
+  const [hasStepSup, hasExecSup, hasApprover] = await Promise.all([
+    db.prepare(`SELECT 1 FROM execution_step_supervisor_assignees WHERE execution_step_id = ? LIMIT 1`).bind(stepId).first(),
+    db.prepare(`SELECT 1 FROM execution_supervisors WHERE execution_id = ? LIMIT 1`).bind(execId).first(),
+    db.prepare(`SELECT 1 FROM execution_approvers WHERE execution_id = ? LIMIT 1`).bind(execId).first(),
+  ]);
+  if (!hasStepSup && !hasExecSup && !hasApprover) {
+    return apiError("VALIDATION_ERROR", "Chưa có người duyệt cho bước này — vui lòng phân công giám sát trước khi báo hoàn thành.", ctx.requestId);
+  }
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
   const note = typeof body?.note === "string" ? body.note.trim() || null : null;
@@ -1422,7 +1468,7 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
     request_id: ctx.requestId,
     diff: { execution_id: execId, code: step.code },
   });
-  // Thông báo cho giám sát duyệt.
+  // Thông báo cho giám sát duyệt (chuỗi fallback: giám sát bước → giám sát lượt → người phê duyệt).
   const stepSupRows = await db.prepare(
     `SELECT user_id FROM execution_step_supervisor_assignees WHERE execution_step_id = ?`
   ).bind(stepId).all<{ user_id: string }>();
@@ -1431,7 +1477,13 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
     approveNotifyIds = [...new Set((stepSupRows.results ?? []).map((r) => r.user_id))].filter((x) => x !== me.user.id);
   } else {
     const supRows = await db.prepare(`SELECT user_id FROM execution_supervisors WHERE execution_id = ?`).bind(execId).all<{ user_id: string }>();
-    approveNotifyIds = [...new Set((supRows.results ?? []).map((r) => r.user_id))].filter((x) => x !== me.user.id);
+    if ((supRows.results ?? []).length > 0) {
+      approveNotifyIds = [...new Set((supRows.results ?? []).map((r) => r.user_id))].filter((x) => x !== me.user.id);
+    } else {
+      // Fallback cuối: người phê duyệt lượt.
+      const aprRows = await db.prepare(`SELECT user_id FROM execution_approvers WHERE execution_id = ?`).bind(execId).all<{ user_id: string }>();
+      approveNotifyIds = [...new Set((aprRows.results ?? []).map((r) => r.user_id))].filter((x) => x !== me.user.id);
+    }
   }
   if (approveNotifyIds.length > 0) {
     await notifyUsers(db, approveNotifyIds, {
@@ -1445,6 +1497,37 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
   return ok(toPublicStep(updated!));
 }
 
+// Kiểm tra quyền duyệt bước theo chuỗi fallback:
+// 1. Giám sát của bước → 2. Giám sát của lượt → 3. Người phê duyệt lượt → 4. Admin.
+// Trả về { allowed, fallbackRole } — fallbackRole cho biết đang dùng vai trò nào.
+async function canReviewStep(
+  db: D1Database,
+  execId: string,
+  stepId: string,
+  userId: string,
+  permissions: string[]
+): Promise<{ allowed: boolean; fallbackRole: string | null }> {
+  if (permissions.includes("*") || permissions.includes("executions.manage")) {
+    return { allowed: true, fallbackRole: "admin" };
+  }
+  // 1. Giám sát của bước.
+  const stepSup = await db.prepare(
+    `SELECT 1 FROM execution_step_supervisor_assignees WHERE execution_step_id = ? AND user_id = ? LIMIT 1`
+  ).bind(stepId, userId).first();
+  if (stepSup) return { allowed: true, fallbackRole: "step_supervisor" };
+  // 2. Giám sát của lượt.
+  const execSup = await db.prepare(
+    `SELECT 1 FROM execution_supervisors WHERE execution_id = ? AND user_id = ? LIMIT 1`
+  ).bind(execId, userId).first();
+  if (execSup) return { allowed: true, fallbackRole: "exec_supervisor" };
+  // 3. Người phê duyệt lượt.
+  const approver = await db.prepare(
+    `SELECT 1 FROM execution_approvers WHERE execution_id = ? AND user_id = ? LIMIT 1`
+  ).bind(execId, userId).first();
+  if (approver) return { allowed: true, fallbackRole: "approver" };
+  return { allowed: false, fallbackRole: null };
+}
+
 // POST .../{id}/steps/{sid}:approve — giám sát duyệt bước (chờ duyệt → đạt).
 export async function handleApproveStep(ctx: Ctx, execId: string, stepId: string): Promise<Response> {
   const s = ctx.requireAuth();
@@ -1456,6 +1539,11 @@ export async function handleApproveStep(ctx: Ctx, execId: string, stepId: string
   if (!step) return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
   if (step.status !== "PENDING_REVIEW") {
     return apiError("VALIDATION_ERROR", "Bước không ở trạng thái chờ duyệt.", ctx.requestId);
+  }
+  // Chỉ giám sát (theo chuỗi fallback) mới được duyệt.
+  const { allowed } = await canReviewStep(db, execId, stepId, me.user.id, me.permissions);
+  if (!allowed) {
+    return apiError("FORBIDDEN", "Chỉ người giám sát hoặc người phê duyệt mới được duyệt bước này.", ctx.requestId);
   }
 
   const now = nowIso();
@@ -1498,6 +1586,11 @@ export async function handleRejectStep(ctx: Ctx, execId: string, stepId: string)
   if (!step) return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
   if (step.status !== "PENDING_REVIEW") {
     return apiError("VALIDATION_ERROR", "Bước không ở trạng thái chờ duyệt.", ctx.requestId);
+  }
+  // Chỉ giám sát (theo chuỗi fallback) mới được yêu cầu làm lại.
+  const { allowed: canReject } = await canReviewStep(db, execId, stepId, me.user.id, me.permissions);
+  if (!canReject) {
+    return apiError("FORBIDDEN", "Chỉ người giám sát hoặc người phê duyệt mới được yêu cầu làm lại bước này.", ctx.requestId);
   }
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
