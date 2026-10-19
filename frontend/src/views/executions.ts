@@ -2172,7 +2172,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
             <div class="evidence-section" data-evidence-for="${esc(st.id)}">
               <div class="evidence-head">
                 <span class="evidence-title">📷 Bằng chứng <span class="evidence-count" data-ev-count></span></span>
-                <button class="btn sm evidence-refresh-btn" data-ev-refresh title="Tải lại danh sách">🔄</button>
+                <span class="evidence-actions">
                 ${canUpload ? `<span class="evidence-upload-group">
                   <label class="btn sm evidence-upload-btn camera-btn">
                     📸 Chụp
@@ -2187,6 +2187,8 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                     <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple hidden data-ev-input data-ev-kind="file" />
                   </label>
                 </span>` : ""}
+                <button class="btn sm evidence-refresh-btn" data-ev-refresh title="Tải lại danh sách">🔄</button>
+                </span>
               </div>
               <div class="evidence-grid" data-ev-grid></div>
               <p class="evidence-hint muted small">Ảnh được nén trước khi tải lên (tối đa 10 ảnh/bước). Tệp: PDF, Word, Excel, tối đa 10MB.</p>
