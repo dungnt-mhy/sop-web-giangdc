@@ -1041,14 +1041,14 @@ async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void
       ]);
       let html = "";
       if (items.length === 0) {
-        html += `<div class="small" style="color:#2563eb;">Người thực hiện: chưa phân công</div>`;
+        html += `<div class="small" style="color:#2563eb;">Thực hiện: chưa phân công</div>`;
       } else {
-        html += `<div class="small" style="color:#2563eb;">Người thực hiện: ` + items.map((u) =>
+        html += `<div class="small" style="color:#2563eb;">Thực hiện: ` + items.map((u) =>
           esc(u.display_name) + (u.position ? ` (${esc(u.position)})` : "")
         ).join(", ") + `</div>`;
       }
       if (supItems.length > 0) {
-        html += `<div class="small" style="color:#7c3aed;">👁️ Giám sát: ` + supItems.map((u) =>
+        html += `<div class="small" style="color:#7c3aed;">Giám sát: ` + supItems.map((u) =>
           esc(u.display_name) + (u.position ? ` (${esc(u.position)})` : "")
         ).join(", ") + `</div>`;
       }
@@ -1141,17 +1141,45 @@ async function openAssignDialog(
     return aMatch - bMatch;
   });
   const posNames = stepPositions.map((p) => p.name).join(", ");
-  const renderUserList = (name: string, checkedIds: Set<string>) => `
-    <div class="assign-list">
-      ${sorted.map((u) => {
-        const isMatch = u.position_id && stepPosIds.has(u.position_id);
-        return `
-        <label class="assign-item ${isMatch ? "assign-match" : ""}">
-          <input type="checkbox" name="${name}" value="${esc(u.id)}" ${checkedIds.has(u.id) ? "checked" : ""} />
-          <span>${esc(u.display_name)}${u.position_name ? ` <span class="muted small">— ${esc(u.position_name)}</span>` : ""}${isMatch ? ` <span class="pill green">Phù hợp</span>` : ""}</span>
-        </label>`;
-      }).join("")}
-    </div>`;
+  const PAGE_SIZE = 50;
+  // State cho từng block (thực hiện / giám sát).
+  const blockState: Record<string, { q: string; page: number }> = {
+    exec: { q: "", page: 0 },
+    sup: { q: "", page: 0 },
+  };
+  const filterUsers = (q: string) => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return sorted;
+    return sorted.filter((u) =>
+      u.display_name.toLowerCase().includes(needle) ||
+      (u.username ?? "").toLowerCase().includes(needle) ||
+      (u.position_name ?? "").toLowerCase().includes(needle)
+    );
+  };
+  const renderBlock = (key: "exec" | "sup", name: string, checkedIds: Set<string>) => {
+    const st = blockState[key];
+    const filtered = filterUsers(st.q);
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (st.page >= totalPages) st.page = totalPages - 1;
+    const pageItems = filtered.slice(st.page * PAGE_SIZE, st.page * PAGE_SIZE + PAGE_SIZE);
+    return `
+      <input type="search" class="input" data-search="${key}" placeholder="🔍 Tìm tên, tài khoản, chức vụ…" value="${esc(st.q)}" style="margin-bottom:8px;" />
+      <div class="assign-list" data-list="${key}">
+        ${pageItems.length === 0 ? `<p class="muted small" style="padding:12px;">Không tìm thấy.</p>` : pageItems.map((u) => {
+          const isMatch = u.position_id && stepPosIds.has(u.position_id);
+          return `
+          <label class="assign-item ${isMatch ? "assign-match" : ""}">
+            <input type="checkbox" name="${name}" value="${esc(u.id)}" ${checkedIds.has(u.id) ? "checked" : ""} />
+            <span>${esc(u.display_name)}${u.position_name ? ` <span class="muted small">— ${esc(u.position_name)}</span>` : ""}${isMatch ? ` <span class="pill green">Phù hợp</span>` : ""}</span>
+          </label>`;
+        }).join("")}
+      </div>
+      <div class="pager" data-pager="${key}" style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+        <button type="button" class="btn sm" data-prev="${key}" ${st.page === 0 ? "disabled" : ""}>‹ Trước</button>
+        <span class="muted small">Trang ${st.page + 1}/${totalPages} · ${filtered.length} người</span>
+        <button type="button" class="btn sm" data-next="${key}" ${st.page >= totalPages - 1 ? "disabled" : ""}>Sau ›</button>
+      </div>`;
+  };
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
       <div class="dialog" role="dialog" aria-modal="true" aria-label="Phân công bước">
@@ -1159,10 +1187,10 @@ async function openAssignDialog(
         ${posNames ? `<p class="muted small">Vai trò người thực hiện: <strong>${esc(posNames)}</strong> — người phù hợp được hiện đầu danh sách.</p>` : ""}
         <form id="assign-form">
           <h4 style="margin:12px 0 8px;">👤 Người thực hiện</h4>
-          ${renderUserList("user_ids", currentIds)}
+          <div data-block="exec">${renderBlock("exec", "user_ids", currentIds)}</div>
           <h4 style="margin:16px 0 8px;">👁️ Người giám sát / duyệt <span class="muted small">(không bắt buộc)</span></h4>
           <p class="muted small">Yêu cầu xin bỏ qua sẽ gửi cho người này trước.</p>
-          ${renderUserList("supervisor_ids", currentSupIds)}
+          <div data-block="sup">${renderBlock("sup", "supervisor_ids", currentSupIds)}</div>
           <p class="form-error" id="assign-error" role="alert" hidden></p>
           <div class="dialog-actions">
             <button type="button" class="btn" id="assign-cancel">Huỷ</button>
@@ -1171,6 +1199,44 @@ async function openAssignDialog(
         </form>
       </div>
     </div>`;
+  // Lưu checkbox đã chọn khi chuyển trang/tìm kiếm (vì re-render).
+  // Chỉ cập nhật những ô đang hiển thị; ô bị ẩn bởi tìm kiếm/phân trang giữ nguyên.
+  const preserveChecked = () => {
+    dialogRoot.querySelectorAll<HTMLInputElement>('input[name="user_ids"]').forEach((c) => {
+      if (c.checked) currentIds.add(c.value); else currentIds.delete(c.value);
+    });
+    dialogRoot.querySelectorAll<HTMLInputElement>('input[name="supervisor_ids"]').forEach((c) => {
+      if (c.checked) currentSupIds.add(c.value); else currentSupIds.delete(c.value);
+    });
+  };
+  const rerenderBlock = (key: "exec" | "sup") => {
+    preserveChecked();
+    const name = key === "exec" ? "user_ids" : "supervisor_ids";
+    const checked = key === "exec" ? currentIds : currentSupIds;
+    dialogRoot.querySelector(`[data-block="${key}"]`)!.innerHTML = renderBlock(key, name, checked);
+    bindBlock(key);
+  };
+  const bindBlock = (key: "exec" | "sup") => {
+    const block = dialogRoot.querySelector(`[data-block="${key}"]`)!;
+    const search = block.querySelector<HTMLInputElement>(`[data-search="${key}"]`)!;
+    search.addEventListener("input", () => {
+      blockState[key].q = search.value;
+      blockState[key].page = 0;
+      rerenderBlock(key);
+      // Giữ focus ô tìm kiếm sau re-render.
+      const s2 = dialogRoot.querySelector<HTMLInputElement>(`[data-block="${key}"] [data-search="${key}"]`)!;
+      s2.focus();
+      s2.setSelectionRange(s2.value.length, s2.value.length);
+    });
+    block.querySelector(`[data-prev="${key}"]`)?.addEventListener("click", () => {
+      if (blockState[key].page > 0) { blockState[key].page--; rerenderBlock(key); }
+    });
+    block.querySelector(`[data-next="${key}"]`)?.addEventListener("click", () => {
+      blockState[key].page++; rerenderBlock(key);
+    });
+  };
+  bindBlock("exec");
+  bindBlock("sup");
   const close = () => { dialogRoot.innerHTML = ""; };
   dialogRoot.querySelector("#assign-cancel")!.addEventListener("click", close);
   dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
@@ -1380,8 +1446,8 @@ function renderExecDiagram(steps: import("../api.js").ExecutionStep[], pendingSk
           <div class="flow-title">${esc(st.title)}</div>
           ${positions.length > 0 ? `<div class="flow-meta">👤 Thực hiện: ${positions.map((p) => esc(p.name)).join(", ")}</div>` : ""}
           ${supervisors.length > 0 ? `<div class="flow-meta">👁️ Giám sát: ${supervisors.map((p) => esc(p.name)).join(", ")}</div>` : ""}
-          ${assignees.length > 0 ? `<div class="flow-meta" style="color:#2563eb;">Người thực hiện: ${assignees.map((a) => esc(a.display_name)).join(", ")}</div>` : `<div class="flow-meta" style="color:#2563eb;">Người thực hiện: chưa phân công</div>`}
-          ${((st as unknown as Record<string, unknown>).supervisor_assignees as { display_name: string }[] ?? []).length > 0 ? `<div class="flow-meta" style="color:#7c3aed;">👁️ Duyệt: ${((st as unknown as Record<string, unknown>).supervisor_assignees as { display_name: string }[]).map((a) => esc(a.display_name)).join(", ")}</div>` : ""}
+          ${assignees.length > 0 ? `<div class="flow-meta" style="color:#2563eb;">Thực hiện: ${assignees.map((a) => esc(a.display_name)).join(", ")}</div>` : `<div class="flow-meta" style="color:#2563eb;">Thực hiện: chưa phân công</div>`}
+          ${((st as unknown as Record<string, unknown>).supervisor_assignees as { display_name: string }[] ?? []).length > 0 ? `<div class="flow-meta" style="color:#7c3aed;">Giám sát: ${((st as unknown as Record<string, unknown>).supervisor_assignees as { display_name: string }[]).map((a) => esc(a.display_name)).join(", ")}</div>` : ""}
           ${evCount > 0 ? `<div class="flow-meta">📷 ${evCount} bằng chứng</div>` : ""}
           ${st.completed_at ? `<div class="flow-meta muted small">Xong: ${esc(st.completed_at.slice(0, 16).replace("T", " "))}</div>` : ""}
         </div>`;
