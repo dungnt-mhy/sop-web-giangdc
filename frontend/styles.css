@@ -822,6 +822,17 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .user-search-item { padding: 10px 12px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
 .user-search-item:hover { background: #f1f5f9; }
 .user-search-empty { padding: 10px 12px; color: #94a3b8; font-size: 13px; }
+/* Nút tải lại không background, chỉ icon */
+.evidence-refresh-btn.icon-only {
+  background: none; border: none; padding: 4px; font-size: 18px;
+  cursor: pointer; line-height: 1; flex-shrink: 0;
+}
+.evidence-refresh-btn.icon-only:hover { opacity: 0.7; }
+.evidence-refresh-btn.icon-only:disabled { opacity: 0.4; cursor: default; }
+/* Tiêu đề bằng chứng: icon trên, chữ dưới */
+.evidence-title { display: inline-flex; flex-direction: column; align-items: center; text-align: center; line-height: 1.2; }
+.evidence-title .ev-icon { font-size: 16px; }
+.evidence-title .ev-label { font-size: 10px; font-weight: 700; color: #334155; }
 /* Mobile: evidence header gọn trên 1 hàng, icon trên chữ dưới */
 @media (max-width: 640px) {
   .evidence-head { gap: 6px; }
