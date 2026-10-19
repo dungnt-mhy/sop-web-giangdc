@@ -463,12 +463,16 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   const db = ctx.env.sop_demo_db;
   const e = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
   if (!e) return apiError("NOT_FOUND", "Không tìm thấy lượt thực hiện.", ctx.requestId);
-  const pname = await db.prepare(`SELECT name, code FROM processes WHERE id = ?`).bind(e.process_id).first<{
-    name: string;
-    code: string;
-  }>();
-  const vrow = await db.prepare(`SELECT version_number FROM process_versions WHERE id = ?`).bind(e.version_id).first<{ version_number: number }>();
-  const users = await db.prepare(`SELECT id, display_name, position_id FROM users WHERE id IN (?, ?, ?, ?, ?, ?)`).bind(e.assignee_id, e.created_by, e.supervisor_id, (e as unknown as Record<string, unknown>).creator_id, (e as unknown as Record<string, unknown>).approver_id, (e as unknown as Record<string, unknown>).approved_by).all<{ id: string; display_name: string; position_id: string | null }>();
+  // Chạy song song các query độc lập.
+  const [pname, vrow, users, steps] = await Promise.all([
+    db.prepare(`SELECT name, code FROM processes WHERE id = ?`).bind(e.process_id).first<{
+      name: string;
+      code: string;
+    }>(),
+    db.prepare(`SELECT version_number FROM process_versions WHERE id = ?`).bind(e.version_id).first<{ version_number: number }>(),
+    db.prepare(`SELECT id, display_name, position_id FROM users WHERE id IN (?, ?, ?, ?, ?, ?)`).bind(e.assignee_id, e.created_by, e.supervisor_id, (e as unknown as Record<string, unknown>).creator_id, (e as unknown as Record<string, unknown>).approver_id, (e as unknown as Record<string, unknown>).approved_by).all<{ id: string; display_name: string; position_id: string | null }>(),
+    db.prepare(`SELECT * FROM execution_steps WHERE execution_id = ? ORDER BY sort_order ASC`).bind(id).all<ExecStepRow>(),
+  ]);
   const nameById: Record<string, string> = {};
   const posById: Record<string, string | null> = {};
   for (const u of users.results ?? []) {
@@ -482,10 +486,6 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
     const pos = await db.prepare(`SELECT name FROM positions WHERE id = ?`).bind(posById[creatorId]).first<{ name: string }>();
     creatorPositionName = pos?.name ?? null;
   }
-  const steps = await db
-    .prepare(`SELECT * FROM execution_steps WHERE execution_id = ? ORDER BY sort_order ASC`)
-    .bind(id)
-    .all<ExecStepRow>();
   // Lấy danh sách chức vụ cho từng bước thực hiện.
   const execStepIds = (steps.results ?? []).map((s) => s.id);
   const execPosMap = new Map<string, { id: string; name: string }[]>();
@@ -557,16 +557,17 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
       }
     }
   }
-  const progress = await getProgress(db, id);
-  const redoInfo = await getRedoInfo(db, id);
-  const rejectHistory = await getRejectHistory(db, id);
-  // Lấy danh sách người giám sát / phê duyệt của lượt (chọn nhiều).
-  const execSupRows = await db.prepare(
-    `SELECT u.display_name FROM execution_supervisors es JOIN users u ON u.id = es.user_id WHERE es.execution_id = ? ORDER BY u.display_name ASC`
-  ).bind(id).all<{ display_name: string }>();
-  const execAprRows = await db.prepare(
-    `SELECT u.display_name FROM execution_approvers ea JOIN users u ON u.id = ea.user_id WHERE ea.execution_id = ? ORDER BY u.display_name ASC`
-  ).bind(id).all<{ display_name: string }>();
+  const [progress, redoInfo, rejectHistory, execSupRows, execAprRows] = await Promise.all([
+    getProgress(db, id),
+    getRedoInfo(db, id),
+    getRejectHistory(db, id),
+    db.prepare(
+      `SELECT u.display_name FROM execution_supervisors es JOIN users u ON u.id = es.user_id WHERE es.execution_id = ? ORDER BY u.display_name ASC`
+    ).bind(id).all<{ display_name: string }>(),
+    db.prepare(
+      `SELECT u.display_name FROM execution_approvers ea JOIN users u ON u.id = ea.user_id WHERE ea.execution_id = ? ORDER BY u.display_name ASC`
+    ).bind(id).all<{ display_name: string }>(),
+  ]);
   const execSupervisorNames = (execSupRows.results ?? []).map((r) => r.display_name);
   const execApproverNames = (execAprRows.results ?? []).map((r) => r.display_name);
   // Lấy người được phân công và số bằng chứng cho từng bước (cho tab sơ đồ).
@@ -575,28 +576,32 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
   const evidenceMap = new Map<string, number>();
   if (execStepIds.length > 0) {
     const placeholders = execStepIds.map(() => "?").join(",");
-    const asgRows = await db.prepare(
-      `SELECT esa.execution_step_id, u.display_name
-       FROM execution_step_assignees esa JOIN users u ON u.id = esa.user_id
-       WHERE esa.execution_step_id IN (${placeholders})`
-    ).bind(...execStepIds).all<{ execution_step_id: string; display_name: string }>();
+    const [asgRows, supAsgRows, evRows] = await Promise.all([
+      db.prepare(
+        `SELECT esa.execution_step_id, u.display_name
+         FROM execution_step_assignees esa JOIN users u ON u.id = esa.user_id
+         WHERE esa.execution_step_id IN (${placeholders})`
+      ).bind(...execStepIds).all<{ execution_step_id: string; display_name: string }>(),
+      db.prepare(
+        `SELECT essa.execution_step_id, u.display_name
+         FROM execution_step_supervisor_assignees essa JOIN users u ON u.id = essa.user_id
+         WHERE essa.execution_step_id IN (${placeholders})`
+      ).bind(...execStepIds).all<{ execution_step_id: string; display_name: string }>(),
+      db.prepare(
+        `SELECT execution_step_id, COUNT(*) as cnt FROM evidence
+         WHERE execution_step_id IN (${placeholders}) GROUP BY execution_step_id`
+      ).bind(...execStepIds).all<{ execution_step_id: string; cnt: number }>(),
+    ]);
     for (const r of asgRows.results ?? []) {
       if (!assigneeMap.has(r.execution_step_id)) assigneeMap.set(r.execution_step_id, []);
       assigneeMap.get(r.execution_step_id)!.push({ display_name: r.display_name });
     }
-    const supAsgRows = await db.prepare(
-      `SELECT essa.execution_step_id, u.display_name
-       FROM execution_step_supervisor_assignees essa JOIN users u ON u.id = essa.user_id
-       WHERE essa.execution_step_id IN (${placeholders})`
-    ).bind(...execStepIds).all<{ execution_step_id: string; display_name: string }>();
+
     for (const r of supAsgRows.results ?? []) {
       if (!supAssigneeMap.has(r.execution_step_id)) supAssigneeMap.set(r.execution_step_id, []);
       supAssigneeMap.get(r.execution_step_id)!.push({ display_name: r.display_name });
     }
-    const evRows = await db.prepare(
-      `SELECT execution_step_id, COUNT(*) as cnt FROM evidence
-       WHERE execution_step_id IN (${placeholders}) GROUP BY execution_step_id`
-    ).bind(...execStepIds).all<{ execution_step_id: string; cnt: number }>();
+
     for (const r of evRows.results ?? []) evidenceMap.set(r.execution_step_id, r.cnt);
   }
   return ok({
