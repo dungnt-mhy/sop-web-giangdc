@@ -1103,6 +1103,7 @@ function openRedoHistoryDialog(
   items: { action: string; reason: string | null; created_at: string; actor_name: string | null }[]
 ): void {
   const rejected = items.filter((h) => h.action === "REJECTED");
+  const total = rejected.length;
   dialogRoot.innerHTML = `
     <div class="dialog-backdrop" data-close>
       <div class="dialog" role="dialog" aria-modal="true" aria-label="Lịch sử làm lại">
@@ -1110,7 +1111,7 @@ function openRedoHistoryDialog(
         <div class="redo-hist-list">
         ${rejected.length === 0 ? `<p class="muted">Chưa có lần làm lại nào.</p>` : rejected.map((h, i) => `
           <div class="hist-item">
-            <div><span class="hist-action">Lần ${i + 1}</span> <span class="muted small">👤 ${esc(h.actor_name ?? "—")} · 🕐 ${esc(formatDateTime(h.created_at))}</span></div>
+            <div><span class="hist-action">Lần ${total - i}</span> <span class="muted small">👤 ${esc(h.actor_name ?? "—")} · 🕐 ${esc(formatDateTime(h.created_at))}</span></div>
             ${h.reason ? `<div class="hist-reason">Lý do: ${esc(h.reason)}</div>` : ""}
           </div>`).join("")}
         </div>
@@ -1549,7 +1550,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👁️ Giám sát: ${((st as unknown as Record<string, unknown>).supervisors as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
                 ${st.skip_reason ? `<div class="muted small">Lý do bỏ qua: ${esc(st.skip_reason)}</div>` : ""}
                 ${st.note ? `<div class="muted small">📝 Ghi chú:</div><div class="step-head-note">${esc(st.note)}</div>` : ""}
-                ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? `<div class="muted small" style="color:#b45309;">🔄 Yêu cầu làm lại: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")} (${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")})${(st as unknown as Record<string, unknown>).redo_by_name ? ` — bởi ${esc((st as unknown as Record<string, unknown>).redo_by_name as string)}` : ""}</div>` : ""}
+                ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 && st.status !== "PASSED" ? `<div class="muted small" style="color:#b45309;">🔄 Yêu cầu làm lại: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")} (${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")})${(st as unknown as Record<string, unknown>).redo_by_name ? ` — bởi ${esc((st as unknown as Record<string, unknown>).redo_by_name as string)}` : ""}</div>` : ""}
                 ${(st as unknown as Record<string, unknown>).approved_by_name ? `<div class="muted small" style="color:#15803d;">✅ Duyệt bởi: ${esc((st as unknown as Record<string, unknown>).approved_by_name as string)}${(st as unknown as Record<string, unknown>).approved_at ? ` (${esc(formatDateTime((st as unknown as Record<string, unknown>).approved_at as string))})` : ""}</div>` : ""}
               </div>
               ${(() => {
