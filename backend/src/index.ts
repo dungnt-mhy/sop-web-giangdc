@@ -63,6 +63,8 @@ import {
   handleCancelExecution,
   handleConfirmComplete,
   handleCompleteStep,
+  handleApproveStep,
+  handleRejectStep,
   handleCreateExecution,
   handleGetExecution,
   handleListExecutions,
@@ -402,7 +404,7 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
       if (action === "complete") return handleReportComplete(ctx, eid); // tương thích cũ
     }
   }
-  const esm = /^\/executions\/[^/:]+\/steps\/([^/:]+)(?::(start|complete|skip|request-skip|approve-skip|reject-skip))$/.exec(path);
+  const esm = /^\/executions\/[^/:]+\/steps\/([^/:]+)(?::(start|complete|approve|reject|skip|request-skip|approve-skip|reject-skip))$/.exec(path);
   if (esm && method === "POST") {
     const eidM = /^\/executions\/([^/:]+)\/steps\//.exec(path);
     const eid = eidM ? decodeURIComponent(eidM[1]) : "";
@@ -413,6 +415,8 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     }
     if (action === "start") return handleStartStep(ctx, eid, sid);
     if (action === "complete") return handleCompleteStep(ctx, eid, sid);
+    if (action === "approve") return handleApproveStep(ctx, eid, sid);
+    if (action === "reject") return handleRejectStep(ctx, eid, sid);
     if (action === "skip") return handleSkipStep(ctx, eid, sid);
     if (action === "request-skip") return handleRequestSkip(ctx, eid, sid);
     if (action === "approve-skip") return handleApproveSkip(ctx, eid, sid);

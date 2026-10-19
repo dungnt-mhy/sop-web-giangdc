@@ -1300,20 +1300,120 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
   }
 
   const now = nowIso();
+  // Báo hoàn thành → chuyển sang chờ duyệt (không phải Đạt ngay).
   await db
     .prepare(
-      `UPDATE execution_steps SET status = 'PASSED', completed_by = ?, completed_at = ?, note = ?, updated_at = ? WHERE id = ?`
+      `UPDATE execution_steps SET status = 'PENDING_REVIEW', completed_by = ?, completed_at = ?, note = ?, updated_at = ? WHERE id = ?`
     )
     .bind(me.user.id, now, note, now, stepId)
     .run();
   await audit(db, {
-    event_type: "EXECUTION_STEP_COMPLETED",
+    event_type: "EXECUTION_STEP_REPORTED",
     actor_id: me.user.id,
     object_type: "execution_step",
     object_id: stepId,
     request_id: ctx.requestId,
     diff: { execution_id: execId, code: step.code },
   });
+  // Thông báo cho giám sát duyệt.
+  const stepSupRows = await db.prepare(
+    `SELECT user_id FROM execution_step_supervisor_assignees WHERE execution_step_id = ?`
+  ).bind(stepId).all<{ user_id: string }>();
+  let approveNotifyIds: string[];
+  if ((stepSupRows.results ?? []).length > 0) {
+    approveNotifyIds = [...new Set((stepSupRows.results ?? []).map((r) => r.user_id))].filter((x) => x !== me.user.id);
+  } else {
+    const supRows = await db.prepare(`SELECT user_id FROM execution_supervisors WHERE execution_id = ?`).bind(execId).all<{ user_id: string }>();
+    approveNotifyIds = [...new Set((supRows.results ?? []).map((r) => r.user_id))].filter((x) => x !== me.user.id);
+  }
+  if (approveNotifyIds.length > 0) {
+    await notifyUsers(db, approveNotifyIds, {
+      type: "STEP_PENDING_REVIEW",
+      title: `Bước ${step.code} chờ duyệt`,
+      message: `${me.user.display_name} đã báo hoàn thành bước ${step.code} (${step.title}). Vui lòng vào duyệt.`,
+      link: `#/executions/${execId}`,
+    });
+  }
+  const updated = await db.prepare(`SELECT * FROM execution_steps WHERE id = ?`).bind(stepId).first<ExecStepRow>();
+  return ok(toPublicStep(updated!));
+}
+
+// POST .../{id}/steps/{sid}:approve — giám sát duyệt bước (chờ duyệt → đạt).
+export async function handleApproveStep(ctx: Ctx, execId: string, stepId: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+
+  const step = await db.prepare(`SELECT * FROM execution_steps WHERE id = ? AND execution_id = ?`).bind(stepId, execId).first<ExecStepRow>();
+  if (!step) return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
+  if (step.status !== "PENDING_REVIEW") {
+    return apiError("VALIDATION_ERROR", "Bước không ở trạng thái chờ duyệt.", ctx.requestId);
+  }
+
+  const now = nowIso();
+  await db.prepare(
+    `UPDATE execution_steps SET status = 'PASSED', updated_at = ? WHERE id = ?`
+  ).bind(now, stepId).run();
+  await audit(db, {
+    event_type: "EXECUTION_STEP_APPROVED",
+    actor_id: me.user.id,
+    object_type: "execution_step",
+    object_id: stepId,
+    request_id: ctx.requestId,
+    diff: { execution_id: execId, code: step.code },
+  });
+  // Thông báo cho người báo hoàn thành.
+  if (step.completed_by && step.completed_by !== me.user.id) {
+    await notifyUsers(db, [step.completed_by], {
+      type: "STEP_APPROVED",
+      title: `Bước ${step.code} đã đạt`,
+      message: `${me.user.display_name} đã duyệt bước ${step.code} (${step.title}).`,
+      link: `#/executions/${execId}`,
+    });
+  }
+  const updated = await db.prepare(`SELECT * FROM execution_steps WHERE id = ?`).bind(stepId).first<ExecStepRow>();
+  return ok(toPublicStep(updated!));
+}
+
+// POST .../{id}/steps/{sid}:reject — giám sát yêu cầu làm lại bước.
+export async function handleRejectStep(ctx: Ctx, execId: string, stepId: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+
+  const step = await db.prepare(`SELECT * FROM execution_steps WHERE id = ? AND execution_id = ?`).bind(stepId, execId).first<ExecStepRow>();
+  if (!step) return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
+  if (step.status !== "PENDING_REVIEW") {
+    return apiError("VALIDATION_ERROR", "Bước không ở trạng thái chờ duyệt.", ctx.requestId);
+  }
+
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+  if (!reason) return apiError("VALIDATION_ERROR", "Vui lòng nhập lý do yêu cầu làm lại.", ctx.requestId);
+
+  const now = nowIso();
+  await db.prepare(
+    `UPDATE execution_steps SET status = 'IN_PROGRESS', redo_count = redo_count + 1, redo_reason = ?, redo_by = ?, redo_at = ?, updated_at = ? WHERE id = ?`
+  ).bind(reason, me.user.id, now, now, stepId).run();
+  await audit(db, {
+    event_type: "EXECUTION_STEP_REJECTED",
+    actor_id: me.user.id,
+    object_type: "execution_step",
+    object_id: stepId,
+    request_id: ctx.requestId,
+    diff: { execution_id: execId, code: step.code, reason },
+  });
+  // Thông báo cho người báo hoàn thành.
+  if (step.completed_by && step.completed_by !== me.user.id) {
+    await notifyUsers(db, [step.completed_by], {
+      type: "STEP_REJECTED",
+      title: `Bước ${step.code} bị yêu cầu làm lại`,
+      message: `${me.user.display_name} yêu cầu làm lại bước ${step.code} (${step.title}). Lý do: ${reason}`,
+      link: `#/executions/${execId}`,
+    });
+  }
   const updated = await db.prepare(`SELECT * FROM execution_steps WHERE id = ?`).bind(stepId).first<ExecStepRow>();
   return ok(toPublicStep(updated!));
 }

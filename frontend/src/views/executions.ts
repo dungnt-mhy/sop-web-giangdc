@@ -38,6 +38,7 @@ const EXEC_STATUS_PILL: Record<string, string> = {
 const STEP_STATUS_LABELS: Record<string, string> = {
   NOT_STARTED: "Chưa bắt đầu",
   IN_PROGRESS: "Đang làm",
+  PENDING_REVIEW: "Chờ duyệt",
   PASSED: "Đạt",
   FAILED: "Không đạt",
   SKIPPED: "Bỏ qua",
@@ -488,6 +489,20 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           await reload();
         });
         return;
+      } else if (act === "approve") {
+        restore();
+        const ok = await openConfirmDialog(dialogRoot, "Duyệt bước", `Xác nhận bước "${step?.code}" đạt yêu cầu?`, "✅ Duyệt đạt");
+        if (!ok) return;
+        setLoading(btn, true, "Đang duyệt…");
+        await api.approveStep(execId, sid);
+        toast("Đã duyệt đạt.");
+      } else if (act === "reject") {
+        restore();
+        const reason = await openReasonDialog(dialogRoot, `Lý do yêu cầu làm lại bước "${step?.code}"`, "VD: Chưa đủ ảnh bằng chứng, số lượng sai…");
+        if (!reason) return;
+        setLoading(btn, true, "Đang gửi…");
+        await api.rejectStep(execId, sid, reason);
+        toast("Đã gửi yêu cầu làm lại.");
       }
       await reload();
     } catch (e) {
@@ -1434,7 +1449,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${st.is_required ? "" : ' <span class="pill gray">Tùy chọn</span>'}
                 ${skipAllowed ? ' <span class="pill blue">⏭️ Được bỏ qua</span>' : ""}
                 ${pendingSkip ? ' <span class="pill amber">🙏 Chờ duyệt bỏ qua</span>' : ""}
-                <span class="pill ${st.status === "PASSED" ? "green" : st.status === "SKIPPED" ? "gray" : st.status === "IN_PROGRESS" ? "blue" : "gray"}">${esc(STEP_STATUS_LABELS[st.status] ?? st.status)}</span>
+                <span class="pill ${st.status === "PASSED" ? "green" : st.status === "SKIPPED" ? "gray" : st.status === "IN_PROGRESS" ? "blue" : st.status === "PENDING_REVIEW" ? "amber" : "gray"}">${esc(STEP_STATUS_LABELS[st.status] ?? st.status)}</span>
                 ${minPhotos > 0 ? ` <span class="pill orange" title="Yêu cầu ít nhất ${minPhotos} ảnh">📷 ${minPhotos} ảnh</span>` : ""}
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? ` <span class="pill amber" title="Lý do: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")}&#10;Lúc: ${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")}">🔄 Làm lại ${esc(String((st as unknown as Record<string, unknown>).redo_count))} lần</span>` : ""}
                 ${((st as unknown as Record<string, unknown>).positions as { name: string }[] ?? []).length > 0 ? `<div class="muted small">👤 Thực hiện: ${((st as unknown as Record<string, unknown>).positions as { name: string }[]).map((p) => esc(p.name)).join(", ")}</div>` : ""}
@@ -1444,12 +1459,15 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${((st as unknown as Record<string, unknown>).redo_count as number ?? 0) > 0 ? `<div class="muted small" style="color:#b45309;">🔄 Yêu cầu làm lại: ${esc(((st as unknown as Record<string, unknown>).redo_reason as string) ?? "")} (${esc(((st as unknown as Record<string, unknown>).redo_at as string) ?? "")})</div>` : ""}
               </div>
               ${(() => {
+                const canReview = active && st.status === "PENDING_REVIEW";
                 const btns = [
                   canStart ? `<button class="btn sm primary" data-step="start">Bắt đầu</button>` : "",
-                  canFinish ? `<button class="btn sm primary" data-step="complete">Hoàn thành</button>` : "",
+                  canFinish ? `<button class="btn sm primary" data-step="complete">Báo hoàn thành</button>` : "",
+                  canReview ? `<button class="btn sm primary" data-step="approve">✅ Duyệt đạt</button>` : "",
+                  canReview ? `<button class="btn sm" data-step="reject">🔄 Yêu cầu làm lại</button>` : "",
                   canSkip ? `<button class="btn sm" data-step="skip">⏭️ Bỏ qua</button>` : "",
                   canSkip ? `<button class="btn sm secondary" data-step="request-skip">🙏 Xin bỏ qua</button>` : "",
-                  active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) && !pendingSkip ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : "",
+                  active && !["PASSED", "SKIPPED", "CANCELLED", "PENDING_REVIEW"].includes(st.status) && !pendingSkip ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : "",
                   active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) ? `<button class="btn sm" data-step="note">📝 Ghi chú</button>` : "",
                 ].filter(Boolean);
                 return btns.length > 0 ? `<div class="step-actions">${btns.join("")}</div>` : "";
@@ -1525,6 +1543,7 @@ function renderExecDiagram(steps: import("../api.js").ExecutionStep[], pendingSk
   const label: Record<string, string> = {
     NOT_STARTED: "Chưa bắt đầu",
     IN_PROGRESS: "Đang làm",
+    PENDING_REVIEW: "Chờ duyệt",
     PASSED: "Đạt",
     FAILED: "Không đạt",
     SKIPPED: "Bỏ qua",

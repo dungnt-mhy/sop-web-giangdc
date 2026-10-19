@@ -493,6 +493,12 @@ export const api = {
   completeStep(execId: string, stepId: string, note?: string): Promise<ExecutionStep> {
     return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:complete`, { note });
   },
+  approveStep(execId: string, stepId: string): Promise<ExecutionStep> {
+    return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:approve`);
+  },
+  rejectStep(execId: string, stepId: string, reason: string): Promise<ExecutionStep> {
+    return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:reject`, { reason });
+  },
   skipStep(execId: string, stepId: string, skip_reason: string): Promise<ExecutionStep> {
     return req("POST", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}:skip`, { skip_reason });
   },
