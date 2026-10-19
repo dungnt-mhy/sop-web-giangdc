@@ -175,11 +175,21 @@ function renderShell(): void {
       if (items.length === 0) {
         listEl.innerHTML = `<p class="muted" style="padding:12px;">Chưa có thông báo nào.</p>`;
       } else {
+        const fmtVnTime = (iso: string): string => {
+          if (!iso) return "";
+          const d = new Date(iso);
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yyyy = d.getFullYear();
+          const hh = String(d.getHours()).padStart(2, "0");
+          const min = String(d.getMinutes()).padStart(2, "0");
+          return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+        };
         listEl.innerHTML = items.map((n) => `
           <div class="notif-item ${n.is_read ? "" : "unread"}" data-nid="${esc(n.id)}" data-link="${esc(n.link ?? "")}">
             <div class="notif-title">${esc(n.title)}</div>
             ${n.message ? `<div class="notif-msg">${esc(n.message)}</div>` : ""}
-            <div class="notif-time muted small">${esc(n.created_at)}</div>
+            <div class="notif-time muted small">🕐 ${esc(fmtVnTime(n.created_at))}</div>
           </div>`).join("");
         listEl.querySelectorAll(".notif-item").forEach((el) => {
           el.addEventListener("click", async () => {
