@@ -1308,7 +1308,13 @@ export async function handleStartStep(ctx: Ctx, execId: string, stepId: string):
   }
   const canManage = me.permissions.includes("*") || me.permissions.includes("executions.manage");
   if (!canManage && e.assignee_id !== me.user.id) {
-    return apiError("FORBIDDEN", "Bạn không được giao lượt này.", ctx.requestId);
+    // Cho phép người được phân công bước đó bấm hoàn thành.
+    const stepAsg = await db.prepare(
+      `SELECT 1 FROM execution_step_assignees WHERE execution_step_id = ? AND user_id = ? LIMIT 1`
+    ).bind(stepId, me.user.id).first();
+    if (!stepAsg) {
+      return apiError("FORBIDDEN", "Bạn không được phân công thực hiện bước này.", ctx.requestId);
+    }
   }
 
   const step = await db
@@ -1380,7 +1386,13 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
   }
   const canManage = me.permissions.includes("*") || me.permissions.includes("executions.manage");
   if (!canManage && e.assignee_id !== me.user.id) {
-    return apiError("FORBIDDEN", "Bạn không được giao lượt này.", ctx.requestId);
+    // Cho phép người được phân công bước đó bấm báo hoàn thành.
+    const stepAsg = await db.prepare(
+      `SELECT 1 FROM execution_step_assignees WHERE execution_step_id = ? AND user_id = ? LIMIT 1`
+    ).bind(stepId, me.user.id).first();
+    if (!stepAsg) {
+      return apiError("FORBIDDEN", "Bạn không được phân công thực hiện bước này.", ctx.requestId);
+    }
   }
 
   const step = await db
