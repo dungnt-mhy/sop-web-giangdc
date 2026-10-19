@@ -1738,6 +1738,7 @@ function bindStepHistory(body: HTMLElement, execId: string): void {
     APPROVED: "✅ Duyệt đạt",
     REJECTED: "🔄 Yêu cầu làm lại",
     ASSIGNED: "👥 Phân công",
+    ASSIGNED_EXCEPTION: "⚠️ Gán ngoại lệ khẩn cấp",
     NOTE_UPDATED: "📝 Cập nhật ghi chú",
     SKIPPED: "⏭️ Bỏ qua",
     SKIP_REQUESTED: "🙏 Xin bỏ qua",
@@ -1907,6 +1908,76 @@ function openReasonDialog(dialogRoot: HTMLElement, title: string, placeholder: s
   });
 }
 
+/** Dialog xử lý vi phạm phân công — cho phép gán ngoại lệ khẩn cấp. */
+async function handleAssignmentViolation(
+  dialogRoot: HTMLElement,
+  details: { violations?: { display_name: string; violations: string[] }[]; can_exception?: boolean } | undefined,
+  onException: (reason: string) => Promise<void>
+): Promise<void> {
+  const violations = details?.violations ?? [];
+  const canException = details?.can_exception ?? false;
+
+  const violationHtml = violations.map((v) => `
+    <div style="margin-bottom:8px;padding:8px;background:#fef2f2;border-radius:6px;">
+      <div style="font-weight:600;">${esc(v.display_name)}</div>
+      <ul style="margin:4px 0 0 16px;padding:0;">
+        ${v.violations.map((x) => `<li class="small">${esc(x)}</li>`).join("")}
+      </ul>
+    </div>`).join("");
+
+  // Tạo dialog riêng cho vi phạm.
+  const overlay = document.createElement("div");
+  overlay.className = "dialog-overlay";
+  overlay.innerHTML = `
+    <div class="dialog" style="max-width:480px;">
+      <h3>⚠️ Phân công vi phạm quy định</h3>
+      <p class="muted small">Những người sau không đáp ứng yêu cầu của bước:</p>
+      ${violationHtml}
+      ${canException ? `
+        <div class="form-group" style="margin-top:12px;">
+          <label>Lý do ngoại lệ khẩn cấp *</label>
+          <textarea id="exc-reason" class="input" rows="3" placeholder="VD: Thủ kho nghỉ đột xuất, cần người thay thế gấp…"></textarea>
+          <span class="hint">Bắt buộc nhập. Sẽ được lưu vết và thông báo cho giám sát.</span>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+          <button class="btn" id="exc-cancel">Quay lại sửa</button>
+          <button class="btn primary" id="exc-confirm">⚠️ Gán ngoại lệ khẩn cấp</button>
+        </div>` : `
+        <p class="muted small" style="margin-top:12px;">Bạn không có quyền gán ngoại lệ. Vui lòng chọn người khác hoặc liên hệ giám sát.</p>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+          <button class="btn primary" id="exc-cancel">Đã hiểu</button>
+        </div>`}
+    </div>`;
+  dialogRoot.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector("#exc-cancel")?.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).classList.contains("dialog-overlay")) close();
+  });
+
+  if (canException) {
+    overlay.querySelector("#exc-confirm")?.addEventListener("click", async () => {
+      const reason = overlay.querySelector<HTMLTextAreaElement>("#exc-reason")!.value.trim();
+      if (!reason) {
+        toast("Vui lòng nhập lý do ngoại lệ.", "err");
+        return;
+      }
+      const btn = overlay.querySelector<HTMLButtonElement>("#exc-confirm")!;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner"></span> Đang gán…`;
+      try {
+        await onException(reason);
+        close();
+      } catch (e) {
+        toast(`Lỗi: ${(e as Error).message}`, "err");
+        btn.disabled = false;
+        btn.innerHTML = `⚠️ Gán ngoại lệ khẩn cấp`;
+      }
+    });
+  }
+}
+
 /** Dialog phân công nhiều người cho bước. */
 async function openAssignDialog(
   dialogRoot: HTMLElement,
@@ -2059,6 +2130,24 @@ async function openAssignDialog(
       close();
       onDone();
     } catch (e) {
+      // Kiểm tra có phải lỗi vi phạm phân công không.
+      const apiErr = e as import("../api.js").ApiError;
+      if (apiErr.code === "ASSIGNMENT_VIOLATION") {
+        const details = apiErr.details as
+          { violations?: { display_name: string; violations: string[] }[]; can_exception?: boolean } | undefined;
+        await handleAssignmentViolation(dialogRoot, details, async (reason) => {
+          // Thử lại với cờ ngoại lệ.
+          await api.setStepAssignees(execId, stepId, userIds, { is_exception: true, exception_reason: reason });
+          await api.setStepSupervisors(execId, stepId, supervisorIds);
+          toast(`⚠️ Đã gán ngoại lệ khẩn cấp.`);
+          close();
+          onDone();
+        });
+        submitBtn.disabled = false;
+        cancelBtn.disabled = false;
+        submitBtn.innerHTML = origLabel;
+        return;
+      }
       errEl.textContent = msg(e);
       errEl.hidden = false;
       submitBtn.disabled = false;

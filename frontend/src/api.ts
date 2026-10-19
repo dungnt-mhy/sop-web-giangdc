@@ -261,10 +261,12 @@ function apiBase(): string {
 export class ApiError extends Error {
   code: string;
   status: number;
-  constructor(status: number, code: string, message: string) {
+  details: unknown;
+  constructor(status: number, code: string, message: string, details?: unknown) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -288,11 +290,12 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     data = null;
   }
   if (!res.ok) {
-    const err = (data as { error?: { code?: string; message?: string } } | null)?.error;
+    const err = (data as { error?: { code?: string; message?: string; details?: unknown } } | null)?.error;
     throw new ApiError(
       res.status,
       err?.code ?? "UNKNOWN",
-      err?.message ?? "Có lỗi xảy ra. Vui lòng thử lại."
+      err?.message ?? "Có lỗi xảy ra. Vui lòng thử lại.",
+      err?.details
     );
   }
   return data as T;
@@ -659,8 +662,12 @@ export const api = {
   listStepAssignees(execId: string, stepId: string): Promise<{ items: { id: string; username: string; display_name: string; position: string | null }[] }> {
     return req("GET", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/assignees`);
   },
-  setStepAssignees(execId: string, stepId: string, user_ids: string[]): Promise<{ assigned: number }> {
-    return req("PUT", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/assignees`, { user_ids });
+  setStepAssignees(execId: string, stepId: string, user_ids: string[], opts?: { is_exception?: boolean; exception_reason?: string }): Promise<{ assigned: number; is_exception?: boolean }> {
+    return req("PUT", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/assignees`, {
+      user_ids,
+      is_exception: opts?.is_exception ?? false,
+      exception_reason: opts?.exception_reason ?? "",
+    });
   },
   listStepSupervisors(execId: string, stepId: string): Promise<{ items: { id: string; username: string; display_name: string; position: string | null }[] }> {
     return req("GET", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/supervisors`);

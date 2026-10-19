@@ -1009,6 +1009,91 @@ export async function handleSetStepSupervisors(ctx: Ctx, execId: string, stepId:
 }
 
 /** PUT /executions/{eid}/steps/{sid}/assignees — gán danh sách người (thay thế toàn bộ). */
+
+/**
+ * Kiểm tra phân công bước có vi phạm chức vụ/đơn vị không.
+ * Trả về danh sách vi phạm (rỗng = hợp lệ).
+ * - Kiểm tra chức vụ: user.position_id phải nằm trong execution_step_positions.
+ * - Kiểm tra đơn vị: user.org_unit_id phải cùng đơn vị hoặc cấp dưới của người gán.
+ */
+async function validateStepAssignment(
+  db: D1Database,
+  stepId: string,
+  userIds: string[],
+  assignerId: string,
+  assignerPermissions: string[]
+): Promise<{ user_id: string; display_name: string; violations: string[] }[]> {
+  // Admin bỏ qua mọi kiểm tra.
+  if (assignerPermissions.includes("*")) return [];
+
+  // Lấy chức vụ yêu cầu của bước.
+  const reqPositions = await db.prepare(
+    `SELECT p.id, p.name FROM execution_step_positions esp
+     JOIN positions p ON p.id = esp.position_id
+     WHERE esp.execution_step_id = ?`
+  ).bind(stepId).all<{ id: string; name: string }>();
+  const reqPosIds = (reqPositions.results ?? []).map((r) => r.id);
+  const reqPosNames = (reqPositions.results ?? []).map((r) => r.name).join(", ");
+
+  // Lấy đơn vị của người gán + danh sách đơn vị được phép (mình + cấp dưới).
+  const assigner = await db.prepare(`SELECT org_unit_id FROM users WHERE id = ?`).bind(assignerId)
+    .first<{ org_unit_id: string | null }>();
+  let allowedUnitIds: string[] | null = null;
+  if (assigner?.org_unit_id) {
+    allowedUnitIds = await getUnitDescendants(db, assigner.org_unit_id);
+  }
+
+  const violations: { user_id: string; display_name: string; violations: string[] }[] = [];
+  for (const uid of userIds) {
+    const u = await db.prepare(
+      `SELECT u.id, u.display_name, u.position_id, u.org_unit_id, p.name AS position_name, ou.name AS org_unit_name
+       FROM users u
+       LEFT JOIN positions p ON p.id = u.position_id
+       LEFT JOIN org_units ou ON ou.id = u.org_unit_id
+       WHERE u.id = ?`
+    ).bind(uid).first<{
+      id: string; display_name: string; position_id: string | null;
+      org_unit_id: string | null; position_name: string | null; org_unit_name: string | null;
+    }>();
+    if (!u) continue;
+    const v: string[] = [];
+    // Kiểm tra chức vụ (chỉ khi bước có yêu cầu chức vụ).
+    if (reqPosIds.length > 0 && (!u.position_id || !reqPosIds.includes(u.position_id))) {
+      v.push(`Sai chức vụ (cần: ${reqPosNames || "—"}, hiện tại: ${u.position_name || "chưa gán"})`);
+    }
+    // Kiểm tra đơn vị.
+    if (!u.org_unit_id) {
+      v.push("Chưa được gán đơn vị công tác");
+    } else if (allowedUnitIds && !allowedUnitIds.includes(u.org_unit_id)) {
+      v.push(`Khác đơn vị (đang ở: ${u.org_unit_name || u.org_unit_id})`);
+    }
+    if (v.length > 0) {
+      violations.push({ user_id: uid, display_name: u.display_name, violations: v });
+    }
+  }
+  return violations;
+}
+
+/**
+ * Kiểm tra người dùng có quyền gán ngoại lệ khẩn cấp không.
+ * Chỉ giám sát (có executions.manage) hoặc admin mới được.
+ */
+function canAssignException(permissions: string[]): boolean {
+  return permissions.includes("*") || permissions.includes("executions.manage");
+}
+
+/**
+ * Đếm số lần gán ngoại lệ của 1 người trong 7 ngày qua (chống lạm dụng).
+ */
+async function countRecentExceptions(db: D1Database, userId: string): Promise<number> {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const r = await db.prepare(
+    `SELECT COUNT(*) AS cnt FROM execution_step_history
+     WHERE actor_id = ? AND action = 'ASSIGNED_EXCEPTION' AND created_at >= ?`
+  ).bind(userId, sevenDaysAgo).first<{ cnt: number }>();
+  return r?.cnt ?? 0;
+}
+
 export async function handleSetStepAssignees(ctx: Ctx, execId: string, stepId: string) {
   const me = await requirePermission(ctx, "executions.perform");
   if (me instanceof Response) return me;
@@ -1038,6 +1123,37 @@ export async function handleSetStepAssignees(ctx: Ctx, execId: string, stepId: s
     if (!u) return apiError("VALIDATION_ERROR", `Người dùng không tồn tại: ${uid}`, ctx.requestId);
   }
 
+  // Kiểm tra chức vụ + đơn vị (mức 2: chặn mềm).
+  const isException = body?.is_exception === true;
+  const exceptionReason = typeof body?.exception_reason === "string" ? body.exception_reason.trim() : "";
+  const violations = await validateStepAssignment(db, stepId, [...new Set(userIds)], me.user.id, me.permissions);
+
+  if (violations.length > 0 && !isException) {
+    // Chặn và trả về chi tiết vi phạm để frontend hiện dialog.
+    return apiError("VALIDATION_ERROR", "Phân công vi phạm quy định.", ctx.requestId, {
+      code: "ASSIGNMENT_VIOLATION",
+      violations,
+      can_exception: canAssignException(me.permissions),
+    });
+  }
+
+  if (violations.length > 0 && isException) {
+    // Gán ngoại lệ khẩn cấp: cần quyền + bắt buộc lý do.
+    if (!canAssignException(me.permissions)) {
+      return apiError("FORBIDDEN", "Chỉ giám sát trở lên mới được gán ngoại lệ khẩn cấp.", ctx.requestId);
+    }
+    if (!exceptionReason) {
+      return apiError("VALIDATION_ERROR", "Gán ngoại lệ bắt buộc phải nhập lý do.", ctx.requestId);
+    }
+    // Chặn tự gán ngoại lệ cho mình rồi tự duyệt (nếu người gán cũng là giám sát bước).
+    const isStepSupervisor = await db.prepare(
+      `SELECT 1 FROM execution_step_supervisor_assignees WHERE execution_step_id = ? AND user_id = ? LIMIT 1`
+    ).bind(stepId, me.user.id).first();
+    if (isStepSupervisor && userIds.includes(me.user.id)) {
+      return apiError("VALIDATION_ERROR", "Không được vừa gán ngoại lệ cho mình vừa là người duyệt bước này.", ctx.requestId);
+    }
+  }
+
   const now = nowIso();
   const stmts: D1PreparedStatement[] = [
     db.prepare(`DELETE FROM execution_step_assignees WHERE execution_step_id = ?`).bind(stepId),
@@ -1053,19 +1169,85 @@ export async function handleSetStepAssignees(ctx: Ctx, execId: string, stepId: s
   const asgNames2 = userIds.length > 0
     ? (await db.prepare(`SELECT display_name FROM users WHERE id IN (${userIds.map(() => "?").join(",")})`).bind(...userIds).all<{ display_name: string }>()).results?.map((r) => r.display_name).join(", ") ?? ""
     : "xóa phân công";
+  const historyAction = violations.length > 0 && isException ? "ASSIGNED_EXCEPTION" : "ASSIGNED";
+  const historyReason = violations.length > 0 && isException
+    ? `⚠️ Gán ngoại lệ khẩn cấp: ${asgNames2} — Lý do: ${exceptionReason} — Vi phạm: ${violations.map((v) => `${v.display_name} (${v.violations.join("; ")})`).join(", ")}`
+    : `Phân công thực hiện: ${asgNames2}`;
   await db.prepare(
-    `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, 'ASSIGNED', ?, ?, ?)`
-  ).bind(crypto.randomUUID(), execId, stepId, me.user.id, `Phân công thực hiện: ${asgNames2}`, now).run();
+    `INSERT INTO execution_step_history (id, execution_id, step_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(crypto.randomUUID(), execId, stepId, historyAction, me.user.id, historyReason, now).run();
 
   await audit(db, {
-    event_type: "STEP_ASSIGNEES_SET",
+    event_type: violations.length > 0 && isException ? "STEP_ASSIGN_EXCEPTION" : "STEP_ASSIGNEES_SET",
     actor_id: me.user.id,
     object_type: "execution_step",
     object_id: stepId,
     request_id: ctx.requestId,
-    diff: { user_ids: userIds },
+    diff: {
+      user_ids: userIds,
+      is_exception: violations.length > 0 && isException,
+      exception_reason: violations.length > 0 && isException ? exceptionReason : null,
+      violations: violations.length > 0 ? violations : null,
+    },
   });
-  return ok({ assigned: [...new Set(userIds)].length });
+
+  // Thông báo cho giám sát khi có gán ngoại lệ.
+  if (violations.length > 0 && isException) {
+    // Lấy danh sách giám sát bước + giám sát lượt + người phê duyệt.
+    const supIds = new Set<string>();
+    const stepSups = await db.prepare(
+      `SELECT user_id FROM execution_step_supervisor_assignees WHERE execution_step_id = ?`
+    ).bind(stepId).all<{ user_id: string }>();
+    for (const r of stepSups.results ?? []) supIds.add(r.user_id);
+    const execSups = await db.prepare(
+      `SELECT user_id FROM execution_supervisors WHERE execution_id = ?`
+    ).bind(execId).all<{ user_id: string }>();
+    for (const r of execSups.results ?? []) supIds.add(r.user_id);
+    const approvers = await db.prepare(
+      `SELECT user_id FROM execution_approvers WHERE execution_id = ?`
+    ).bind(execId).all<{ user_id: string }>();
+    for (const r of approvers.results ?? []) supIds.add(r.user_id);
+    supIds.delete(me.user.id); // Không thông báo cho chính người gán.
+
+    if (supIds.size > 0) {
+      const stepInfo = await db.prepare(`SELECT code, title FROM execution_steps WHERE id = ?`).bind(stepId)
+        .first<{ code: string; title: string }>();
+      const assignerName = me.user.display_name ?? me.user.username;
+      await notifyUsers(db, [...supIds], {
+        type: "ASSIGN_EXCEPTION",
+        title: `⚠️ Gán ngoại lệ khẩn cấp — bước ${stepInfo?.code ?? ""}`,
+        message: `${assignerName} vừa gán ngoại lệ: ${asgNames2} vào bước "${stepInfo?.title ?? ""}". Lý do: ${exceptionReason}`,
+        link: `#/executions/${execId}`,
+      }, ctx.env);
+    }
+
+    // Kiểm tra lạm dụng: đếm số lần gán ngoại lệ trong 7 ngày.
+    const recentCount = await countRecentExceptions(db, me.user.id);
+    if (recentCount >= 3) {
+      // Gửi cảnh báo cho admin (user có quyền *).
+      const admins = await db.prepare(
+        `SELECT DISTINCT u.id FROM users u
+         INNER JOIN user_roles ur ON ur.user_id = u.id
+         INNER JOIN roles r ON r.code = ur.role
+         WHERE r.code = 'admin' AND u.status = 'active' AND u.id != ?`
+      ).bind(me.user.id).all<{ id: string }>();
+      const adminIds = (admins.results ?? []).map((r) => r.id);
+      if (adminIds.length > 0) {
+        const level = recentCount >= 5 ? "🔴" : "🟡";
+        await notifyUsers(db, adminIds, {
+          type: "EXCEPTION_ABUSE_WARNING",
+          title: `${level} Cảnh báo lạm dụng gán ngoại lệ`,
+          message: `${me.user.display_name ?? me.user.username} đã gán ngoại lệ ${recentCount} lần trong 7 ngày qua. Vui lòng kiểm tra.`,
+          link: `#/audit`,
+        }, ctx.env);
+      }
+    }
+  }
+
+  return ok({
+    assigned: [...new Set(userIds)].length,
+    is_exception: violations.length > 0 && isException,
+  });
 }
 
 // Chuyển trạng thái execution — dùng chung.
