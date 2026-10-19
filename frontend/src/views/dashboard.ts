@@ -76,12 +76,26 @@ export async function renderDashboard(root: HTMLElement): Promise<void> {
   }
 
   root.querySelector("#db-apply")!.addEventListener("click", load);
-  root.querySelector("#db-export")!.addEventListener("click", () => {
+  root.querySelector("#db-export")!.addEventListener("click", async () => {
     const q = new URLSearchParams();
     if (fromEl.value) q.set("from", fromEl.value);
     if (toEl.value) q.set("to", toEl.value);
-    window.open(api.dashboardExportUrl(q.toString()), "_blank");
     toast("Đang xuất CSV…");
+    try {
+      const resp = await fetch(api.dashboardExportUrl(q.toString()), { credentials: "include" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const blob = await resp.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "luot-cong-viec.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      toast("Đã xuất file CSV.");
+    } catch (e) {
+      toast(`Lỗi xuất CSV: ${e instanceof Error ? e.message : e}`);
+    }
   });
 
   await load();
