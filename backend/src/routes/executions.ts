@@ -1428,9 +1428,9 @@ export async function handleUpdateStepNote(ctx: Ctx, execId: string, stepId: str
   if (!step || step.execution_id !== execId) {
     return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
   }
-  // Không sửa ghi chú khi bước đã hoàn thành/bỏ qua/hủy.
-  if (["PASSED", "SKIPPED", "CANCELLED"].includes(step.status)) {
-    return apiError("VALIDATION_ERROR", "Bước đã hoàn thành — không thể sửa ghi chú.", ctx.requestId);
+  // Không sửa ghi chú khi bước đã báo hoàn thành/chờ duyệt/hoàn thành/bỏ qua/hủy.
+  if (["PENDING_REVIEW", "PASSED", "SKIPPED", "CANCELLED"].includes(step.status)) {
+    return apiError("VALIDATION_ERROR", "Bước đã báo hoàn thành — không thể sửa ghi chú.", ctx.requestId);
   }
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;

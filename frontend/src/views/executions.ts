@@ -1468,7 +1468,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                   canSkip ? `<button class="btn sm" data-step="skip">⏭️ Bỏ qua</button>` : "",
                   canSkip ? `<button class="btn sm secondary" data-step="request-skip">🙏 Xin bỏ qua</button>` : "",
                   active && !["PASSED", "SKIPPED", "CANCELLED", "PENDING_REVIEW"].includes(st.status) && !pendingSkip ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : "",
-                  active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) ? `<button class="btn sm" data-step="note">📝 Ghi chú</button>` : "",
+                  active && !["PENDING_REVIEW", "PASSED", "SKIPPED", "CANCELLED"].includes(st.status) ? `<button class="btn sm" data-step="note">📝 Ghi chú</button>` : "",
                 ].filter(Boolean);
                 return btns.length > 0 ? `<div class="step-actions">${btns.join("")}</div>` : "";
               })()}
