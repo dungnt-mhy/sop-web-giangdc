@@ -128,7 +128,10 @@ import {
   handleMarkAllRead,
   handleMarkRead,
   handleUnreadCount,
+  handleTelegramLinkUrl,
+  handleTelegramUnlink,
 } from "./routes/notifications";
+import { handleTelegramWebhook } from "./telegram.js";
 import {
   handleDashboardExecutions,
   handleDashboardExportCsv,
@@ -278,6 +281,14 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
   if (path === "/notifications" && method === "GET") return handleListNotifications(ctx);
   if (path === "/notifications/unread-count" && method === "GET") return handleUnreadCount(ctx);
   if (path === "/notifications/read-all" && method === "POST") return handleMarkAllRead(ctx);
+  // Telegram: webhook (public, không cần auth) + API liên kết (cần auth).
+  if (path === "/telegram/webhook" && method === "POST") {
+    const update = await ctx.request.json().catch(() => ({})) as { message?: { text?: string; chat?: { id?: number | string }; from?: { id?: number } } };
+    await handleTelegramWebhook(ctx.env as unknown as Record<string, unknown> & { sop_demo_db: D1Database }, update);
+    return ok({ ok: true });
+  }
+  if (path === "/telegram/link-url" && method === "GET") return handleTelegramLinkUrl(ctx);
+  if (path === "/telegram/unlink" && method === "POST") return handleTelegramUnlink(ctx);
   const notifM = /^\/notifications\/([^/:]+):read$/.exec(path);
   if (notifM && method === "POST") return handleMarkRead(ctx, decodeURIComponent(notifM[1]));
 

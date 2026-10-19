@@ -518,7 +518,7 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
       title: `Bạn được giao lượt ${code}`,
       message: `${me.user.display_name} đã tạo lượt công việc "${pname?.name ?? ""}" và giao cho bạn.`,
       link: `#/executions/${execId}`,
-    });
+    }, ctx.env);
   }
   return ok(toPublicExec(created!, pname?.name, { total: steps.results.length, done: 0 }), 201);
 }
@@ -1086,7 +1086,7 @@ async function transitionExecution(
         title: `Lượt ${execCode} đã bắt đầu`,
         message: `${me.user.display_name} đã bắt đầu thực hiện lượt ${execCode}.`,
         link: execLink,
-      });
+      }, ctx.env);
     }
   }
   if (to === "PENDING_CONFIRMATION") {
@@ -1100,7 +1100,7 @@ async function transitionExecution(
         title: `Lượt ${execCode} chờ xác nhận hoàn thành`,
         message: `${me.user.display_name} đã báo hoàn thành lượt ${execCode}. Vui lòng vào xác nhận.`,
         link: execLink,
-      });
+      }, ctx.env);
     }
   } else if (to === "COMPLETED") {
     // Xác nhận hoàn thành → thông báo cho người tạo và người được giao.
@@ -1112,7 +1112,7 @@ async function transitionExecution(
         title: `Lượt ${execCode} đã hoàn thành`,
         message: `${me.user.display_name} đã xác nhận hoàn thành lượt ${execCode}.`,
         link: execLink,
-      });
+      }, ctx.env);
     }
   } else if (to === "CANCELLED") {
     // Hủy lượt → thông báo cho người tạo và người được giao.
@@ -1124,7 +1124,7 @@ async function transitionExecution(
         title: `Lượt ${execCode} đã bị hủy`,
         message: `${me.user.display_name} đã hủy lượt ${execCode}. Lý do: ${extra?.cancel_reason ?? ""}`,
         link: execLink,
-      });
+      }, ctx.env);
     }
   }
   const updated = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
@@ -1248,7 +1248,7 @@ export async function handleRejectConfirmation(ctx: Ctx, id: string): Promise<Re
         title: `Lượt ${e.code} bị yêu cầu làm lại`,
         message: `${me.user.display_name} đã từ chối xác nhận lượt ${e.code}, yêu cầu làm lại ${stepIds.length} bước. Lý do: ${reason}`,
         link: `#/executions/${id}`,
-      });
+      }, ctx.env);
     }
   }
   const updated = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(id).first<ExecutionRow>();
@@ -1439,7 +1439,7 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
       title: `Bước ${step.code} chờ duyệt`,
       message: `${me.user.display_name} đã báo hoàn thành bước ${step.code} (${step.title}). Vui lòng vào duyệt.`,
       link: `#/executions/${execId}`,
-    });
+    }, ctx.env);
   }
   const updated = await db.prepare(`SELECT * FROM execution_steps WHERE id = ?`).bind(stepId).first<ExecStepRow>();
   return ok(toPublicStep(updated!));
@@ -1481,7 +1481,7 @@ export async function handleApproveStep(ctx: Ctx, execId: string, stepId: string
       title: `Bước ${step.code} đã đạt`,
       message: `${me.user.display_name} đã duyệt bước ${step.code} (${step.title}).`,
       link: `#/executions/${execId}`,
-    });
+    }, ctx.env);
   }
   const updated = await db.prepare(`SELECT * FROM execution_steps WHERE id = ?`).bind(stepId).first<ExecStepRow>();
   return ok(toPublicStep(updated!));
@@ -1527,7 +1527,7 @@ export async function handleRejectStep(ctx: Ctx, execId: string, stepId: string)
       title: `Bước ${step.code} bị yêu cầu làm lại`,
       message: `${me.user.display_name} yêu cầu làm lại bước ${step.code} (${step.title}). Lý do: ${reason}`,
       link: `#/executions/${execId}`,
-    });
+    }, ctx.env);
   }
   const updated = await db.prepare(`SELECT * FROM execution_steps WHERE id = ?`).bind(stepId).first<ExecStepRow>();
   return ok(toPublicStep(updated!));
@@ -1706,7 +1706,7 @@ export async function handleRequestSkip(ctx: Ctx, execId: string, stepId: string
       title: `Xin bỏ qua bước ${step.code}`,
       message: `${me.user.display_name} xin bỏ qua bước ${step.code} (${step.title}). Lý do: ${reason}`,
       link: `#/executions/${execId}`,
-    });
+    }, ctx.env);
   }
   return ok({ requested: true });
 }
@@ -1732,7 +1732,7 @@ export async function handleApproveSkip(ctx: Ctx, execId: string, stepId: string
     title: `Yêu cầu bỏ qua được duyệt`,
     message: `${me.user.display_name} đã duyệt yêu cầu bỏ qua bước của bạn.`,
     link: `#/executions/${execId}`,
-  });
+  }, ctx.env);
   return ok({ approved: true });
 }
 
@@ -1755,7 +1755,7 @@ export async function handleRejectSkip(ctx: Ctx, execId: string, stepId: string)
     title: `Yêu cầu bỏ qua bị từ chối`,
     message: `${me.user.display_name} đã từ chối yêu cầu bỏ qua bước của bạn.${reason ? " Lý do: " + reason : ""}`,
     link: `#/executions/${execId}`,
-  });
+  }, ctx.env);
   return ok({ rejected: true });
 }
 

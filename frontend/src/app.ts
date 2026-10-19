@@ -169,6 +169,39 @@ function renderShell(): void {
     toast("Đã đăng xuất.", "ok");
   };
   const notif = $("#btn-notif") as HTMLButtonElement;
+  // Nút liên kết Telegram.
+  const tgBtn = $("#btn-telegram") as HTMLButtonElement;
+  async function refreshTelegramBtn(): Promise<void> {
+    try {
+      const { configured, linked } = await api.telegramLinkUrl();
+      if (!configured) { tgBtn.style.display = "none"; return; }
+      tgBtn.style.display = "";
+      tgBtn.textContent = linked ? "✅" : "✈️";
+      tgBtn.title = linked ? "Đã liên kết Telegram — bấm để hủy" : "Nhận thông báo qua Telegram";
+    } catch { /* bỏ qua */ }
+  }
+  tgBtn.onclick = async () => {
+    try {
+      const { configured, linked, link_url } = await api.telegramLinkUrl();
+      if (!configured) { toast("Chưa cấu hình Telegram Bot.", "err"); return; }
+      if (linked) {
+        if (!confirm("Hủy liên kết Telegram? Bạn sẽ không nhận thông báo SOP qua Telegram nữa.")) return;
+        await api.telegramUnlink();
+        toast("Đã hủy liên kết Telegram.", "ok");
+        refreshTelegramBtn();
+        return;
+      }
+      if (link_url) {
+        window.open(link_url, "_blank");
+        toast("Mở Telegram và bấm Start để liên kết.", "ok");
+        // Kiểm tra lại sau vài giây.
+        setTimeout(refreshTelegramBtn, 5000);
+      }
+    } catch (e) {
+      toast("Không tải được thông tin Telegram.", "err");
+    }
+  };
+  refreshTelegramBtn();
   // Dropdown thông báo.
   let notifOpen = false;
   let notifPanel: HTMLElement | null = null;

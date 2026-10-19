@@ -459,7 +459,7 @@ async function transitionVersion(
         title: `${procLabel} chờ duyệt`,
         message: `${me.user.display_name} đã gửi duyệt ${procLabel}.`,
         link: verLink,
-      });
+      }, ctx.env);
     }
   } else if (to === "APPROVED" || to === "DRAFT") {
     // Duyệt / trả về → thông báo cho người gửi duyệt.
@@ -473,7 +473,7 @@ async function transitionVersion(
           ? `${me.user.display_name} đã duyệt ${procLabel}.`
           : `${me.user.display_name} đã trả về ${procLabel} để sửa.`,
         link: verLink,
-      });
+      }, ctx.env);
     }
   }
   const updated = await db.prepare(`SELECT * FROM process_versions WHERE id = ?`).bind(v.id).first<VersionRow>();
@@ -558,7 +558,7 @@ export async function handleRequestReactivation(ctx: Ctx, versionId: string): Pr
       title: `Yêu cầu kích hoạt lại ${proc?.code ?? ""} v${v.version_number}`,
       message: `${me.user.display_name} đã yêu cầu kích hoạt lại phiên bản v${v.version_number} của ${proc?.name ?? ""}.`,
       link: `#/processes/${v.process_id}`,
-    });
+    }, ctx.env);
   }
   return ok({ requested: true });
 }
@@ -595,7 +595,7 @@ export async function handleApproveReactivation(ctx: Ctx, versionId: string): Pr
       title: `Yêu cầu kích hoạt lại được duyệt`,
       message: `${me.user.display_name} đã duyệt kích hoạt lại v${v.version_number} của ${proc?.name ?? ""}.`,
       link: `#/processes/${v.process_id}`,
-    });
+    }, ctx.env);
   }
   // Kích hoạt: gọi transitionVersion với RETIRED -> ACTIVE.
   return transitionVersion(ctx, versionId, ["RETIRED"], "ACTIVE", "processes.approve", "PROCESS_VERSION_ACTIVATED");
@@ -638,7 +638,7 @@ export async function handleRejectReactivation(ctx: Ctx, versionId: string): Pro
       title: `Yêu cầu kích hoạt lại bị từ chối`,
       message: `${me.user.display_name} đã từ chối kích hoạt lại v${v.version_number} của ${proc?.name ?? ""}. Lý do: ${reason}`,
       link: `#/processes/${v.process_id}`,
-    });
+    }, ctx.env);
   }
   return ok({ rejected: true });
 }

@@ -661,6 +661,12 @@ export const api = {
   markAllNotificationsRead(): Promise<{ ok: boolean }> {
     return req("POST", `/notifications/read-all`);
   },
+  telegramLinkUrl(): Promise<{ configured: boolean; linked: boolean; link_url: string | null }> {
+    return req("GET", `/telegram/link-url`);
+  },
+  telegramUnlink(): Promise<{ ok: boolean }> {
+    return req("POST", `/telegram/unlink`);
+  },
   updateExecution(id: string, input: Record<string, unknown>): Promise<Execution> {
     return req("PATCH", `/executions/${encodeURIComponent(id)}`, input);
   },

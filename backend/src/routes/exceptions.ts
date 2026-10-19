@@ -119,7 +119,7 @@ export async function handleCreateException(ctx: Ctx, execId: string) {
       title: `Ngoại lệ mới ở lượt ${execFull.code}`,
       message: `${me.user.display_name} đã báo ngoại lệ "${title}" (mức ${severity}).`,
       link: `#/exceptions`,
-    });
+    }, ctx.env);
   }
 
   const row = await db.prepare(`SELECT * FROM exceptions WHERE id = ?`).bind(id).first<ExceptionRow>();
@@ -222,7 +222,7 @@ export async function handleResolveException(ctx: Ctx, exceptionId: string) {
       title: `Ngoại lệ đã được khắc phục`,
       message: `${me.user.display_name} đã khắc phục ngoại lệ "${ex.title}".`,
       link: `#/exceptions`,
-    });
+    }, ctx.env);
   }
   const updated = await db.prepare(`SELECT * FROM exceptions WHERE id = ?`).bind(exceptionId).first<ExceptionRow>();
   return ok(toPublic(updated!));

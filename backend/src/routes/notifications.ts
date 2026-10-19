@@ -1,11 +1,19 @@
 import type { Ctx } from "./context";
 import { ok, apiError } from "../errors.js";
 import { newId, nowIso } from "../db.js";
+import { notifyTelegram } from "../telegram.js";
 
 const FROM_EMAIL = "Dungnt.connect@gmail.com";
 const FROM_NAME = "SOP Demo";
 // TẠM ĐÓNG BĂNG gửi email theo yêu cầu (2026-10-18).
 const EMAIL_ENABLED = false;
+
+/** Env tối thiểu để gửi Telegram (được truyền từ ctx.env). */
+export interface NotifyEnv {
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_BOT_USERNAME?: string;
+  sop_demo_db: D1Database;
+}
 
 export interface CreateNotificationInput {
   user_id: string;
@@ -41,7 +49,8 @@ async function sendEmail(to: string, subject: string, htmlBody: string): Promise
 /** Tạo thông báo trong app cho một user (kèm gửi email nếu có). */
 export async function createNotification(
   db: D1Database,
-  input: CreateNotificationInput
+  input: CreateNotificationInput,
+  env?: NotifyEnv
 ): Promise<void> {
   try {
     await db.prepare(
@@ -56,6 +65,10 @@ export async function createNotification(
       input.link ?? null,
       nowIso()
     ).run();
+    // Gửi Telegram nếu user đã liên kết (không chặn luồng chính).
+    if (env) {
+      notifyTelegram(env, input.user_id, input.title, input.message, input.link).catch(() => {});
+    }
     // Gửi email nếu user có email (trừ khi tắt explicitly). Đang đóng băng.
     if (EMAIL_ENABLED && input.sendEmail !== false) {
       const u = await db.prepare(`SELECT email FROM users WHERE id = ?`).bind(input.user_id).first<{ email: string | null }>();
@@ -82,7 +95,8 @@ function escapeHtml(s: string): string {
 export async function notifyUsers(
   db: D1Database,
   userIds: string[],
-  input: Omit<CreateNotificationInput, "user_id">
+  input: Omit<CreateNotificationInput, "user_id">,
+  env?: NotifyEnv
 ): Promise<void> {
   const unique = [...new Set(userIds.filter(Boolean))];
   if (unique.length === 0) return;
@@ -96,6 +110,12 @@ export async function notifyUsers(
     ).bind(id, uid, input.type, input.title, input.message, input.link ?? null, now);
   });
   await db.batch(stmts);
+  // Gửi Telegram cho từng user đã liên kết.
+  if (env) {
+    for (const uid of unique) {
+      notifyTelegram(env, uid, input.title, input.message, input.link).catch(() => {});
+    }
+  }
 }
 
 // GET /api/v1/notifications — danh sách thông báo của tôi.
@@ -146,5 +166,31 @@ export async function handleMarkAllRead(ctx: Ctx): Promise<Response> {
   await db.prepare(
     `UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0`
   ).bind(me.user.id).run();
+  return ok({ ok: true });
+}
+
+// GET /api/v1/telegram/link-url — lấy link t.me để liên kết Telegram.
+export async function handleTelegramLinkUrl(ctx: Ctx): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as { user: { id: string; telegram_chat_id?: string | null } };
+  const db = ctx.env.sop_demo_db;
+  const u = await db.prepare(`SELECT telegram_chat_id FROM users WHERE id = ?`).bind(me.user.id).first<{ telegram_chat_id: string | null }>();
+  const username = (ctx.env as unknown as Record<string, string>).TELEGRAM_BOT_USERNAME;
+  const configured = !!(ctx.env as unknown as Record<string, string>).TELEGRAM_BOT_TOKEN;
+  return ok({
+    configured,
+    linked: !!u?.telegram_chat_id,
+    link_url: configured && username ? `https://t.me/${username}?start=${me.user.id}` : null,
+  });
+}
+
+// POST /api/v1/telegram/unlink — hủy liên kết Telegram.
+export async function handleTelegramUnlink(ctx: Ctx): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as { user: { id: string } };
+  const db = ctx.env.sop_demo_db;
+  await db.prepare(`UPDATE users SET telegram_chat_id = NULL WHERE id = ?`).bind(me.user.id).run();
   return ok({ ok: true });
 }
