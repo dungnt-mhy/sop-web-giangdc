@@ -1333,6 +1333,7 @@ function renderExecDiagram(steps: import("../api.js").ExecutionStep[], pendingSk
     PASSED: "Đạt",
     FAILED: "Không đạt",
     SKIPPED: "Bỏ qua",
+    CANCELLED: "Đã hủy",
   };
   return `
     <div class="flow-diagram" role="img" aria-label="Sơ đồ lượt thực hiện ${steps.length} bước">
@@ -1357,7 +1358,7 @@ function renderExecDiagram(steps: import("../api.js").ExecutionStep[], pendingSk
           <div class="flow-title">${esc(st.title)}</div>
           ${positions.length > 0 ? `<div class="flow-meta">👤 Thực hiện: ${positions.map((p) => esc(p.name)).join(", ")}</div>` : ""}
           ${supervisors.length > 0 ? `<div class="flow-meta">👁️ Giám sát: ${supervisors.map((p) => esc(p.name)).join(", ")}</div>` : ""}
-          ${assignees.length > 0 ? `<div class="flow-meta">✅ ${assignees.map((a) => esc(a.display_name)).join(", ")}</div>` : `<div class="flow-meta muted">Chưa phân công</div>`}
+          ${assignees.length > 0 ? `<div class="flow-meta" style="color:#2563eb;">Người thực hiện: ${assignees.map((a) => esc(a.display_name)).join(", ")}</div>` : `<div class="flow-meta" style="color:#2563eb;">Người thực hiện: chưa phân công</div>`}
           ${evCount > 0 ? `<div class="flow-meta">📷 ${evCount} bằng chứng</div>` : ""}
           ${st.completed_at ? `<div class="flow-meta muted small">Xong: ${esc(st.completed_at.slice(0, 16).replace("T", " "))}</div>` : ""}
         </div>`;
