@@ -416,8 +416,6 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       await loadAllEvidence(body, e.id);
       // Tải phân công cho từng bước.
       await loadAllAssignees(body, e.id);
-      // Tải lịch sử khi mở chi tiết bước.
-      bindStepHistory(body, e.id);
       // Tải danh sách ngoại lệ.
       const isActive = e.status === "IN_PROGRESS" || e.status === "PAUSED";
       await loadExceptions(body, dialogRoot, e.id, isActive, reload);
@@ -1083,48 +1081,6 @@ function openResolveDialog(dialogRoot: HTMLElement, exceptionId: string, onDone:
 
 const SHIFT_LABEL: Record<string, string> = { MORNING: "sáng", NOON: "trưa", AFTERNOON: "chiều", NIGHT: "đêm" };
 
-/** Tải lịch sử thao tác khi mở chi tiết bước. */
-function bindStepHistory(body: HTMLElement, execId: string): void {
-  const ACTION_LABEL: Record<string, string> = {
-    REPORTED: "📤 Báo hoàn thành",
-    APPROVED: "✅ Duyệt đạt",
-    REJECTED: "🔄 Yêu cầu làm lại",
-    STARTED: "▶️ Bắt đầu",
-    SKIPPED: "⏭️ Bỏ qua",
-    SKIP_REQUESTED: "🙏 Xin bỏ qua",
-  };
-  body.querySelectorAll<HTMLDetailsElement>("details.step-history").forEach((det) => {
-    det.addEventListener("toggle", async () => {
-      if (!det.open) return;
-      const sid = det.dataset.historyFor!;
-      const bodyEl = det.querySelector<HTMLElement>(".step-history-body")!;
-      if (bodyEl.dataset.loaded) return;
-      try {
-        const { items } = await api.getStepHistory(execId, sid);
-        if (items.length === 0) {
-          bodyEl.innerHTML = `<span class="muted small">Chưa có thao tác nào.</span>`;
-        } else {
-          let rejectCount = 0;
-          bodyEl.innerHTML = items.map((h) => {
-            let label = ACTION_LABEL[h.action] ?? h.action;
-            if (h.action === "REJECTED") {
-              rejectCount++;
-              label = `🔄 Yêu cầu làm lại lần ${rejectCount}`;
-            }
-            return `<div class="hist-item"><span class="hist-action">${esc(label)}</span> ` +
-            `<span class="muted small">👤 ${esc(h.actor_name ?? "—")} · 🕐 ${esc(formatDateTime(h.created_at))}</span>` +
-            (h.reason ? `<div class="hist-reason">${esc(h.reason)}</div>` : "") +
-            `</div>`;
-          }).join("");
-        }
-        bodyEl.dataset.loaded = "1";
-      } catch {
-        bodyEl.innerHTML = `<span class="muted small">Không tải được lịch sử.</span>`;
-      }
-    });
-  });
-}
-
 /** Tải phân công cho tất cả các bước (song song). */
 async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void> {
   const els = Array.from(body.querySelectorAll<HTMLElement>("[data-assignees-for]"));
@@ -1529,17 +1485,12 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${(st as unknown as Record<string, unknown>).expected_result ? `<div class="step-detail-row"><span class="step-dlabel">Kết quả mong đợi:</span> ${esc((st as unknown as Record<string, unknown>).expected_result as string)}</div>` : ""}
                 ${(st as unknown as Record<string, unknown>).input_desc ? `<div class="step-detail-row"><span class="step-dlabel">Đầu vào:</span> ${esc((st as unknown as Record<string, unknown>).input_desc as string)}</div>` : ""}
                 ${(st as unknown as Record<string, unknown>).output_desc ? `<div class="step-detail-row"><span class="step-dlabel">Đầu ra / Bàn giao:</span> ${esc((st as unknown as Record<string, unknown>).output_desc as string)}</div>` : ""}
-                ${st.note ? `<div class="step-detail-row"><span class="step-dlabel">📝 Ghi chú:</span><span class="note-content">${esc(st.note)}</span></div>` : ""}
                 ${(st as unknown as Record<string, unknown>).target_duration_min ? `<div class="step-detail-row"><span class="step-dlabel">Thời gian mục tiêu:</span> ${esc(String((st as unknown as Record<string, unknown>).target_duration_min))} phút</div>` : ""}
                 ${st.is_required ? "" : `<div class="step-detail-row"><span class="step-dlabel">Bắt buộc:</span> Không (bước tùy chọn, được phép bỏ qua)</div>`}
                 ${((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed ? `<div class="step-detail-row"><span class="step-dlabel">⏭️ Bỏ qua:</span> ✅ Cho phép bỏ qua bước này (người giám sát duyệt)</div>` : ""}
                 ${(st as unknown as Record<string, unknown>).failure_policy ? `<div class="step-detail-row"><span class="step-dlabel">Xử lý khi lỗi:</span> ${esc(typeof (st as unknown as Record<string, unknown>).failure_policy === "string" ? (st as unknown as Record<string, unknown>).failure_policy as string : JSON.stringify((st as unknown as Record<string, unknown>).failure_policy))}</div>` : ""}
                 ${(st as unknown as Record<string, unknown>).warning ? `<div class="step-detail-row"><span class="step-dlabel">⚠️ Cảnh báo:</span> ${esc((st as unknown as Record<string, unknown>).warning as string)}</div>` : ""}
                 ${st.instruction ? `<div class="step-guide"><div class="step-guide-title">📖 Hướng dẫn thực hiện</div><div class="step-guide-body">${esc(st.instruction)}</div></div>` : ""}
-                <details class="step-history" data-history-for="${esc(st.id)}">
-                  <summary>🕐 Lịch sử thao tác</summary>
-                  <div class="step-history-body"><span class="muted small">Đang tải…</span></div>
-                </details>
               </div>
             </details>` : ""}
             <div class="evidence-section" data-evidence-for="${esc(st.id)}">
