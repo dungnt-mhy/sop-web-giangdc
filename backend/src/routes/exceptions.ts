@@ -66,7 +66,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 /** POST /executions/{eid}/exceptions — tạo ngoại lệ mới. */
 export async function handleCreateException(ctx: Ctx, execId: string) {
-  const me = await requirePermission(ctx, "executions.execute");
+  const me = await requirePermission(ctx, "executions.perform");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
 

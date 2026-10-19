@@ -839,7 +839,7 @@ export async function handleListStepSupervisors(ctx: Ctx, execId: string, stepId
 
 /** PUT /executions/{eid}/steps/{sid}/supervisors — gán danh sách người giám sát (thay thế toàn bộ). */
 export async function handleSetStepSupervisors(ctx: Ctx, execId: string, stepId: string) {
-  const me = await requirePermission(ctx, "executions.execute");
+  const me = await requirePermission(ctx, "executions.perform");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
 
@@ -897,7 +897,7 @@ export async function handleSetStepSupervisors(ctx: Ctx, execId: string, stepId:
 
 /** PUT /executions/{eid}/steps/{sid}/assignees — gán danh sách người (thay thế toàn bộ). */
 export async function handleSetStepAssignees(ctx: Ctx, execId: string, stepId: string) {
-  const me = await requirePermission(ctx, "executions.execute");
+  const me = await requirePermission(ctx, "executions.perform");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
 
@@ -1535,7 +1535,7 @@ export async function handleRejectStep(ctx: Ctx, execId: string, stepId: string)
 
 // PATCH /executions/:id/steps/:stepId/note — cập nhật ghi chú bước.
 export async function handleUpdateStepNote(ctx: Ctx, execId: string, stepId: string): Promise<Response> {
-  const me = await requirePermission(ctx, "executions.execute");
+  const me = await requirePermission(ctx, "executions.perform");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
 

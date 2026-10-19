@@ -72,7 +72,7 @@ async function getExecStep(ctx: Ctx, execId: string, stepId: string) {
 
 /** POST /executions/{eid}/steps/{sid}/evidence — tải lên bằng chứng (multipart/form-data). */
 export async function handleUploadEvidence(ctx: Ctx, execId: string, stepId: string) {
-  const me = await requirePermission(ctx, "executions.execute");
+  const me = await requirePermission(ctx, "executions.perform");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
 
@@ -185,7 +185,7 @@ export async function handleListEvidence(ctx: Ctx, execId: string, stepId: strin
 
 /** DELETE /evidence/{id} — xóa bằng chứng (chỉ khi bước chưa hoàn thành). */
 export async function handleDeleteEvidence(ctx: Ctx, evidenceId: string) {
-  const me = await requirePermission(ctx, "executions.execute");
+  const me = await requirePermission(ctx, "executions.perform");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
 
