@@ -664,10 +664,10 @@ export async function handleGetExecution(ctx: Ctx, id: string): Promise<Response
          WHERE esa.execution_step_id IN (${placeholders})`
       ).bind(...execStepIds).all<{ execution_step_id: string; display_name: string }>(),
       db.prepare(
-        `SELECT essa.execution_step_id, u.display_name
+        `SELECT essa.execution_step_id, essa.user_id, u.display_name
          FROM execution_step_supervisor_assignees essa JOIN users u ON u.id = essa.user_id
          WHERE essa.execution_step_id IN (${placeholders})`
-      ).bind(...execStepIds).all<{ execution_step_id: string; display_name: string }>(),
+      ).bind(...execStepIds).all<{ execution_step_id: string; user_id: string; display_name: string }>(),
       db.prepare(
         `SELECT execution_step_id, COUNT(*) as cnt FROM evidence
          WHERE execution_step_id IN (${placeholders}) GROUP BY execution_step_id`
@@ -1617,6 +1617,15 @@ export async function handleSkipStep(ctx: Ctx, execId: string, stepId: string): 
   const canSkipByPolicy = skipPolicy?.allowed === true;
   if (step.is_required === 1 && !canSkipByPolicy) {
     return apiError("VALIDATION_ERROR", "Không được bỏ qua bước bắt buộc.", ctx.requestId);
+  }
+  // Chỉ giám sát (hoặc người có quyền manage) mới được bỏ qua trực tiếp.
+  // Người thực hiện chỉ được "xin bỏ qua" (qua skip_requests).
+  const isSupervisor = await db.prepare(
+    `SELECT 1 FROM execution_step_supervisors WHERE execution_step_id = ? AND user_id = ? LIMIT 1`
+  ).bind(stepId, me.user.id).first();
+  const isManager = me.permissions.includes("*") || me.permissions.includes("executions.manage");
+  if (!isSupervisor && !isManager) {
+    return apiError("FORBIDDEN", "Chỉ giám sát mới được bỏ qua trực tiếp. Vui lòng dùng chức năng 'Xin bỏ qua'.", ctx.requestId);
   }
   // AC-04 cũng áp dụng cho skip: bước trước phải xong.
   if (step.sort_order > 1) {

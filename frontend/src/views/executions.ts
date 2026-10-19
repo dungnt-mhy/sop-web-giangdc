@@ -472,6 +472,12 @@ function openCreateExecDialog(dialogRoot: HTMLElement, onDone: () => void): void
 export async function renderExecutionDetail(root: HTMLElement, execId: string): Promise<void> {
   // Dừng auto-refresh cũ (nếu có) khi chuyển sang lượt khác.
   stopEvidenceAutoRefresh();
+  // Lấy thông tin user hiện tại để phân biệt giám sát / người thực hiện.
+  let currentUserId = "";
+  try {
+    const sess = await api.session();
+    currentUserId = (sess as unknown as { user?: { id?: string } }).user?.id ?? "";
+  } catch { /* bỏ qua */ }
   root.innerHTML = `
     <div class="page-head">
       <div><a href="#/my-work" class="link back">← Công việc của tôi</a>
@@ -501,7 +507,7 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         const { items } = await api.listSkipRequests(execId);
         pendingSkipStepIds = new Set(items.map((r) => String((r as Record<string, unknown>).step_id)));
       } catch { /* bỏ qua */ }
-      body.innerHTML = detailHtml(e, pendingSkipStepIds);
+      body.innerHTML = detailHtml(e, pendingSkipStepIds, currentUserId);
       // Tải và hiển thị yêu cầu xin bỏ qua đang chờ.
       try {
         const { items } = await api.listSkipRequests(execId);
@@ -2054,7 +2060,7 @@ async function openAssignDialog(
   });
 }
 
-function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Set()): string {
+function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Set(), currentUserId: string = ""): string {
   const p = e.progress;
   const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
   const active = e.status === "IN_PROGRESS";
@@ -2110,6 +2116,11 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
           const skipAllowed = ((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed === true;
           // Bước tùy chọn (không bắt buộc) cũng được bỏ qua — khớp logic backend.
           const canSkip = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") && (skipAllowed || !st.is_required) && !pendingSkip;
+          // Chỉ giám sát của bước mới được "Bỏ qua" trực tiếp; người thực hiện chỉ được "Xin bỏ qua".
+          const supAssignees = ((st as unknown as Record<string, unknown>).supervisor_assignees as { id?: string; user_id?: string }[] | undefined) ?? [];
+          const isStepSupervisor = currentUserId !== "" && supAssignees.some((a) => (a.id ?? a.user_id) === currentUserId);
+          const canSkipDirect = canSkip && isStepSupervisor;
+          const canRequestSkip = canSkip && !isStepSupervisor;
           const canAssign = active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) && !pendingSkip;
           const canRefresh = !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status);
           const canUpload = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS");
@@ -2144,8 +2155,8 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                   canFinish ? `<button class="btn sm primary" data-step="complete">Báo hoàn thành</button>` : "",
                   canReview ? `<button class="btn sm primary" data-step="approve">✅ Duyệt đạt</button>` : "",
                   canReview ? `<button class="btn sm" data-step="reject">🔄 Yêu cầu làm lại</button>` : "",
-                  canSkip ? `<button class="btn sm" data-step="skip">⏭️ Bỏ qua</button>` : "",
-                  canSkip ? `<button class="btn sm secondary" data-step="request-skip">🙏 Xin bỏ qua</button>` : "",
+                  canSkipDirect ? `<button class="btn sm" data-step="skip">⏭️ Bỏ qua</button>` : "",
+                  canRequestSkip ? `<button class="btn sm secondary" data-step="request-skip">🙏 Xin bỏ qua</button>` : "",
                   active && !["PASSED", "SKIPPED", "CANCELLED", "PENDING_REVIEW"].includes(st.status) && !pendingSkip ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : "",
                   active && !["PENDING_REVIEW", "PASSED", "SKIPPED", "CANCELLED"].includes(st.status) ? `<button class="btn sm" data-step="note">📝 Ghi chú</button>` : "",
                 ].filter(Boolean);
