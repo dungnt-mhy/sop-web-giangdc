@@ -2,8 +2,8 @@
  * Trang Đề xuất lượt công việc (#/proposals).
  * Nhân viên tạo đề xuất → người phê duyệt duyệt/từ chối.
  */
-import { api, Proposal } from "../api";
-import { esc, toast } from "../ui";
+import { api, Proposal } from "../api.js";
+import { esc, toast } from "../ui.js";
 
 function openConfirmDialog(dialogRoot: HTMLElement, title: string, message: string, okLabel = "Xác nhận"): Promise<boolean> {
   return new Promise((resolve) => {
