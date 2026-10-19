@@ -1557,7 +1557,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
     <section class="card">
       <h3>Thông tin lượt công việc</h3>
       <dl class="info-list">
-        <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}${(e.redo_steps ?? 0) > 0 ? ` <span class="pill amber exec-redo-pill" style="cursor:pointer;" title="Bấm để xem chi tiết">🔄 Bị trả lại làm lại ${e.redo_steps} bước</span>` : ""}</dd></div>
+        <div class="info-row"><dt>Trạng thái</dt><dd>${execPill(e.status)}${(e.redo_steps ?? 0) > 0 ? ` <span class="pill amber exec-redo-pill" style="cursor:pointer;" title="Bấm để xem chi tiết">🔄 Số bước bị làm lại: ${e.redo_steps} bước</span>` : ""}</dd></div>
         <div class="info-row"><dt style="color:#c2410c;">Quy trình</dt><dd style="color:#2563eb;">${esc(e.process_name ?? "—")} (${esc(e.process_code ?? "")})${(e as unknown as Record<string, unknown>).version_number ? ` · Phiên bản v${(e as unknown as Record<string, unknown>).version_number}` : ""}</dd></div>
         ${(e as unknown as Record<string, unknown>).expected_start_at ? `<div class="info-row"><dt>Thời gian bắt đầu (dự kiến)</dt><dd>${fmtDt((e as unknown as Record<string, unknown>).expected_start_at as string)}${e.shift ? ` · Ca ${esc(SHIFT_LABEL[e.shift] ?? e.shift)}` : ""}</dd></div>` : ""}
         ${(e as unknown as Record<string, unknown>).expected_end_at ? `<div class="info-row"><dt>Thời gian hoàn thành (dự kiến)</dt><dd>${fmtDt((e as unknown as Record<string, unknown>).expected_end_at as string)}</dd></div>` : ""}
