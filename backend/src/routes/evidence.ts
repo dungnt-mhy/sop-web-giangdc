@@ -6,6 +6,7 @@ import { audit, newId, nowIso } from "../db";
 import { apiError, ok, readJson } from "../errors";
 import { requirePermission, type SessionInfo } from "./auth";
 import type { Ctx } from "./context";
+import { notifyUsers } from "./notifications";
 
 // Giới hạn theo EVD-009 (DEFAULT).
 const MAX_PHOTO_SOURCE_BYTES = 15 * 1024 * 1024; // ảnh nguồn tối đa 15MB
@@ -155,6 +156,27 @@ export async function handleUploadEvidence(ctx: Ctx, execId: string, stepId: str
     request_id: ctx.requestId,
     diff: { execution_id: execId, step_id: stepId, code: step.code, mime, size_bytes: sizeBytes },
   });
+
+  // Thông báo cho những người cùng thực hiện bước (trừ người vừa upload).
+  try {
+    const execRow = await db.prepare(`SELECT code FROM executions WHERE id = ?`).bind(execId).first<{ code: string }>();
+    const assigneeRows = await db.prepare(
+      `SELECT DISTINCT esa.user_id FROM execution_step_assignees esa WHERE esa.execution_step_id = ?`
+    ).bind(stepId).all<{ user_id: string }>();
+    const notifyIds = (assigneeRows.results ?? [])
+      .map((r) => r.user_id)
+      .filter((uid) => uid && uid !== me.user.id);
+    if (notifyIds.length > 0) {
+      await notifyUsers(db, notifyIds, {
+        type: "EVIDENCE_UPLOADED",
+        title: `Có bằng chứng mới ở bước ${step.code}`,
+        message: `${me.user.display_name} vừa tải lên "${file.name.slice(0, 50)}" ở bước ${step.code} (${execRow?.code ?? ""}).`,
+        link: `#/executions/${execId}`,
+      }, ctx.env);
+    }
+  } catch {
+    // Không chặn upload nếu gửi thông báo lỗi.
+  }
 
   const row = await db.prepare(`SELECT * FROM evidence WHERE id = ?`).bind(id).first<EvidenceRow>();
   return ok(toPublicEvidence(row!, me.user.display_name));
