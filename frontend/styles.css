@@ -431,6 +431,11 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
   background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
   padding: 6px 10px; margin-top: 4px; white-space: pre-wrap;
 }
+.step-head-note {
+  max-height: 80px; overflow-y: auto;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+  padding: 4px 8px; margin-top: 4px; white-space: pre-wrap;
+}
 .step-dlabel { font-weight: 700; color: #475569; }
 @keyframes beauty-in {
   from { opacity: 0; transform: translateY(12px); }
