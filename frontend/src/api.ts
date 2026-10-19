@@ -620,6 +620,9 @@ export const api = {
   setStepSupervisors(execId: string, stepId: string, user_ids: string[]): Promise<{ assigned: number }> {
     return req("PUT", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/supervisors`, { user_ids });
   },
+  updateStepNote(execId: string, stepId: string, note: string): Promise<{ updated: boolean }> {
+    return req("PATCH", `/executions/${encodeURIComponent(execId)}/steps/${encodeURIComponent(stepId)}/note`, { note });
+  },
   // --- Thông báo ---
   listNotifications(limit = 20): Promise<{ items: AppNotification[] }> {
     return req("GET", `/notifications?limit=${limit}`);

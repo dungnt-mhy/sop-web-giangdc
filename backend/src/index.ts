@@ -69,6 +69,7 @@ import {
   handleListStepAssignees,
   handleListStepSupervisors,
   handleSetStepSupervisors,
+  handleUpdateStepNote,
   handlePauseExecution,
   handleUpdateExecution,
   handleRejectConfirmation,
@@ -438,6 +439,12 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     const sid = decodeURIComponent(supAsg[2]);
     if (method === "GET") return handleListStepSupervisors(ctx, eid, sid);
     if (method === "PUT") return handleSetStepSupervisors(ctx, eid, sid);
+  }
+  const stepNote = /^\/executions\/([^/:]+)\/steps\/([^/:]+)\/note$/.exec(path);
+  if (stepNote && UUID_RE.test(stepNote[1]) && UUID_RE.test(stepNote[2])) {
+    const eid = decodeURIComponent(stepNote[1]);
+    const sid = decodeURIComponent(stepNote[2]);
+    if (method === "PATCH") return handleUpdateStepNote(ctx, eid, sid);
   }
   // --- Bằng chứng (Task 1.7: EVD-001..013) ---
   const evUp = /^\/executions\/([^/:]+)\/steps\/([^/:]+)\/evidence$/.exec(path);

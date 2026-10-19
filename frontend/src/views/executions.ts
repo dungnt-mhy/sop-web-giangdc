@@ -481,6 +481,13 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
           await loadAllAssignees(body, execId);
         });
         return;
+      } else if (act === "note") {
+        restore();
+        openNoteDialog(dialogRoot, step?.code ?? "", step?.note ?? "", async (note) => {
+          await api.updateStepNote(execId, sid, note);
+          await reload();
+        });
+        return;
       }
       await reload();
     } catch (e) {
@@ -1084,6 +1091,56 @@ async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void
   }));
 }
 
+/** Dialog nhập ghi chú bước. */
+function openNoteDialog(
+  dialogRoot: HTMLElement,
+  stepCode: string,
+  currentNote: string,
+  onSave: (note: string) => Promise<void>
+): void {
+  dialogRoot.innerHTML = `
+    <div class="dialog-backdrop" data-close>
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Ghi chú bước">
+        <h3>📝 Ghi chú bước "${esc(stepCode)}"</h3>
+        <form id="note-form">
+          <label class="field">
+            <span>Ghi chú</span>
+            <textarea id="note-text" rows="4" placeholder="VD: Cần kiểm tra lại số lượng trước khi đóng gói…" style="width:100%;resize:vertical;">${esc(currentNote)}</textarea>
+          </label>
+          <p class="form-error" id="note-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" class="btn" id="note-cancel">Huỷ</button>
+            <button type="submit" class="btn primary" id="note-save">Lưu ghi chú</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  const close = () => { dialogRoot.innerHTML = ""; };
+  dialogRoot.querySelector("#note-cancel")!.addEventListener("click", close);
+  dialogRoot.querySelector("[data-close]")!.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).hasAttribute("data-close")) close();
+  });
+  dialogRoot.querySelector<HTMLFormElement>("#note-form")!.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const ta = dialogRoot.querySelector<HTMLTextAreaElement>("#note-text")!;
+    const saveBtn = dialogRoot.querySelector<HTMLButtonElement>("#note-save")!;
+    const errEl = dialogRoot.querySelector<HTMLElement>("#note-error")!;
+    const origLabel = saveBtn.innerHTML;
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = `<span class="spinner"></span> Đang lưu…`;
+    try {
+      await onSave(ta.value.trim());
+      toast("Đã lưu ghi chú.");
+      close();
+    } catch (e) {
+      errEl.textContent = msg(e);
+      errEl.hidden = false;
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = origLabel;
+    }
+  });
+}
+
 /** Dialog xác nhận (thay cho confirm trình duyệt). */
 function openConfirmDialog(dialogRoot: HTMLElement, title: string, message: string, okLabel = "Xác nhận"): Promise<boolean> {
   return new Promise((resolve) => {
@@ -1387,6 +1444,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${canSkip ? `<button class="btn sm" data-step="skip">⏭️ Bỏ qua</button>` : ""}
                 ${canSkip ? `<button class="btn sm secondary" data-step="request-skip">🙏 Xin bỏ qua</button>` : ""}
                 ${active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) && !pendingSkip ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : ""}
+                ${active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) ? `<button class="btn sm" data-step="note">📝 Ghi chú</button>` : ""}
               </div>
               <div class="step-assignees" data-assignees-for="${esc(st.id)}"><span class="muted small">Đang tải…</span></div>
             </div>

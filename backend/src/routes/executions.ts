@@ -1318,6 +1318,39 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
   return ok(toPublicStep(updated!));
 }
 
+// PATCH /executions/:id/steps/:stepId/note — cập nhật ghi chú bước.
+export async function handleUpdateStepNote(ctx: Ctx, execId: string, stepId: string): Promise<Response> {
+  const me = await requirePermission(ctx, "executions.execute");
+  if (me instanceof Response) return me;
+  const db = ctx.env.sop_demo_db;
+
+  const step = await db.prepare(`SELECT id, execution_id, status FROM execution_steps WHERE id = ?`).bind(stepId).first<{ id: string; execution_id: string; status: string }>();
+  if (!step || step.execution_id !== execId) {
+    return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
+  }
+  // Không sửa ghi chú khi bước đã hoàn thành/bỏ qua/hủy.
+  if (["PASSED", "SKIPPED", "CANCELLED"].includes(step.status)) {
+    return apiError("VALIDATION_ERROR", "Bước đã hoàn thành — không thể sửa ghi chú.", ctx.requestId);
+  }
+
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const note = typeof body?.note === "string" ? body.note.trim() || null : null;
+
+  await db.prepare(
+    `UPDATE execution_steps SET note = ?, updated_at = ? WHERE id = ?`
+  ).bind(note, nowIso(), stepId).run();
+
+  await audit(db, {
+    event_type: "STEP_NOTE_UPDATED",
+    actor_id: me.user.id,
+    object_type: "execution_step",
+    object_id: stepId,
+    request_id: ctx.requestId,
+    diff: { note },
+  });
+  return ok({ updated: true });
+}
+
 // POST .../{id}/steps/{sid}:skip — bỏ qua bước (chỉ bước không bắt buộc).
 export async function handleSkipStep(ctx: Ctx, execId: string, stepId: string): Promise<Response> {
   const s = ctx.requireAuth();
