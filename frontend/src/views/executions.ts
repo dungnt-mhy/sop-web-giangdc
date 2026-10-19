@@ -2110,6 +2110,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
           const skipAllowed = ((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed === true;
           const canSkip = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") && skipAllowed && !pendingSkip;
           const canAssign = active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) && !pendingSkip;
+          const canRefresh = !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status);
           const canUpload = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS");
           // Yêu cầu ảnh từ completion_req (EXE-007).
           let minPhotos = 0;
@@ -2187,7 +2188,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                     <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple hidden data-ev-input data-ev-kind="file" />
                   </label>
                 </span>` : ""}
-                <button class="evidence-refresh-btn icon-only" data-ev-refresh title="Tải lại danh sách">🔄</button>
+                ${canRefresh ? `<button class="btn sm evidence-refresh-btn" data-ev-refresh title="Tải lại danh sách"><span class="ev-icon">🔄</span><span class="ev-label">Tải<br/>lại</span></button>` : ""}
                 </span>
               </div>
               <div class="evidence-grid" data-ev-grid></div>
