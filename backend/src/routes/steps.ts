@@ -104,20 +104,23 @@ export async function handleListSteps(ctx: Ctx, versionId: string): Promise<Resp
   const supMap = new Map<string, { id: string; name: string }[]>();
   if (stepIds.length > 0) {
     const placeholders = stepIds.map(() => "?").join(",");
-    const posRows = await db.prepare(
-      `SELECT psp.step_id, p.id, p.name FROM process_step_positions psp
-       JOIN positions p ON p.id = psp.position_id
-       WHERE psp.step_id IN (${placeholders}) ORDER BY p.name ASC`
-    ).bind(...stepIds).all<{ step_id: string; id: string; name: string }>();
+    const [posRows, supRows] = await Promise.all([
+      db.prepare(
+        `SELECT psp.step_id, p.id, p.name FROM process_step_positions psp
+         JOIN positions p ON p.id = psp.position_id
+         WHERE psp.step_id IN (${placeholders}) ORDER BY p.name ASC`
+      ).bind(...stepIds).all<{ step_id: string; id: string; name: string }>(),
+      db.prepare(
+        `SELECT pss.step_id, p.id, p.name FROM process_step_supervisors pss
+         JOIN positions p ON p.id = pss.position_id
+         WHERE pss.step_id IN (${placeholders}) ORDER BY p.name ASC`
+      ).bind(...stepIds).all<{ step_id: string; id: string; name: string }>(),
+    ]);
     for (const r of posRows.results ?? []) {
       if (!posMap.has(r.step_id)) posMap.set(r.step_id, []);
       posMap.get(r.step_id)!.push({ id: r.id, name: r.name });
     }
-    const supRows = await db.prepare(
-      `SELECT pss.step_id, p.id, p.name FROM process_step_supervisors pss
-       JOIN positions p ON p.id = pss.position_id
-       WHERE pss.step_id IN (${placeholders}) ORDER BY p.name ASC`
-    ).bind(...stepIds).all<{ step_id: string; id: string; name: string }>();
+
     for (const r of supRows.results ?? []) {
       if (!supMap.has(r.step_id)) supMap.set(r.step_id, []);
       supMap.get(r.step_id)!.push({ id: r.id, name: r.name });

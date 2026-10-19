@@ -232,14 +232,13 @@ export async function handleGetProcess(ctx: Ctx, id: string): Promise<Response> 
   const db = ctx.env.sop_demo_db;
   const p = await db.prepare(`SELECT * FROM processes WHERE id = ?`).bind(id).first<ProcessRow>();
   if (!p) return apiError("NOT_FOUND", "Không tìm thấy quy trình.", ctx.requestId);
-  const versions = await db
-    .prepare(`SELECT * FROM process_versions WHERE process_id = ? ORDER BY version_number DESC`)
-    .bind(id)
-    .all<VersionRow>();
-  const av = await getActiveVersion(db, id);
-  const ouRows = await db.prepare(
-    `SELECT ou.id, ou.name FROM process_org_units pou JOIN org_units ou ON ou.id = pou.org_unit_id WHERE pou.process_id = ? ORDER BY ou.name ASC`
-  ).bind(id).all<{ id: string; name: string }>();
+  const [versions, av, ouRows] = await Promise.all([
+    db.prepare(`SELECT * FROM process_versions WHERE process_id = ? ORDER BY version_number DESC`).bind(id).all<VersionRow>(),
+    getActiveVersion(db, id),
+    db.prepare(
+      `SELECT ou.id, ou.name FROM process_org_units pou JOIN org_units ou ON ou.id = pou.org_unit_id WHERE pou.process_id = ? ORDER BY ou.name ASC`
+    ).bind(id).all<{ id: string; name: string }>(),
+  ]);
   return ok({
     ...toPublicProcess(p, av),
     versions: versions.results.map(toPublicVersion),
