@@ -822,12 +822,18 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 .user-search-item { padding: 10px 12px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
 .user-search-item:hover { background: #f1f5f9; }
 .user-search-empty { padding: 10px 12px; color: #94a3b8; font-size: 13px; }
-/* Mobile: evidence header gọn trên 1 hàng */
+/* Mobile: evidence header gọn trên 1 hàng, icon trên chữ dưới */
 @media (max-width: 640px) {
   .evidence-head { gap: 6px; }
-  .evidence-title { font-size: 12.5px; white-space: nowrap; }
-  .evidence-actions { gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-  .evidence-actions::-webkit-scrollbar { display: none; }
+  .evidence-title { font-size: 12.5px; white-space: nowrap; flex-shrink: 0; }
+  .evidence-actions { gap: 4px; margin-left: auto; }
   .evidence-upload-group { gap: 4px; }
-  .evidence-upload-btn, .evidence-refresh-btn { padding: 5px 8px; font-size: 12px; white-space: nowrap; }
+  .evidence-upload-btn, .evidence-refresh-btn {
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 4px 8px; min-width: 44px; line-height: 1.2;
+  }
+  .evidence-upload-btn .ev-icon, .evidence-refresh-btn .ev-icon { font-size: 16px; }
+  .evidence-upload-btn .ev-label, .evidence-refresh-btn .ev-label { font-size: 10px; }
 }
+/* Desktop: icon và chữ nằm ngang */
+.evidence-upload-btn .ev-icon, .evidence-refresh-btn .ev-icon { margin-right: 2px; }
