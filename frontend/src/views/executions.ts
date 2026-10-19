@@ -480,9 +480,11 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
   stopEvidenceAutoRefresh();
   // Lấy thông tin user hiện tại để phân biệt giám sát / người thực hiện.
   let currentUserId = "";
+  let currentPermissions: string[] = [];
   try {
     const sess = await api.session();
     currentUserId = (sess as unknown as { user?: { id?: string } }).user?.id ?? "";
+    currentPermissions = (sess as unknown as { permissions?: string[] }).permissions ?? [];
   } catch { /* bỏ qua */ }
   root.innerHTML = `
     <div class="page-head">
@@ -513,7 +515,7 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
         const { items } = await api.listSkipRequests(execId);
         pendingSkipStepIds = new Set(items.map((r) => String((r as Record<string, unknown>).step_id)));
       } catch { /* bỏ qua */ }
-      body.innerHTML = detailHtml(e, pendingSkipStepIds, currentUserId);
+      body.innerHTML = detailHtml(e, pendingSkipStepIds, currentUserId, currentPermissions);
       // Tải và hiển thị yêu cầu xin bỏ qua đang chờ.
       try {
         const { items } = await api.listSkipRequests(execId);
@@ -2066,7 +2068,7 @@ async function openAssignDialog(
   });
 }
 
-function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Set(), currentUserId: string = ""): string {
+function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Set(), currentUserId: string = "", currentPermissions: string[] = []): string {
   const p = e.progress;
   const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
   const active = e.status === "IN_PROGRESS";
@@ -2125,8 +2127,10 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
           // Chỉ giám sát của bước mới được "Bỏ qua" trực tiếp; người thực hiện chỉ được "Xin bỏ qua".
           const supAssignees = ((st as unknown as Record<string, unknown>).supervisor_assignees as { id?: string; user_id?: string }[] | undefined) ?? [];
           const isStepSupervisor = currentUserId !== "" && supAssignees.some((a) => (a.id ?? a.user_id) === currentUserId);
-          const canSkipDirect = canSkip && isStepSupervisor;
-          const canRequestSkip = canSkip && !isStepSupervisor;
+          // Admin/quản lý được coi như giám sát (khớp logic backend).
+          const isManager = currentPermissions.includes("*") || currentPermissions.includes("executions.manage");
+          const canSkipDirect = canSkip && (isStepSupervisor || isManager);
+          const canRequestSkip = canSkip && !isStepSupervisor && !isManager;
           const canAssign = active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) && !pendingSkip;
           const canRefresh = !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status);
           const canUpload = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS");
@@ -2175,7 +2179,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 const stepSupIds = (((st as unknown as Record<string, unknown>).supervisor_assignees as { user_id?: string }[] | undefined) ?? []).map((a) => a.user_id).filter(Boolean);
                 const execSupIds = ((eRec.supervisor_ids as string[] | undefined) ?? []).filter(Boolean);
                 const execAprIds = ((eRec.approver_ids as string[] | undefined) ?? []).filter(Boolean);
-                const canReviewUser = currentUserId !== "" && (stepSupIds.includes(currentUserId) || execSupIds.includes(currentUserId) || execAprIds.includes(currentUserId));
+                const canReviewUser = currentUserId !== "" && (stepSupIds.includes(currentUserId) || execSupIds.includes(currentUserId) || execAprIds.includes(currentUserId) || currentPermissions.includes("*") || currentPermissions.includes("executions.manage"));
                 const canReview = active && st.status === "PENDING_REVIEW" && canReviewUser;
                 const btns = [
                   canStart ? `<button class="btn sm primary" data-step="start">Bắt đầu</button>` : "",
