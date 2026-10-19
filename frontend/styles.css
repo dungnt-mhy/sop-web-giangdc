@@ -568,7 +568,8 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 @media (max-width: 640px) {
   .evidence-section { margin-left: 0; }
   .step-head { flex-wrap: wrap; }
-  .step-actions { flex-wrap: wrap; width: 100%; margin-top: 8px; }
+  .step-actions { flex-wrap: wrap; }
+  .step-actions:not(:empty) { width: 100%; margin-top: 8px; }
   .step-actions .btn { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
   .step-assignees { width: 100%; margin-top: 4px; }
   .flow-node-head { flex-wrap: wrap; }
