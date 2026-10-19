@@ -383,11 +383,13 @@ export const api = {
     return req("POST", `/users/${encodeURIComponent(id)}:reset-password`, { password });
   },
   // --- Quy trình (Task 1.4) ---
-  listProcesses(params?: { q?: string; group?: string; status?: string }): Promise<{ items: SopProcess[]; total: number }> {
+  listProcesses(params?: { q?: string; group?: string; status?: string; from?: string; to?: string }): Promise<{ items: SopProcess[]; total: number }> {
     const qs = new URLSearchParams();
     if (params?.q) qs.set("q", params.q);
     if (params?.group) qs.set("group", params.group);
     if (params?.status) qs.set("status", params.status);
+    if (params?.from) qs.set("from", params.from);
+    if (params?.to) qs.set("to", params.to);
     const suffix = qs.toString() ? "?" + qs.toString() : "";
     return req("GET", "/processes" + suffix);
   },
@@ -450,7 +452,7 @@ export const api = {
     return req("GET", `/processes/x/versions/${encodeURIComponent(versionId)}:validate`);
   },
   // --- Lượt thực hiện (Task 1.6) ---
-  listExecutions(params?: { mine?: boolean; status?: string; page?: number; limit?: number; from?: string; to?: string; creator_id?: string }): Promise<{ items: Execution[]; total: number; page?: number; limit?: number; totalPages?: number }> {
+  listExecutions(params?: { mine?: boolean; status?: string; page?: number; limit?: number; from?: string; to?: string; creator_id?: string; assignee_id?: string; process_id?: string; shift?: string; q?: string; has_redo?: string }): Promise<{ items: Execution[]; total: number; page?: number; limit?: number; totalPages?: number }> {
     const qs = new URLSearchParams();
     if (params?.mine) qs.set("mine", "1");
     if (params?.status) qs.set("status", params.status);
@@ -459,6 +461,11 @@ export const api = {
     if (params?.from) qs.set("from", params.from);
     if (params?.to) qs.set("to", params.to);
     if (params?.creator_id) qs.set("creator_id", params.creator_id);
+    if (params?.assignee_id) qs.set("assignee_id", params.assignee_id);
+    if (params?.process_id) qs.set("process_id", params.process_id);
+    if (params?.shift) qs.set("shift", params.shift);
+    if (params?.q) qs.set("q", params.q);
+    if (params?.has_redo) qs.set("has_redo", params.has_redo);
     const suffix = qs.toString() ? "?" + qs.toString() : "";
     return req("GET", "/executions" + suffix);
   },

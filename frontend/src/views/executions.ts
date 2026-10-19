@@ -62,6 +62,7 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
       <button class="btn primary" id="btn-create-exec">+ Tạo lượt công việc mới</button>
     </div>
     <div class="filter-bar">
+      <input type="text" id="flt-search" class="input" placeholder="🔍 Mã/tên lượt..." aria-label="Tìm kiếm" />
       <select id="flt-status" class="input" aria-label="Trạng thái">
         <option value="">Tất cả trạng thái</option>
         <option value="CREATED">Mới tạo</option>
@@ -71,8 +72,29 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
         <option value="COMPLETED">Hoàn thành</option>
         <option value="CANCELLED">Đã hủy</option>
       </select>
+      <select id="flt-process" class="input" aria-label="Quy trình">
+        <option value="">Tất cả quy trình</option>
+      </select>
+      <select id="flt-shift" class="input" aria-label="Ca làm việc">
+        <option value="">Tất cả ca</option>
+        <option value="MORNING">Sáng</option>
+        <option value="NOON">Trưa</option>
+        <option value="AFTERNOON">Chiều</option>
+        <option value="NIGHT">Đêm</option>
+      </select>
+      <select id="flt-redo" class="input" aria-label="Bị trả lại">
+        <option value="">Tất cả</option>
+        <option value="1">Có bị trả lại</option>
+        <option value="0">Không bị trả lại</option>
+      </select>
       <input type="date" id="flt-from" class="input" aria-label="Từ ngày" />
       <input type="date" id="flt-to" class="input" aria-label="Đến ngày" />
+      <div class="user-picker">
+        <input type="text" id="flt-assignee-search" class="input" placeholder="🔍 Người thực hiện..." aria-label="Tìm người thực hiện" />
+        <select id="flt-assignee" class="input" aria-label="Người thực hiện">
+          <option value="">Tất cả người thực hiện</option>
+        </select>
+      </div>
       <select id="flt-creator" class="input" aria-label="Người tạo">
         <option value="">Tất cả người tạo</option>
       </select>
@@ -93,13 +115,36 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
   const fromEl = root.querySelector<HTMLInputElement>("#flt-from")!;
   const toEl = root.querySelector<HTMLInputElement>("#flt-to")!;
   const creatorEl = root.querySelector<HTMLSelectElement>("#flt-creator")!;
+  const searchEl = root.querySelector<HTMLInputElement>("#flt-search")!;
+  const processEl = root.querySelector<HTMLSelectElement>("#flt-process")!;
+  const shiftEl = root.querySelector<HTMLSelectElement>("#flt-shift")!;
+  const redoEl = root.querySelector<HTMLSelectElement>("#flt-redo")!;
+  const assigneeSearchEl = root.querySelector<HTMLInputElement>("#flt-assignee-search")!;
+  const assigneeEl = root.querySelector<HTMLSelectElement>("#flt-assignee")!;
   const paginationEl = root.querySelector<HTMLElement>("#exec-pagination")!;
   let currentPage = 1;
   const PAGE_SIZE = 20;
+  let allUsers: { id: string; display_name: string; username: string }[] = [];
 
-  // Tải danh sách người tạo.
+  // Tải danh sách người dùng cho bộ lọc.
   api.listUsers().then(({ items }) => {
-    creatorEl.innerHTML = `<option value="">Tất cả người tạo</option>` + items.map((u) => `<option value="${esc(u.id)}">${esc(u.display_name || u.username)}</option>`).join("");
+    allUsers = items;
+    const opts = items.map((u) => `<option value="${esc(u.id)}">${esc(u.display_name || u.username)}</option>`).join("");
+    creatorEl.innerHTML = `<option value="">Tất cả người tạo</option>` + opts;
+    assigneeEl.innerHTML = `<option value="">Tất cả người thực hiện</option>` + opts;
+  }).catch(() => { /* bỏ qua */ });
+
+  // Tìm kiếm người thực hiện.
+  assigneeSearchEl.addEventListener("input", () => {
+    const f = assigneeSearchEl.value.trim().toLowerCase();
+    const filtered = f ? allUsers.filter((u) => (u.display_name || u.username).toLowerCase().includes(f)) : allUsers;
+    const currentVal = assigneeEl.value;
+    assigneeEl.innerHTML = `<option value="">Tất cả người thực hiện</option>` + filtered.map((u) => `<option value="${esc(u.id)}"${u.id === currentVal ? " selected" : ""}>${esc(u.display_name || u.username)}</option>`).join("");
+  });
+
+  // Tải danh sách quy trình.
+  api.listProcesses().then(({ items }) => {
+    processEl.innerHTML = `<option value="">Tất cả quy trình</option>` + items.map((p) => `<option value="${esc(p.id)}">${esc(p.code)} — ${esc(p.name)}</option>`).join("");
   }).catch(() => { /* bỏ qua */ });
 
   async function reload(): Promise<void> {
@@ -111,6 +156,11 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
         from: fromEl.value || undefined,
         to: toEl.value || undefined,
         creator_id: creatorEl.value || undefined,
+        assignee_id: assigneeEl.value || undefined,
+        process_id: processEl.value || undefined,
+        shift: shiftEl.value || undefined,
+        q: searchEl.value.trim() || undefined,
+        has_redo: redoEl.value || undefined,
         page: currentPage,
         limit: PAGE_SIZE,
       });

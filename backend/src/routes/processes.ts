@@ -89,6 +89,8 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
   const group = (url.searchParams.get("group") ?? "").trim();
   const owner = (url.searchParams.get("owner") ?? "").trim();
   const status = (url.searchParams.get("status") ?? "").trim(); // trạng thái phiên bản ACTIVE
+  const from = (url.searchParams.get("from") ?? "").trim();
+  const to = (url.searchParams.get("to") ?? "").trim();
 
   const conds: string[] = [];
   const binds: unknown[] = [];
@@ -104,6 +106,14 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
     conds.push(`p.owner_id = ?`);
     binds.push(owner);
   }
+  if (from) {
+    conds.push(`date(p.created_at) >= date(?)`);
+    binds.push(from);
+  }
+  if (to) {
+    conds.push(`date(p.created_at) <= date(?)`);
+    binds.push(to);
+  }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
   const rows = await db
     .prepare(`SELECT p.* FROM processes p ${where} ORDER BY p.updated_at DESC, p.created_at DESC LIMIT 100`)
@@ -116,6 +126,7 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
   const latestMap = new Map<string, VersionRow>();
   const creatorMap = new Map<string, string>();
   const ouMap = new Map<string, { id: string; name: string }[]>();
+  const execCountMap = new Map<string, number>();
   if (procIds.length > 0) {
     const ph = procIds.map(() => "?").join(",");
     const avRows = await db.prepare(
@@ -143,6 +154,11 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
       if (!ouMap.has(r.process_id)) ouMap.set(r.process_id, []);
       ouMap.get(r.process_id)!.push({ id: r.id, name: r.name });
     }
+    // Đếm số lượt thực hiện cho mỗi quy trình.
+    const ecRows = await db.prepare(
+      `SELECT process_id, COUNT(*) AS cnt FROM executions WHERE process_id IN (${ph}) GROUP BY process_id`
+    ).bind(...procIds).all<{ process_id: string; cnt: number }>();
+    for (const r of ecRows.results ?? []) execCountMap.set(r.process_id, r.cnt);
   }
 
   const items = [];
@@ -155,6 +171,7 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
       creator_name: p.created_by ? creatorMap.get(p.created_by) ?? null : null,
       org_units: ouMap.get(p.id) ?? [],
       latest_version: latest ? { version_number: latest.version_number, status: latest.status } : null,
+      execution_count: execCountMap.get(p.id) ?? 0,
     });
   }
   return ok({ items, total: items.length });

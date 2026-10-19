@@ -43,24 +43,54 @@ export async function renderProcesses(root: HTMLElement, canManage: boolean): Pr
     </div>
     <div class="filter-bar">
       <input type="search" id="flt-q" class="input" placeholder="Tìm theo mã hoặc tên…" aria-label="Tìm kiếm" />
+      <select id="flt-group" class="input" aria-label="Nhóm">
+        <option value="">Tất cả nhóm</option>
+      </select>
+      <select id="flt-status" class="input" aria-label="Trạng thái phiên bản">
+        <option value="">Tất cả trạng thái</option>
+        <option value="DRAFT">Nháp</option>
+        <option value="IN_REVIEW">Chờ duyệt</option>
+        <option value="APPROVED">Đã duyệt</option>
+        <option value="ACTIVE">Đang hiệu lực</option>
+        <option value="SUPERSEDED">Đã thay thế</option>
+        <option value="RETIRED">Đã ngừng</option>
+      </select>
+      <input type="date" id="flt-from" class="input" aria-label="Từ ngày" />
+      <input type="date" id="flt-to" class="input" aria-label="Đến ngày" />
       <button class="btn" id="btn-search">Tìm</button>
     </div>
     <div class="table-wrap"><table class="tbl" id="proc-table">
       <thead><tr>
-        <th>Mã</th><th>Tên quy trình</th><th>Nhóm</th><th>Trạng thái phiên bản</th><th>Ngày tạo</th><th>Người tạo</th><th>Thao tác</th>
+        <th>Mã</th><th>Tên quy trình</th><th>Nhóm</th><th>Mục đích</th><th>Đơn vị áp dụng</th><th>Trạng thái phiên bản</th><th>Số lượt</th><th>Ngày tạo</th><th>Người tạo</th><th>Thao tác</th>
       </tr></thead>
-      <tbody><tr><td colspan="7" class="empty">Đang tải…</td></tr></tbody>
+      <tbody><tr><td colspan="10" class="empty">Đang tải…</td></tr></tbody>
     </table></div>
     <div id="proc-dialog-root"></div>`;
 
   const tbody = root.querySelector<HTMLTableSectionElement>("#proc-table tbody")!;
   const dialogRoot = root.querySelector<HTMLElement>("#proc-dialog-root")!;
   const inputQ = root.querySelector<HTMLInputElement>("#flt-q")!;
+  const selGroup = root.querySelector<HTMLSelectElement>("#flt-group")!;
+  const selStatus = root.querySelector<HTMLSelectElement>("#flt-status")!;
+  const fromEl = root.querySelector<HTMLInputElement>("#flt-from")!;
+  const toEl = root.querySelector<HTMLInputElement>("#flt-to")!;
+
+  // Tải danh sách nhóm.
+  api.listProcesses().then(({ items }) => {
+    const groups = [...new Set(items.map((p) => p.group_name).filter(Boolean))] as string[];
+    selGroup.innerHTML = `<option value="">Tất cả nhóm</option>` + groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("");
+  }).catch(() => { /* bỏ qua */ });
 
   async function reload(): Promise<void> {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty">Đang tải…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">Đang tải…</td></tr>`;
     try {
-      const { items } = await api.listProcesses({ q: inputQ.value.trim() || undefined });
+      const { items } = await api.listProcesses({
+        q: inputQ.value.trim() || undefined,
+        group: selGroup.value || undefined,
+        status: selStatus.value || undefined,
+        from: fromEl.value || undefined,
+        to: toEl.value || undefined,
+      });
       if (items.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="empty">Chưa có quy trình nào.</td></tr>`;
         return;
@@ -207,6 +237,9 @@ function rowHtml(p: SopProcess): string {
   const latest = (p as unknown as Record<string, unknown>).latest_version as { version_number: number; status: string } | null;
   const creator = (p as unknown as Record<string, unknown>).creator_name as string | null;
   const createdAt = p.created_at ? p.created_at.slice(0, 10).split("-").reverse().join("/") : "—";
+  const purpose = (p as unknown as Record<string, unknown>).purpose as string | null;
+  const orgUnits = (p as unknown as { org_units: { name: string }[] }).org_units ?? [];
+  const execCount = (p as unknown as Record<string, unknown>).execution_count as number ?? 0;
   // Ưu tiên hiện phiên bản đang hiệu lực; bản mới nhất (nháp/chờ duyệt) chỉ là thông tin phụ.
   let verCell: string;
   if (av) {
@@ -221,9 +254,12 @@ function rowHtml(p: SopProcess): string {
   }
   return `<tr data-id="${esc(p.id)}">
     <td><strong>${esc(p.code)}</strong></td>
-    <td>${esc(p.name)}${p.group_name ? `<div class="muted small">${esc(p.group_name)}</div>` : ""}</td>
+    <td>${esc(p.name)}</td>
     <td>${p.group_name ? esc(p.group_name) : '<span class="muted">—</span>'}</td>
+    <td class="muted small">${purpose ? esc(purpose.length > 60 ? purpose.slice(0, 60) + "…" : purpose) : '<span class="muted">—</span>'}</td>
+    <td>${orgUnits.length > 0 ? orgUnits.map((u) => `<span class="pill blue">${esc(u.name)}</span>`).join(" ") : '<span class="muted">—</span>'}</td>
     <td>${verCell}</td>
+    <td style="text-align:center;"><strong>${execCount}</strong></td>
     <td class="muted small">${esc(createdAt)}</td>
     <td>${creator ? esc(creator) : '<span class="muted">—</span>'}</td>
     <td class="actions"><button class="link" data-act="view"><span>Chi tiết</span></button></td>

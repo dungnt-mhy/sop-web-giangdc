@@ -227,6 +227,11 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
   const from = (url.searchParams.get("from") ?? "").trim();
   const to = (url.searchParams.get("to") ?? "").trim();
   const creatorId = (url.searchParams.get("creator_id") ?? "").trim();
+  const assigneeId = (url.searchParams.get("assignee_id") ?? "").trim();
+  const processId = (url.searchParams.get("process_id") ?? "").trim();
+  const shift = (url.searchParams.get("shift") ?? "").trim();
+  const search = (url.searchParams.get("q") ?? "").trim();
+  const hasRedo = url.searchParams.get("has_redo");
   const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "20", 10) || 20));
   const offset = (page - 1) * limit;
@@ -252,6 +257,27 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
   if (creatorId) {
     conds.push(`e.created_by = ?`);
     binds.push(creatorId);
+  }
+  if (assigneeId) {
+    conds.push(`e.assignee_id = ?`);
+    binds.push(assigneeId);
+  }
+  if (processId) {
+    conds.push(`e.process_id = ?`);
+    binds.push(processId);
+  }
+  if (shift) {
+    conds.push(`e.shift = ?`);
+    binds.push(shift);
+  }
+  if (search) {
+    conds.push(`(e.code LIKE ? OR e.title LIKE ?)`);
+    binds.push(`%${search}%`, `%${search}%`);
+  }
+  if (hasRedo === "1") {
+    conds.push(`EXISTS (SELECT 1 FROM execution_steps es WHERE es.execution_id = e.id AND es.redo_count > 0)`);
+  } else if (hasRedo === "0") {
+    conds.push(`NOT EXISTS (SELECT 1 FROM execution_steps es WHERE es.execution_id = e.id AND es.redo_count > 0)`);
   }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
   const rows = await db
