@@ -79,16 +79,20 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
       </tr></thead>
       <tbody><tr><td colspan="7" class="empty">Đang tải…</td></tr></tbody>
     </table></div>
+    <div class="pagination" id="exec-pagination" style="display:flex;gap:8px;justify-content:center;align-items:center;margin-top:12px;"></div>
     <div id="exec-dialog-root"></div>`;
 
   const tbody = root.querySelector<HTMLTableSectionElement>("#exec-table tbody")!;
   const dialogRoot = root.querySelector<HTMLElement>("#exec-dialog-root")!;
   const selStatus = root.querySelector<HTMLSelectElement>("#flt-status")!;
+  const paginationEl = root.querySelector<HTMLElement>("#exec-pagination")!;
+  let currentPage = 1;
+  const PAGE_SIZE = 20;
 
   async function reload(): Promise<void> {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">Đang tải…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">Đang tải…</td></tr>`;
     try {
-      const { items } = await api.listExecutions({ mine: true, status: selStatus.value || undefined });
+      const { items, total, totalPages } = await api.listExecutions({ mine: true, status: selStatus.value || undefined, page: currentPage, limit: PAGE_SIZE });
       if (items.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="empty">Chưa có lượt nào được giao cho bạn.</td></tr>`;
         return;
@@ -116,8 +120,21 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
           <td>${execPill(e.status)}${(e.redo_steps ?? 0) > 0 ? ` <span class="pill amber" title="Bị từ chối: ${esc(e.last_redo_reason ?? "")}&#10;Người từ chối: ${esc(e.last_redo_by_name ?? "")}&#10;Lúc: ${esc(e.last_redo_at ?? "")}&#10;Số bước làm lại: ${e.redo_steps}">🔄 Trả lại (${e.redo_steps})</span>` : ""}</td>
         </tr>`;
       }).join("");
+      // Phân trang.
+      const tp = totalPages ?? 1;
+      if (tp > 1) {
+        paginationEl.innerHTML = `
+          <button class="btn sm" id="pg-prev" ${currentPage <= 1 ? "disabled" : ""}>‹ Trước</button>
+          <span class="muted small">Trang ${currentPage} / ${tp} (${total} lượt)</span>
+          <button class="btn sm" id="pg-next" ${currentPage >= tp ? "disabled" : ""}>Sau ›</button>`;
+        paginationEl.querySelector("#pg-prev")?.addEventListener("click", () => { if (currentPage > 1) { currentPage--; reload(); } });
+        paginationEl.querySelector("#pg-next")?.addEventListener("click", () => { if (currentPage < tp) { currentPage++; reload(); } });
+      } else {
+        paginationEl.innerHTML = total > 0 ? `<span class="muted small">${total} lượt</span>` : "";
+      }
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="5" class="empty">Không tải được: ${esc(msg(e))}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">Không tải được: ${esc(msg(e))}</td></tr>`;
+      paginationEl.innerHTML = "";
     }
   }
 
@@ -129,7 +146,7 @@ export async function renderMyWork(root: HTMLElement): Promise<void> {
     location.hash = "#/executions/" + id;
   });
 
-  root.querySelector("#btn-filter")!.addEventListener("click", reload);
+  root.querySelector("#btn-filter")!.addEventListener("click", () => { currentPage = 1; reload(); });
   root.querySelector("#btn-create-exec")!.addEventListener("click", () => {
     openCreateExecDialog(dialogRoot, reload);
   });

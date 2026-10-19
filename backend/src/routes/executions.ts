@@ -224,6 +224,9 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
   const url = new URL(ctx.request.url);
   const mine = url.searchParams.get("mine") === "1";
   const status = (url.searchParams.get("status") ?? "").trim();
+  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "20", 10) || 20));
+  const offset = (page - 1) * limit;
 
   const conds: string[] = [];
   const binds: unknown[] = [];
@@ -249,10 +252,14 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
        LEFT JOIN users us ON us.id = e.supervisor_id
        LEFT JOIN users ucr ON ucr.id = e.creator_id
        LEFT JOIN positions pos ON pos.id = ucr.position_id
-       ${where} ORDER BY e.created_at DESC LIMIT 50`
+       ${where} ORDER BY e.created_at DESC LIMIT ? OFFSET ?`
     )
-    .bind(...binds)
+    .bind(...binds, limit, offset)
     .all<ExecutionRow & { process_name: string; assignee_name: string | null; creator_name: string | null; supervisor_name: string | null; creator_display_name: string | null; creator_position_name: string | null }>();
+
+  // Đếm tổng số.
+  const countRow = await db.prepare(`SELECT COUNT(*) AS total FROM executions e ${where}`).bind(...binds).first<{ total: number }>();
+  const total = countRow?.total ?? 0;
 
   // Lấy tiến độ cho tất cả lượt trong 1 query (tránh N+1).
   const execIds = (rows.results ?? []).map((r) => r.id);
@@ -275,7 +282,7 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
     const progress = progressMap.get(r.id) ?? { total: 0, done: 0 };
     items.push({ ...toPublicExec(r, r.process_name, progress, undefined), assignee_name: r.assignee_name, creator_name: r.creator_name, supervisor_name: r.supervisor_name });
   }
-  return ok({ items, total: items.length });
+  return ok({ items, total, page, limit, totalPages: Math.ceil(total / limit) });
 }
 
 // POST /api/v1/executions — tạo lượt mới từ phiên bản đang hiệu lực (EXE-001, EXE-002).

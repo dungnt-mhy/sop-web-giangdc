@@ -450,10 +450,12 @@ export const api = {
     return req("GET", `/processes/x/versions/${encodeURIComponent(versionId)}:validate`);
   },
   // --- Lượt thực hiện (Task 1.6) ---
-  listExecutions(params?: { mine?: boolean; status?: string }): Promise<{ items: Execution[]; total: number }> {
+  listExecutions(params?: { mine?: boolean; status?: string; page?: number; limit?: number }): Promise<{ items: Execution[]; total: number; page?: number; limit?: number; totalPages?: number }> {
     const qs = new URLSearchParams();
     if (params?.mine) qs.set("mine", "1");
     if (params?.status) qs.set("status", params.status);
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.limit) qs.set("limit", String(params.limit));
     const suffix = qs.toString() ? "?" + qs.toString() : "";
     return req("GET", "/executions" + suffix);
   },
