@@ -416,6 +416,8 @@ export async function renderExecutionDetail(root: HTMLElement, execId: string): 
       await loadAllEvidence(body, e.id);
       // Tải phân công cho từng bước.
       await loadAllAssignees(body, e.id);
+      // Tải lịch sử khi mở.
+      bindStepHistory(body, e.id);
       // Tải danh sách ngoại lệ.
       const isActive = e.status === "IN_PROGRESS" || e.status === "PAUSED";
       await loadExceptions(body, dialogRoot, e.id, isActive, reload);
@@ -1081,6 +1083,48 @@ function openResolveDialog(dialogRoot: HTMLElement, exceptionId: string, onDone:
 
 const SHIFT_LABEL: Record<string, string> = { MORNING: "sáng", NOON: "trưa", AFTERNOON: "chiều", NIGHT: "đêm" };
 
+/** Tải lịch sử thao tác khi mở. */
+function bindStepHistory(body: HTMLElement, execId: string): void {
+  const ACTION_LABEL: Record<string, string> = {
+    REPORTED: "📤 Báo hoàn thành",
+    APPROVED: "✅ Duyệt đạt",
+    REJECTED: "🔄 Yêu cầu làm lại",
+    STARTED: "▶️ Bắt đầu",
+    SKIPPED: "⏭️ Bỏ qua",
+    SKIP_REQUESTED: "🙏 Xin bỏ qua",
+  };
+  body.querySelectorAll<HTMLDetailsElement>("details.step-history").forEach((det) => {
+    det.addEventListener("toggle", async () => {
+      if (!det.open) return;
+      const sid = det.dataset.historyFor!;
+      const bodyEl = det.querySelector<HTMLElement>(".step-history-body")!;
+      if (bodyEl.dataset.loaded) return;
+      try {
+        const { items } = await api.getStepHistory(execId, sid);
+        if (items.length === 0) {
+          bodyEl.innerHTML = `<span class="muted small">Chưa có thao tác nào.</span>`;
+        } else {
+          let rejectCount = 0;
+          bodyEl.innerHTML = items.map((h) => {
+            let label = ACTION_LABEL[h.action] ?? h.action;
+            if (h.action === "REJECTED") {
+              rejectCount++;
+              label = `🔄 Yêu cầu làm lại lần ${rejectCount}`;
+            }
+            return `<div class="hist-item"><span class="hist-action">${esc(label)}</span> ` +
+            `<span class="muted small">👤 ${esc(h.actor_name ?? "—")} · 🕐 ${esc(formatDateTime(h.created_at))}</span>` +
+            (h.reason ? `<div class="hist-reason">${esc(h.reason)}</div>` : "") +
+            `</div>`;
+          }).join("");
+        }
+        bodyEl.dataset.loaded = "1";
+      } catch {
+        bodyEl.innerHTML = `<span class="muted small">Không tải được lịch sử.</span>`;
+      }
+    });
+  });
+}
+
 /** Tải phân công cho tất cả các bước (song song). */
 async function loadAllAssignees(body: HTMLElement, execId: string): Promise<void> {
   const els = Array.from(body.querySelectorAll<HTMLElement>("[data-assignees-for]"));
@@ -1514,6 +1558,10 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
               <div class="evidence-grid" data-ev-grid></div>
               <p class="evidence-hint muted small">Ảnh được nén trước khi tải lên (tối đa 10 ảnh/bước). Tệp: PDF, Word, Excel, tối đa 10MB.</p>
             </div>
+            <details class="step-history" data-history-for="${esc(st.id)}">
+              <summary>🕐 Lịch sử thao tác</summary>
+              <div class="step-history-body"><span class="muted small">Đang tải…</span></div>
+            </details>
           </li>`;
         }).join("")}
       </ol>
