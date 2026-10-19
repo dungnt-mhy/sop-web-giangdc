@@ -710,6 +710,13 @@ export async function handleSetStepAssignees(ctx: Ctx, execId: string, stepId: s
   if (["PASSED", "SKIPPED", "CANCELLED"].includes(step.status)) {
     return apiError("VALIDATION_ERROR", "Bước đã hoàn thành — không thể thay đổi người được phân công.", ctx.requestId);
   }
+  // Chặn đổi phân công khi đang có yêu cầu xin bỏ qua chờ duyệt.
+  const pendingSkipAssign = await db.prepare(
+    `SELECT id FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING' LIMIT 1`
+  ).bind(execId, stepId).first();
+  if (pendingSkipAssign) {
+    return apiError("VALIDATION_ERROR", "Bước đang chờ duyệt yêu cầu bỏ qua — không thể thay đổi người được phân công.", ctx.requestId);
+  }
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
   const userIds = Array.isArray(body?.user_ids) ? body.user_ids.filter((x): x is string => typeof x === "string") : [];
@@ -1130,6 +1137,13 @@ export async function handleCompleteStep(ctx: Ctx, execId: string, stepId: strin
   if (!step) return apiError("NOT_FOUND", "Không tìm thấy bước.", ctx.requestId);
   if (step.status !== "IN_PROGRESS") {
     return apiError("VALIDATION_ERROR", "Bước chưa được bắt đầu.", ctx.requestId);
+  }
+  // Chặn hoàn thành khi đang có yêu cầu xin bỏ qua chờ duyệt.
+  const pendingSkipComplete = await db.prepare(
+    `SELECT id FROM skip_requests WHERE execution_id = ? AND step_id = ? AND status = 'PENDING' LIMIT 1`
+  ).bind(execId, stepId).first();
+  if (pendingSkipComplete) {
+    return apiError("VALIDATION_ERROR", "Bước đang chờ duyệt yêu cầu bỏ qua — không thể hoàn thành.", ctx.requestId);
   }
 
   const body = (await readJson(ctx.request)) as Record<string, unknown> | null;

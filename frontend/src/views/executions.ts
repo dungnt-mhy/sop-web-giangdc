@@ -1226,9 +1226,10 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
         ${e.steps.map((st, idx) => {
           const pendingSkip = pendingSkipStepIds.has(st.id);
           const canStart = active && st.status === "NOT_STARTED" && !pendingSkip;
-          const canFinish = active && st.status === "IN_PROGRESS";
+          const canFinish = active && st.status === "IN_PROGRESS" && !pendingSkip;
           const skipAllowed = ((st as unknown as Record<string, unknown>).skip_policy as { allowed?: boolean } | null)?.allowed === true;
           const canSkip = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") && skipAllowed && !pendingSkip;
+          const canAssign = active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) && !pendingSkip;
           const canUpload = active && (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS");
           // Yêu cầu ảnh từ completion_req (EXE-007).
           let minPhotos = 0;
@@ -1258,7 +1259,7 @@ function detailHtml(e: ExecutionDetail, pendingSkipStepIds: Set<string> = new Se
                 ${canFinish ? `<button class="btn sm primary" data-step="complete">Hoàn thành</button>` : ""}
                 ${canSkip ? `<button class="btn sm" data-step="skip">⏭️ Bỏ qua</button>` : ""}
                 ${canSkip ? `<button class="btn sm secondary" data-step="request-skip">🙏 Xin bỏ qua</button>` : ""}
-                ${active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : ""}
+                ${active && !["PASSED", "SKIPPED", "CANCELLED"].includes(st.status) && !pendingSkip ? `<button class="btn sm" data-step="assign">👥 Phân công</button>` : ""}
               </div>
               <div class="step-assignees" data-assignees-for="${esc(st.id)}"><span class="muted small">Đang tải…</span></div>
             </div>
