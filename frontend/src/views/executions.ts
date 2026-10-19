@@ -663,9 +663,9 @@ function renderActions(
 
 /** Xuất báo cáo lượt công việc ra file Word. */
 async function exportExecutionToWord(e: ExecutionDetail): Promise<void> {
-  const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType } = await import("docx");
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, AlignmentType } = await import("docx");
 
-  const children: InstanceType<typeof Paragraph>[] = [];
+  const children: any[] = [];
 
   // Tiêu đề.
   children.push(new Paragraph({
@@ -674,36 +674,25 @@ async function exportExecutionToWord(e: ExecutionDetail): Promise<void> {
     alignment: AlignmentType.CENTER,
   }));
   children.push(new Paragraph({
-    text: `${e.code} — ${e.title || e.process_name || ""}`,
+    text: `${e.code} — ${e.title || (e as unknown as Record<string, unknown>).process_name as string || ""}`,
     heading: HeadingLevel.HEADING_2,
     alignment: AlignmentType.CENTER,
   }));
   children.push(new Paragraph({ text: "" }));
 
   // Thông tin chung.
-  const infoRows = [
+  children.push(new Paragraph({ text: "I. THÔNG TIN CHUNG", heading: HeadingLevel.HEADING_1 }));
+  const infoRows: [string, string][] = [
     ["Mã lượt", e.code],
-    ["Quy trình", `${e.process_name || ""} (${e.process_code || ""})${(e as unknown as Record<string, unknown>).version_number ? ` v${(e as unknown as Record<string, unknown>).version_number}` : ""}`],
+    ["Quy trình", `${(e as unknown as Record<string, unknown>).process_name || ""} (${(e as unknown as Record<string, unknown>).process_code || ""})`],
     ["Trạng thái", e.status],
     ["Người tạo", (e as unknown as Record<string, unknown>).creator_name as string || "—"],
     ["Người thực hiện chính", (e as unknown as Record<string, unknown>).assignee_name as string || "—"],
-    ["Thời gian bắt đầu (dự kiến)", (e as unknown as Record<string, unknown>).expected_start_at ? fmtVn((e as unknown as Record<string, unknown>).expected_start_at as string) : "—"],
-    ["Thời gian hoàn thành (dự kiến)", (e as unknown as Record<string, unknown>).expected_end_at ? fmtVn((e as unknown as Record<string, unknown>).expected_end_at as string) : "—"],
-    ["Thời gian bắt đầu (thực tế)", (e as unknown as { started_at?: string }).started_at ? fmtVn((e as unknown as { started_at: string }).started_at) : "—"],
-    ["Thời gian hoàn thành (thực tế)", (e as unknown as { completed_at?: string }).completed_at ? fmtVn((e as unknown as { completed_at: string }).completed_at) : "—"],
+    ["Tiêu đề", e.title || "—"],
   ];
-  children.push(new Paragraph({ text: "I. THÔNG TIN CHUNG", heading: HeadingLevel.HEADING_1 }));
-  const infoTable = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: infoRows.map(([k, v]) => new TableRow({
-      children: [
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: k, bold: true })] })], width: { size: 30, type: WidthType.PERCENTAGE } }),
-        new TableCell({ children: [new Paragraph(v)], width: { size: 70, type: WidthType.PERCENTAGE } }),
-      ],
-    })),
-  });
-  // @ts-ignore - Table cần được thêm qua children đặc biệt
-  children.push(infoTable as unknown as Paragraph);
+  for (const [k, v] of infoRows) {
+    children.push(new Paragraph({ children: [new TextRun({ text: `${k}: `, bold: true }), new TextRun(v)] }));
+  }
   children.push(new Paragraph({ text: "" }));
 
   // Chi tiết từng bước.
