@@ -106,31 +106,54 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
   }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
   const rows = await db
-    .prepare(`SELECT p.* FROM processes p ${where} ORDER BY p.updated_at DESC, p.created_at DESC LIMIT 200`)
+    .prepare(`SELECT p.* FROM processes p ${where} ORDER BY p.updated_at DESC, p.created_at DESC LIMIT 100`)
     .bind(...binds)
     .all<ProcessRow>();
 
-  const items = [];
-  for (const p of rows.results) {
-    const av = await getActiveVersion(db, p.id);
-    if (status && (!av || av.status !== status)) continue;
-    // Phiên bản mới nhất (để hiện trạng thái đúng: nháp, chờ duyệt...).
-    const latest = await db.prepare(
-      `SELECT * FROM process_versions WHERE process_id = ? ORDER BY version_number DESC LIMIT 1`
-    ).bind(p.id).first<VersionRow>();
-    let creatorName: string | null = null;
-    if (p.created_by) {
-      const u = await db.prepare(`SELECT display_name FROM users WHERE id = ?`).bind(p.created_by).first<{ display_name: string }>();
-      creatorName = u?.display_name ?? null;
+  const procIds = (rows.results ?? []).map((p) => p.id);
+  // Lấy phiên bản hiệu lực + mới nhất cho tất cả quy trình trong 2 query.
+  const activeMap = new Map<string, VersionRow>();
+  const latestMap = new Map<string, VersionRow>();
+  const creatorMap = new Map<string, string>();
+  const ouMap = new Map<string, { id: string; name: string }[]>();
+  if (procIds.length > 0) {
+    const ph = procIds.map(() => "?").join(",");
+    const avRows = await db.prepare(
+      `SELECT * FROM process_versions WHERE process_id IN (${ph}) AND status = 'ACTIVE'`
+    ).bind(...procIds).all<VersionRow>();
+    for (const v of avRows.results ?? []) activeMap.set(v.process_id, v);
+    const ltRows = await db.prepare(
+      `SELECT * FROM process_versions WHERE process_id IN (${ph}) ORDER BY version_number DESC`
+    ).bind(...procIds).all<VersionRow>();
+    for (const v of ltRows.results ?? []) {
+      if (!latestMap.has(v.process_id)) latestMap.set(v.process_id, v);
     }
-    // Đơn vị áp dụng.
+    const creatorIds = [...new Set((rows.results ?? []).map((p) => p.created_by).filter(Boolean))] as string[];
+    if (creatorIds.length > 0) {
+      const cph = creatorIds.map(() => "?").join(",");
+      const cuRows = await db.prepare(
+        `SELECT id, display_name FROM users WHERE id IN (${cph})`
+      ).bind(...creatorIds).all<{ id: string; display_name: string }>();
+      for (const u of cuRows.results ?? []) creatorMap.set(u.id, u.display_name);
+    }
     const ouRows = await db.prepare(
-      `SELECT ou.id, ou.name FROM process_org_units pou JOIN org_units ou ON ou.id = pou.org_unit_id WHERE pou.process_id = ? ORDER BY ou.name ASC`
-    ).bind(p.id).all<{ id: string; name: string }>();
+      `SELECT pou.process_id, ou.id, ou.name FROM process_org_units pou JOIN org_units ou ON ou.id = pou.org_unit_id WHERE pou.process_id IN (${ph}) ORDER BY ou.name ASC`
+    ).bind(...procIds).all<{ process_id: string; id: string; name: string }>();
+    for (const r of ouRows.results ?? []) {
+      if (!ouMap.has(r.process_id)) ouMap.set(r.process_id, []);
+      ouMap.get(r.process_id)!.push({ id: r.id, name: r.name });
+    }
+  }
+
+  const items = [];
+  for (const p of rows.results ?? []) {
+    const av = activeMap.get(p.id) ?? null;
+    if (status && (!av || av.status !== status)) continue;
+    const latest = latestMap.get(p.id) ?? null;
     items.push({
       ...toPublicProcess(p, av),
-      creator_name: creatorName,
-      org_units: ouRows.results ?? [],
+      creator_name: p.created_by ? creatorMap.get(p.created_by) ?? null : null,
+      org_units: ouMap.get(p.id) ?? [],
       latest_version: latest ? { version_number: latest.version_number, status: latest.status } : null,
     });
   }

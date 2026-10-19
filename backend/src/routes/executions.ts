@@ -230,16 +230,31 @@ export async function handleListExecutions(ctx: Ctx): Promise<Response> {
        LEFT JOIN users us ON us.id = e.supervisor_id
        LEFT JOIN users ucr ON ucr.id = e.creator_id
        LEFT JOIN positions pos ON pos.id = ucr.position_id
-       ${where} ORDER BY e.created_at DESC LIMIT 100`
+       ${where} ORDER BY e.created_at DESC LIMIT 50`
     )
     .bind(...binds)
     .all<ExecutionRow & { process_name: string; assignee_name: string | null; creator_name: string | null; supervisor_name: string | null; creator_display_name: string | null; creator_position_name: string | null }>();
 
+  // Lấy tiến độ cho tất cả lượt trong 1 query (tránh N+1).
+  const execIds = (rows.results ?? []).map((r) => r.id);
+  const progressMap = new Map<string, { total: number; done: number }>();
+  if (execIds.length > 0) {
+    const ph = execIds.map(() => "?").join(",");
+    const progRows = await db.prepare(
+      `SELECT execution_id,
+              COUNT(*) AS total,
+              SUM(CASE WHEN status IN ('PASSED','SKIPPED') THEN 1 ELSE 0 END) AS done
+       FROM execution_steps WHERE execution_id IN (${ph}) GROUP BY execution_id`
+    ).bind(...execIds).all<{ execution_id: string; total: number; done: number }>();
+    for (const pr of progRows.results ?? []) {
+      progressMap.set(pr.execution_id, { total: pr.total, done: pr.done ?? 0 });
+    }
+  }
+
   const items = [];
-  for (const r of rows.results) {
-    const progress = await getProgress(db, r.id);
-    const redoInfo = await getRedoInfo(db, r.id);
-    items.push({ ...toPublicExec(r, r.process_name, progress, redoInfo), assignee_name: r.assignee_name, creator_name: r.creator_name, supervisor_name: r.supervisor_name });
+  for (const r of rows.results ?? []) {
+    const progress = progressMap.get(r.id) ?? { total: 0, done: 0 };
+    items.push({ ...toPublicExec(r, r.process_name, progress, undefined), assignee_name: r.assignee_name, creator_name: r.creator_name, supervisor_name: r.supervisor_name });
   }
   return ok({ items, total: items.length });
 }
