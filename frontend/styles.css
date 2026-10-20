@@ -843,3 +843,9 @@ body.sidebar-collapsed .nav-item { justify-content: center; }
 }
 /* Desktop: icon và chữ nằm ngang */
 .evidence-upload-btn .ev-icon, .evidence-refresh-btn .ev-icon { margin-right: 2px; }
+
+/* Tabs dùng chung (trang Đề xuất, Bằng chứng) */
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.tabs .tab { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 999px; padding: 7px 14px; font-size: 14px; cursor: pointer; }
+.tabs .tab.active { background: #0d9488; border-color: #0d9488; color: #fff; font-weight: 600; }
+.tabs .tab:hover { border-color: #0d9488; }

@@ -6,6 +6,7 @@ import { audit, newId, nowIso } from "../db";
 import { apiError, ok, readJson } from "../errors";
 import { requirePermission, type SessionInfo } from "./auth";
 import type { Ctx } from "./context";
+import { getViewScope, executionScopeFragment } from "../scope";
 import { notifyUsers } from "./notifications";
 
 // Giới hạn theo EVD-009 (DEFAULT).
@@ -269,6 +270,17 @@ export async function handleListAllEvidence(ctx: Ctx) {
   const kind = url.searchParams.get("kind");
   const fromDate = url.searchParams.get("from_date");
   const q = url.searchParams.get("q")?.trim();
+  const requestedTab = url.searchParams.get("scope");
+
+  // Quản lý (executions.manage) và admin được tab "all"; nhân viên chỉ có mine/related.
+  const sess = me as SessionInfo;
+  const isManager = sess.permissions.includes("*") || sess.permissions.includes("executions.manage");
+  let tab = requestedTab === "mine" || requestedTab === "related" || requestedTab === "all" ? requestedTab : null;
+  if (!tab) tab = isManager ? "all" : "related";
+  if (tab === "all" && !isManager) tab = "related";
+
+  const viewScope = await getViewScope(db, sess);
+  const myId = sess.user.id;
 
   let sql = `
     SELECT ev.*, e.code as execution_code, es.code as step_code, es.title as step_title,
@@ -280,6 +292,27 @@ export async function handleListAllEvidence(ctx: Ctx) {
     LEFT JOIN users u ON u.id = ev.uploaded_by
     WHERE 1=1`;
   const params: unknown[] = [];
+  if (tab === "mine") {
+    sql += ` AND ev.uploaded_by = ?`;
+    params.push(myId);
+  } else if (tab === "related") {
+    // Bằng chứng mình tải lên, hoặc thuộc lượt/bước mình tham gia:
+    // được giao lượt, tạo lượt, giám sát lượt, phê duyệt lượt,
+    // được phân công bước, giám sát bước.
+    sql += ` AND (ev.uploaded_by = ? OR e.assignee_id = ? OR e.created_by = ?
+      OR e.id IN (SELECT execution_id FROM execution_supervisors WHERE user_id = ?)
+      OR e.id IN (SELECT execution_id FROM execution_approvers WHERE user_id = ?)
+      OR e.id IN (SELECT es2.execution_id FROM execution_step_assignees esa JOIN execution_steps es2 ON es2.id = esa.execution_step_id WHERE esa.user_id = ?)
+      OR e.id IN (SELECT es3.execution_id FROM execution_step_supervisor_assignees ssa JOIN execution_steps es3 ON es3.id = ssa.execution_step_id WHERE ssa.user_id = ?))`;
+    params.push(myId, myId, myId, myId, myId, myId, myId);
+  } else {
+    // all trong phạm vi (chỉ quản lý/admin): áp dụng phạm vi xem đơn vị.
+    const frag = executionScopeFragment(viewScope, "e");
+    if (frag.cond) {
+      sql += ` AND ${frag.cond}`;
+      params.push(...frag.binds);
+    }
+  }
   if (kind && ["PHOTO", "FILE"].includes(kind)) {
     sql += ` AND ev.kind = ?`;
     params.push(kind);
@@ -296,7 +329,7 @@ export async function handleListAllEvidence(ctx: Ctx) {
   sql += ` ORDER BY ev.created_at DESC LIMIT 200`;
 
   const rows = await db.prepare(sql).bind(...params).all();
-  return ok({ items: rows.results ?? [], total: (rows.results ?? []).length });
+  return ok({ items: rows.results ?? [], total: (rows.results ?? []).length, scope: tab });
 }
 
 /** GET /evidence/{id}/download — URL tải/xem tệp (kiểm tra quyền, chuyển hướng tới R2). */
@@ -307,6 +340,45 @@ export async function handleDownloadEvidence(ctx: Ctx, evidenceId: string) {
 
   const ev = await db.prepare(`SELECT * FROM evidence WHERE id = ?`).bind(evidenceId).first<EvidenceRow>();
   if (!ev) return apiError("NOT_FOUND", "Không tìm thấy bằng chứng.", ctx.requestId);
+
+  // Kiểm tra phạm vi xem: chỉ người tải lên, người tham gia lượt/bước, hoặc quản lý trong phạm vi mới xem/tải được.
+  const sess = me as SessionInfo;
+  const myId = sess.user.id;
+  const isAdmin = sess.permissions.includes("*");
+  const isManager = isAdmin || sess.permissions.includes("executions.manage");
+  let allowed = isAdmin || ev.uploaded_by === myId;
+  if (!allowed) {
+    const row = await db
+      .prepare(
+        `SELECT 1 FROM execution_steps es
+         JOIN executions e ON e.id = es.execution_id
+         WHERE es.id = ? AND (e.assignee_id = ? OR e.created_by = ?
+           OR e.id IN (SELECT execution_id FROM execution_supervisors WHERE user_id = ?)
+           OR e.id IN (SELECT execution_id FROM execution_approvers WHERE user_id = ?)
+           OR e.id IN (SELECT es2.execution_id FROM execution_step_assignees esa JOIN execution_steps es2 ON es2.id = esa.execution_step_id WHERE esa.user_id = ?)
+           OR e.id IN (SELECT es3.execution_id FROM execution_step_supervisor_assignees ssa JOIN execution_steps es3 ON es3.id = ssa.execution_step_id WHERE ssa.user_id = ?))`
+      )
+      .bind(ev.execution_step_id, myId, myId, myId, myId, myId, myId)
+      .first();
+    if (row) allowed = true;
+  }
+  if (!allowed && isManager && !isAdmin) {
+    // Quản lý cấp đơn vị: xem được bằng chứng của lượt có người thực hiện trong phạm vi đơn vị mình.
+    const viewScope = await getViewScope(db, sess);
+    const frag = executionScopeFragment(viewScope, "e");
+    if (frag.cond) {
+      const row = await db
+        .prepare(
+          `SELECT 1 FROM execution_steps es JOIN executions e ON e.id = es.execution_id WHERE es.id = ? AND ${frag.cond}`
+        )
+        .bind(ev.execution_step_id, ...frag.binds)
+        .first();
+      if (row) allowed = true;
+    } else {
+      allowed = true;
+    }
+  }
+  if (!allowed) return apiError("FORBIDDEN", "Bạn không có quyền xem bằng chứng này.", ctx.requestId);
 
   const obj = await ctx.env.sop_demo_files.get(ev.r2_key);
   if (!obj) return apiError("NOT_FOUND", "Tệp không còn tồn tại.", ctx.requestId);

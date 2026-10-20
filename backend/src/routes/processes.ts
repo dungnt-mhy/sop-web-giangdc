@@ -10,6 +10,7 @@
 import { audit, newId, nowIso } from "../db";
 import { apiError, ok, readJson } from "../errors";
 import { requirePermission, type SessionInfo } from "./auth";
+import { getViewScope, unitAncestors } from "../scope";
 import { notifyUsers } from "./notifications";
 import type { Ctx } from "./context";
 
@@ -118,6 +119,20 @@ export async function handleListProcesses(ctx: Ctx): Promise<Response> {
   if (orgUnitId) {
     conds.push(`EXISTS (SELECT 1 FROM process_org_units pou WHERE pou.process_id = p.id AND pou.org_unit_id = ?)`);
     binds.push(orgUnitId);
+  }
+  // Lọc quy trình theo phạm vi xem: chỉ hiện quy trình toàn cục (không gán đơn vị)
+  // hoặc quy trình áp dụng cho đơn vị của mình / đơn vị cha lên tới cấp công ty.
+  const __me = s as SessionInfo;
+  const __scope = await getViewScope(db, __me);
+  if (__scope.level !== "all") {
+    const __visUnits = await unitAncestors(db, __scope.orgUnitId);
+    if (__visUnits.length === 0) {
+      conds.push(`NOT EXISTS (SELECT 1 FROM process_org_units __pou WHERE __pou.process_id = p.id)`);
+    } else {
+      const __ph = __visUnits.map(() => "?").join(",");
+      conds.push(`(NOT EXISTS (SELECT 1 FROM process_org_units __pou WHERE __pou.process_id = p.id) OR EXISTS (SELECT 1 FROM process_org_units __pou2 WHERE __pou2.process_id = p.id AND __pou2.org_unit_id IN (${__ph})))`);
+      binds.push(...__visUnits);
+    }
   }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
   const rows = await db

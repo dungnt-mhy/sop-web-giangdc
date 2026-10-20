@@ -529,10 +529,18 @@ export async function renderEvidence(root: HTMLElement): Promise<void> {
     FAILED: "Không đạt",
     SKIPPED: "Bỏ qua",
   };
+  const sess = await api.session().catch(() => null);
+  const isManager = !!sess && (sess.permissions.includes("*") || sess.permissions.includes("executions.manage"));
+  const defaultTab: string = isManager ? "all" : "related";
   root.innerHTML = `
     <div class="page-head">
       <div><h2>Quản lý bằng chứng</h2>
-      <p class="page-sub">Tất cả ảnh và tệp bằng chứng đã tải lên.</p></div>
+      <p class="page-sub">${isManager ? "Bằng chứng trong phạm vi quản lý của bạn." : "Bằng chứng bạn tải lên hoặc thuộc lượt/bước bạn tham gia."}</p></div>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Phạm vi bằng chứng">
+      <button class="tab${defaultTab === "mine" ? " active" : ""}" data-scope="mine" role="tab">📷 Tôi tải lên</button>
+      <button class="tab${defaultTab === "related" ? " active" : ""}" data-scope="related" role="tab">👥 Tôi tham gia</button>
+      ${isManager ? `<button class="tab${defaultTab === "all" ? " active" : ""}" data-scope="all" role="tab">🌐 Tất cả trong phạm vi</button>` : ""}
     </div>
     <div class="filter-bar">
       <input type="search" id="ev-flt-q" class="input" placeholder="Tìm theo tên tệp…" aria-label="Tìm kiếm" />
@@ -555,6 +563,16 @@ export async function renderEvidence(root: HTMLElement): Promise<void> {
   const selKind = root.querySelector<HTMLSelectElement>("#ev-flt-kind")!;
   const inpDate = root.querySelector<HTMLInputElement>("#ev-flt-date")!;
   let viewMode: "grid" | "list" = "grid";
+  let scopeTab: string = defaultTab;
+
+  root.querySelectorAll<HTMLButtonElement>(".tabs .tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      root.querySelectorAll(".tabs .tab").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      scopeTab = btn.dataset.scope ?? defaultTab;
+      void reload();
+    });
+  });
 
   root.querySelectorAll<HTMLButtonElement>(".view-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -569,6 +587,7 @@ export async function renderEvidence(root: HTMLElement): Promise<void> {
     listEl.innerHTML = `<p class="empty">Đang tải…</p>`;
     try {
       const qs = new URLSearchParams();
+      qs.set("scope", scopeTab);
       if (inpQ.value.trim()) qs.set("q", inpQ.value.trim());
       if (selKind.value) qs.set("kind", selKind.value);
       if (inpDate.value) qs.set("from_date", inpDate.value);

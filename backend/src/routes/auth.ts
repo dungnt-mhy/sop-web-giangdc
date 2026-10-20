@@ -49,6 +49,7 @@ export interface SessionInfo {
     email: string | null;
     status: string;
     position_name: string | null;
+    org_unit_id: string | null;
     org_unit_name: string | null;
   };
   roles: string[];
@@ -112,8 +113,9 @@ export async function loadSession(ctx: Ctx): Promise<SessionInfo | null> {
     const p = await db.prepare(`SELECT name FROM positions WHERE id = ?`).bind(user.position_id).first<{ name: string }>();
     position_name = p?.name ?? null;
   }
-  if (user.org_unit_id) {
-    const ou = await db.prepare(`SELECT name FROM org_units WHERE id = ?`).bind(user.org_unit_id).first<{ name: string }>();
+  const org_unit_id = user.org_unit_id ?? null;
+  if (org_unit_id) {
+    const ou = await db.prepare(`SELECT name FROM org_units WHERE id = ?`).bind(org_unit_id).first<{ name: string }>();
     org_unit_name = ou?.name ?? null;
   }
 
@@ -132,6 +134,7 @@ export async function loadSession(ctx: Ctx): Promise<SessionInfo | null> {
       email: user.email,
       status: user.status,
       position_name,
+      org_unit_id,
       org_unit_name,
     },
     roles,
@@ -238,8 +241,9 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
     const p = await db.prepare(`SELECT name FROM positions WHERE id = ?`).bind(user.position_id).first<{ name: string }>();
     loginPositionName = p?.name ?? null;
   }
-  if (user.org_unit_id) {
-    const ou = await db.prepare(`SELECT name FROM org_units WHERE id = ?`).bind(user.org_unit_id).first<{ name: string }>();
+  const loginOrgUnitId = user.org_unit_id ?? null;
+  if (loginOrgUnitId) {
+    const ou = await db.prepare(`SELECT name FROM org_units WHERE id = ?`).bind(loginOrgUnitId).first<{ name: string }>();
     loginOrgUnitName = ou?.name ?? null;
   }
   await db.batch([
@@ -270,6 +274,7 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
       email: user.email,
       status: user.status,
       position_name: loginPositionName,
+      org_unit_id: loginOrgUnitId,
       org_unit_name: loginOrgUnitName,
     },
     roles,

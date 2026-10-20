@@ -9,6 +9,7 @@ export interface SessionUser {
   email: string | null;
   status: string;
   position_name: string | null;
+  org_unit_id: string | null;
   org_unit_name: string | null;
 }
 
@@ -664,7 +665,7 @@ export const api = {
   listAllExceptions(query: string): Promise<{ items: AppException[]; total: number }> {
     return req("GET", `/exceptions${query ? "?" + query : ""}`);
   },
-  listAllEvidence(query: string): Promise<{ items: Record<string, unknown>[]; total: number }> {
+  listAllEvidence(query: string): Promise<{ items: Record<string, unknown>[]; total: number; scope?: string }> {
     return req("GET", `/evidence${query ? "?" + query : ""}`);
   },
   listStepAssignees(execId: string, stepId: string): Promise<{ items: { id: string; username: string; display_name: string; position: string | null }[] }> {

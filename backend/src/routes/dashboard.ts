@@ -7,7 +7,8 @@
 //   cycle_time = completed_at - started_at (median và P95)
 
 import { apiError, ok } from "../errors";
-import { requirePermission } from "./auth";
+import { requirePermission, type SessionInfo } from "./auth";
+import { getViewScope, executionScopeFragment, execIdScopeFragment, type ViewScope } from "../scope";
 import type { Ctx } from "./context";
 
 function pct(n: number, d: number): number | null {
@@ -34,6 +35,7 @@ export async function handleDashboardSummary(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
+  const __scope = await getViewScope(db, me as SessionInfo);
 
   const url = new URL(ctx.request.url);
   const from = url.searchParams.get("from");
@@ -45,6 +47,8 @@ export async function handleDashboardSummary(ctx: Ctx) {
   if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
   if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
   if (processId) { conds.push(`e.process_id = ?`); params.push(processId); }
+  const __sf = executionScopeFragment(__scope, "e");
+  if (__sf.cond) { conds.push(__sf.cond); params.push(...__sf.binds); }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 
   // Tổng lượt theo trạng thái.
@@ -142,6 +146,7 @@ export async function handleDashboardOverview(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
+  const __scope = await getViewScope(db, me as SessionInfo);
 
   const url = new URL(ctx.request.url);
   const from = url.searchParams.get("from");
@@ -153,25 +158,29 @@ export async function handleDashboardOverview(ctx: Ctx) {
   if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
   if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
   if (processId) { conds.push(`e.process_id = ?`); params.push(processId); }
+  const __sf = executionScopeFragment(__scope, "e");
+  if (__sf.cond) { conds.push(__sf.cond); params.push(...__sf.binds); }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
   const whereAnd = conds.length > 0 ? `${where} AND` : "WHERE";
 
-  // 1. Ngoại lệ theo trạng thái và mức độ.
+  // 1. Ngoại lệ theo trạng thái và mức độ (lọc theo phạm vi lượt liên kết).
+  const __excScope = execIdScopeFragment(__scope, "exceptions.execution_id");
   const excByStatus = await db.prepare(
-    `SELECT status, COUNT(*) as cnt FROM exceptions GROUP BY status`
-  ).all<{ status: string; cnt: number }>();
+    `SELECT status, COUNT(*) as cnt FROM exceptions WHERE ${__excScope.cond} GROUP BY status`
+  ).bind(...__excScope.binds).all<{ status: string; cnt: number }>();
   const excBySeverity = await db.prepare(
-    `SELECT severity, COUNT(*) as cnt FROM exceptions WHERE status NOT IN ('RESOLVED','CLOSED') GROUP BY severity`
-  ).all<{ severity: string; cnt: number }>();
+    `SELECT severity, COUNT(*) as cnt FROM exceptions WHERE status NOT IN ('RESOLVED','CLOSED') AND ${__excScope.cond} GROUP BY severity`
+  ).bind(...__excScope.binds).all<{ severity: string; cnt: number }>();
   const openExc = await db.prepare(
-    `SELECT COUNT(*) as cnt FROM exceptions WHERE status NOT IN ('RESOLVED','CLOSED')`
-  ).first<{ cnt: number }>();
+    `SELECT COUNT(*) as cnt FROM exceptions WHERE status NOT IN ('RESOLVED','CLOSED') AND ${__excScope.cond}`
+  ).bind(...__excScope.binds).first<{ cnt: number }>();
 
-  // 2. Bằng chứng: tổng số, theo loại.
+  // 2. Bằng chứng: tổng số, theo loại (lọc theo phạm vi lượt chứa bằng chứng).
+  const __evScope = execIdScopeFragment(__scope, "(SELECT __es.execution_id FROM execution_steps __es WHERE __es.id = evidence.execution_step_id)");
   const evStats = await db.prepare(
-    `SELECT kind, COUNT(*) as cnt FROM evidence GROUP BY kind`
-  ).all<{ kind: string; cnt: number }>();
-  const evTotal = await db.prepare(`SELECT COUNT(*) as cnt FROM evidence`).first<{ cnt: number }>();
+    `SELECT kind, COUNT(*) as cnt FROM evidence WHERE ${__evScope.cond} GROUP BY kind`
+  ).bind(...__evScope.binds).all<{ kind: string; cnt: number }>();
+  const evTotal = await db.prepare(`SELECT COUNT(*) as cnt FROM evidence WHERE ${__evScope.cond}`).bind(...__evScope.binds).first<{ cnt: number }>();
 
   // 3. Lượt công việc theo ngày (14 ngày gần nhất).
   const byDate = await db.prepare(
@@ -197,18 +206,30 @@ export async function handleDashboardOverview(ctx: Ctx) {
      ${where} GROUP BY u.id ORDER BY total DESC LIMIT 8`
   ).bind(...params).all<{ display_name: string; username: string; total: number; done: number; active: number }>();
 
-  // 6. Người dùng hoạt động.
-  const activeUsers = await db.prepare(
-    `SELECT COUNT(*) as cnt FROM users WHERE status = 'active'`
-  ).first<{ cnt: number }>();
+  // 6. Người dùng hoạt động (theo phạm vi đơn vị).
+  let activeUsers: { cnt: number } | null;
+  if (__scope.level === "all") {
+    activeUsers = await db.prepare(
+      `SELECT COUNT(*) as cnt FROM users WHERE status = 'active'`
+    ).first<{ cnt: number }>();
+  } else if (__scope.level === "unit" && __scope.unitIds.length > 0) {
+    activeUsers = await db.prepare(
+      `SELECT COUNT(*) as cnt FROM users WHERE status = 'active' AND org_unit_id IN (${__scope.unitIds.map(() => "?").join(",")})`
+    ).bind(...__scope.unitIds).first<{ cnt: number }>();
+  } else if (__scope.level === "self") {
+    activeUsers = { cnt: 1 };
+  } else {
+    activeUsers = { cnt: 0 };
+  }
 
   // 7. Ngoại lệ đang mở (chi tiết 5 cái mới nhất).
+  const __excListScope = execIdScopeFragment(__scope, "ex.execution_id");
   const openExcList = await db.prepare(
     `SELECT ex.id, ex.title, ex.severity, ex.status, ex.created_at, e.code as exec_code
      FROM exceptions ex LEFT JOIN executions e ON e.id = ex.execution_id
-     WHERE ex.status NOT IN ('RESOLVED','CLOSED')
+     WHERE ex.status NOT IN ('RESOLVED','CLOSED') AND ${__excListScope.cond}
      ORDER BY ex.created_at DESC LIMIT 5`
-  ).all();
+  ).bind(...__excListScope.binds).all();
 
   return ok({
     exceptions: {
@@ -235,6 +256,7 @@ export async function handleDashboardDaily(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
+  const __scope = await getViewScope(db, me as SessionInfo);
 
   const url = new URL(ctx.request.url);
   let from = url.searchParams.get("from");
@@ -247,30 +269,34 @@ export async function handleDashboardDaily(ctx: Ctx) {
     from = d.toISOString().slice(0, 10);
   }
 
-  // Chạy song song 5 query thống kê theo ngày.
+  // Chạy song song 5 query thống kê theo ngày (lọc theo phạm vi xem).
+  const __sfE = executionScopeFragment(__scope, "e");
+  const __excC = execIdScopeFragment(__scope, "execution_id");
+  const __evC = execIdScopeFragment(__scope, "(SELECT __esx.execution_id FROM execution_steps __esx WHERE __esx.id = evidence.execution_step_id)");
+  const __condE = __sfE.cond ? ` AND ${__sfE.cond}` : "";
   const [created, completed, excOpened, excClosed, evidence] = await Promise.all([
     db.prepare(
-      `SELECT date(created_at) as d, COUNT(*) as cnt FROM executions
-       WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
-    ).bind(from, to).all<{ d: string; cnt: number }>(),
+      `SELECT date(e.created_at) as d, COUNT(*) as cnt FROM executions e
+       WHERE date(e.created_at) BETWEEN ? AND ?${__condE} GROUP BY d`
+    ).bind(from, to, ...__sfE.binds).all<{ d: string; cnt: number }>(),
     db.prepare(
-      `SELECT date(completed_at) as d, COUNT(*) as cnt FROM executions
-       WHERE status = 'COMPLETED' AND date(completed_at) BETWEEN ? AND ?
+      `SELECT date(e.completed_at) as d, COUNT(*) as cnt FROM executions e
+       WHERE e.status = 'COMPLETED' AND date(e.completed_at) BETWEEN ? AND ?${__condE}
        GROUP BY d`
-    ).bind(from, to).all<{ d: string; cnt: number }>(),
+    ).bind(from, to, ...__sfE.binds).all<{ d: string; cnt: number }>(),
     db.prepare(
       `SELECT date(created_at) as d, COUNT(*) as cnt FROM exceptions
-       WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
-    ).bind(from, to).all<{ d: string; cnt: number }>(),
+       WHERE date(created_at) BETWEEN ? AND ? AND ${__excC.cond} GROUP BY d`
+    ).bind(from, to, ...__excC.binds).all<{ d: string; cnt: number }>(),
     db.prepare(
       `SELECT date(updated_at) as d, COUNT(*) as cnt FROM exceptions
-       WHERE status IN ('RESOLVED','CLOSED') AND date(updated_at) BETWEEN ? AND ?
+       WHERE status IN ('RESOLVED','CLOSED') AND date(updated_at) BETWEEN ? AND ? AND ${__excC.cond}
        GROUP BY d`
-    ).bind(from, to).all<{ d: string; cnt: number }>(),
+    ).bind(from, to, ...__excC.binds).all<{ d: string; cnt: number }>(),
     db.prepare(
       `SELECT date(created_at) as d, COUNT(*) as cnt FROM evidence
-       WHERE date(created_at) BETWEEN ? AND ? GROUP BY d`
-    ).bind(from, to).all<{ d: string; cnt: number }>(),
+       WHERE date(created_at) BETWEEN ? AND ? AND ${__evC.cond} GROUP BY d`
+    ).bind(from, to, ...__evC.binds).all<{ d: string; cnt: number }>(),
   ]);
 
   // Gộp theo ngày.
@@ -311,6 +337,7 @@ export async function handleDashboardExecutions(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
+  const __scope = await getViewScope(db, me as SessionInfo);
 
   const url = new URL(ctx.request.url);
   const from = url.searchParams.get("from");
@@ -326,6 +353,8 @@ export async function handleDashboardExecutions(ctx: Ctx) {
   if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
   if (processId) { conds.push(`e.process_id = ?`); params.push(processId); }
   if (status) { conds.push(`e.status = ?`); params.push(status); }
+  const __sf = executionScopeFragment(__scope, "e");
+  if (__sf.cond) { conds.push(__sf.cond); params.push(...__sf.binds); }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 
   const rows = await db
@@ -356,6 +385,7 @@ export async function handleDashboardExportCsv(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
+  const __scope = await getViewScope(db, me as SessionInfo);
 
   const url = new URL(ctx.request.url);
   const from = url.searchParams.get("from");
@@ -367,6 +397,8 @@ export async function handleDashboardExportCsv(ctx: Ctx) {
   if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
   if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
   if (processId) { conds.push(`e.process_id = ?`); params.push(processId); }
+  const __sf = executionScopeFragment(__scope, "e");
+  if (__sf.cond) { conds.push(__sf.cond); params.push(...__sf.binds); }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 
   const rows = await db
@@ -410,6 +442,7 @@ export async function handleStatsByUnit(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
+  const __scope = await getViewScope(db, me as SessionInfo);
   const url = new URL(ctx.request.url);
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
@@ -422,6 +455,13 @@ export async function handleStatsByUnit(ctx: Ctx) {
   if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
   if (unitId) { conds.push(`ou.id = ?`); params.push(unitId); }
   if (unitType) { conds.push(`ou.type = ?`); params.push(unitType); }
+  if (__scope.level === "unit") {
+    if (__scope.unitIds.length === 0) { conds.push("1=0"); }
+    else { conds.push(`ou.id IN (${__scope.unitIds.map(() => "?").join(",")})`); params.push(...__scope.unitIds); }
+  } else if (__scope.level === "self") {
+    if (__scope.orgUnitId) { conds.push(`ou.id = ?`); params.push(__scope.orgUnitId); }
+    else { conds.push("1=0"); }
+  }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 
   const rows = await db.prepare(
@@ -447,6 +487,7 @@ export async function handleStatsByPerson(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
+  const __scope = await getViewScope(db, me as SessionInfo);
   const url = new URL(ctx.request.url);
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
@@ -457,6 +498,12 @@ export async function handleStatsByPerson(ctx: Ctx) {
   if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
   if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
   if (userId) { conds.push(`u.id = ?`); params.push(userId); }
+  if (__scope.level === "unit") {
+    if (__scope.unitIds.length === 0) { conds.push("1=0"); }
+    else { conds.push(`u.org_unit_id IN (${__scope.unitIds.map(() => "?").join(",")})`); params.push(...__scope.unitIds); }
+  } else if (__scope.level === "self") {
+    conds.push(`u.id = ?`); params.push(__scope.userId);
+  }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 
   const rows = await db.prepare(
@@ -482,6 +529,7 @@ export async function handleStatsByProcess(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
+  const __scope = await getViewScope(db, me as SessionInfo);
   const url = new URL(ctx.request.url);
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
@@ -492,6 +540,8 @@ export async function handleStatsByProcess(ctx: Ctx) {
   if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
   if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
   if (processId) { conds.push(`p.id = ?`); params.push(processId); }
+  const __sf = executionScopeFragment(__scope, "e");
+  if (__sf.cond) { conds.push(__sf.cond); params.push(...__sf.binds); }
   const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 
   const rows = await db.prepare(
@@ -517,6 +567,7 @@ export async function handleStatsByShift(ctx: Ctx) {
   const me = await requirePermission(ctx, "reports.view");
   if (me instanceof Response) return me;
   const db = ctx.env.sop_demo_db;
+  const __scope = await getViewScope(db, me as SessionInfo);
   const url = new URL(ctx.request.url);
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
@@ -525,6 +576,8 @@ export async function handleStatsByShift(ctx: Ctx) {
   const params: unknown[] = [];
   if (from) { conds.push(`e.created_at >= ?`); params.push(from); }
   if (to) { conds.push(`e.created_at < date(?, '+1 day')`); params.push(to); }
+  const __sf = executionScopeFragment(__scope, "e");
+  if (__sf.cond) { conds.push(__sf.cond); params.push(...__sf.binds); }
   const where = `WHERE ${conds.join(" AND ")}`;
 
   const rows = await db.prepare(
