@@ -15,6 +15,7 @@ export const PERMISSION_CATALOG: { code: string; label: string; group: string }[
   { code: "processes.manage", label: "Quản lý quy trình (tạo/sửa)", group: "Quy trình" },
   { code: "processes.review", label: "Thẩm định quy trình", group: "Quy trình" },
   { code: "processes.approve", label: "Phê duyệt quy trình", group: "Quy trình" },
+  { code: "executions.view", label: "Xem lượt công việc", group: "Thực hiện" },
   { code: "executions.perform", label: "Thực hiện công việc", group: "Thực hiện" },
   { code: "executions.create", label: "Tạo lượt công việc", group: "Thực hiện" },
   { code: "executions.manage", label: "Quản lý lượt thực hiện", group: "Thực hiện" },
