@@ -26,6 +26,8 @@ export const PBKDF2_KEY_LEN = 32;
  *  (DEFAULT chờ OPEN-AUTH-POLICY-01 chốt ở UAT.) */
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 export const SESSION_ABSOLUTE_MAX_MS = 7 * 24 * 60 * 60 * 1000;
+/** Khi tick "Lưu đăng nhập": phiên kéo dài 30 ngày. */
+export const SESSION_REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Khoá tạm sau 5 lần đăng nhập sai liên tiếp, mỗi lần 15 phút (DEFAULT). */
 export const MAX_FAILED_LOGINS = 5;
@@ -165,12 +167,12 @@ export function getRequestToken(request: Request): string | null {
 }
 
 /** Ghi Set-Cookie phiên vào response. */
-export function setSessionCookie(res: Response, token: string, isHttps: boolean): void {
+export function setSessionCookie(res: Response, token: string, isHttps: boolean, maxAgeMs = SESSION_TTL_MS): void {
   const attrs = [
     `${COOKIE_NAME}=${encodeURIComponent(token)}`,
     "Path=/",
     "HttpOnly",
-    `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
+    `Max-Age=${Math.floor(maxAgeMs / 1000)}`,
     isHttps ? "Secure; SameSite=None" : "SameSite=Lax",
   ];
   res.headers.append("Set-Cookie", attrs.join("; "));
@@ -189,8 +191,8 @@ export function clearSessionCookie(res: Response, isHttps: boolean): void {
 }
 
 /** Hạn dùng mới cho phiên đang hoạt động (trượt 12h). */
-export function refreshedExpiry(): string {
-  return addMs(nowIso(), SESSION_TTL_MS);
+export function refreshedExpiry(remember = false): string {
+  return addMs(nowIso(), remember ? SESSION_REMEMBER_TTL_MS : SESSION_TTL_MS);
 }
 
 /** Rút gọn user-agent làm device_summary (tối đa 120 ký tự, bỏ ký tự điều khiển). */

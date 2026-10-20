@@ -20,6 +20,7 @@ import {
   MAX_FAILED_LOGINS,
   SESSION_TTL_MS,
   SESSION_ABSOLUTE_MAX_MS,
+  SESSION_REMEMBER_TTL_MS,
   clearSessionCookie,
   clientIp,
   deviceSummary,
@@ -76,14 +77,18 @@ export async function loadSession(ctx: Ctx): Promise<SessionInfo | null> {
       user_id: string;
       created_at: string;
       expires_at: string;
+      remember_me: number | null;
     }>();
   if (!s) return null;
 
+  const remember = (s.remember_me ?? 0) === 1;
+  const absoluteMax = remember ? SESSION_REMEMBER_TTL_MS : SESSION_ABSOLUTE_MAX_MS;
+
   const now = nowIso();
-  // Hết hạn (trượt) hoặc quá hạn tuyệt đối 7 ngày → thu hồi.
+  // Hết hạn (trượt) hoặc quá hạn tuyệt đối (7 ngày thường, 30 ngày khi nhớ đăng nhập) → thu hồi.
   if (
     s.expires_at <= now ||
-    addMs(s.created_at, SESSION_ABSOLUTE_MAX_MS) <= now
+    addMs(s.created_at, absoluteMax) <= now
   ) {
     await db
       .prepare(`UPDATE user_sessions SET revoked_at = ? WHERE id = ?`)
@@ -115,7 +120,7 @@ export async function loadSession(ctx: Ctx): Promise<SessionInfo | null> {
   // Trượt hạn dùng: cập nhật last_seen_at + expires_at.
   await db
     .prepare(`UPDATE user_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`)
-    .bind(now, refreshedExpiry(), s.id)
+    .bind(now, refreshedExpiry(remember), s.id)
     .run();
 
   return {
@@ -132,7 +137,7 @@ export async function loadSession(ctx: Ctx): Promise<SessionInfo | null> {
     roles,
     permissions,
     mustChangePassword: (cred?.must_change_password ?? 0) === 1,
-    expiresAt: refreshedExpiry(),
+    expiresAt: refreshedExpiry(remember),
     viaCookie,
   };
 }
@@ -152,9 +157,11 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
   const body = (await readJson(ctx.request)) as {
     username?: unknown;
     password?: unknown;
+    remember?: unknown;
   } | null;
   const username = typeof body?.username === "string" ? body.username : "";
   const password = typeof body?.password === "string" ? body.password : "";
+  const remember = body?.remember === true;
   if (!username.trim() || !password) {
     return apiError("VALIDATION_ERROR", "Vui lòng nhập tên đăng nhập và mật khẩu.", ctx.requestId);
   }
@@ -218,7 +225,8 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
   // Đăng nhập thành công: reset bộ đếm, tạo phiên mới.
   const token = newSessionToken();
   const tokenHash = await hashToken(token);
-  const expiresAt = addMs(now, SESSION_TTL_MS);
+  const loginTtl = remember ? SESSION_REMEMBER_TTL_MS : SESSION_TTL_MS;
+  const expiresAt = addMs(now, loginTtl);
   const sessionId = newId();
   const roles = await getUserRoles(db, user.id);
   const permissions = await getPermissionsForRoles(db, roles);
@@ -240,10 +248,10 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
       .bind(user.id),
     db
       .prepare(
-        `INSERT INTO user_sessions (id, user_id, session_hash, created_at, last_seen_at, expires_at, revoked_at, device_summary)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`
+        `INSERT INTO user_sessions (id, user_id, session_hash, created_at, last_seen_at, expires_at, revoked_at, device_summary, remember_me)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`
       )
-      .bind(sessionId, user.id, tokenHash, now, now, expiresAt, deviceSummary(ctx.request)),
+      .bind(sessionId, user.id, tokenHash, now, now, expiresAt, deviceSummary(ctx.request), remember ? 1 : 0),
   ]);
   await audit(db, {
     event_type: "AUTH_LOGIN_OK",
@@ -274,7 +282,7 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
   // tồn tại khi tải lại trang. Cùng origin nên không còn vấn đề cookie cross-site.
   // Không log token (ADM-003).
   const res = ok({ ...sessionPayload(info), token });
-  setSessionCookie(res, token, ctx.isHttps);
+  setSessionCookie(res, token, ctx.isHttps, loginTtl);
   return res;
 }
 

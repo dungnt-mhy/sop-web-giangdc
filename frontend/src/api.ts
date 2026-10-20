@@ -307,10 +307,11 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 let authToken: string | null = null;
 
 export const api = {
-  async login(username: string, password: string): Promise<SessionInfo> {
+  async login(username: string, password: string, remember = false): Promise<SessionInfo> {
     const s = await req<SessionInfo & { token?: string }>("POST", "/auth/login", {
       username,
       password,
+      remember,
     });
     if (s.token) authToken = s.token;
     return s;

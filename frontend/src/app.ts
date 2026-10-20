@@ -538,6 +538,7 @@ function wireLogin(): void {
     const fd = new FormData(form);
     const username = String(fd.get("username") ?? "").trim();
     const password = String(fd.get("password") ?? "");
+    const remember = (form.querySelector("#login-remember") as HTMLInputElement)?.checked ?? false;
     if (!username || !password) {
       errBox.textContent = "Vui lòng nhập tên đăng nhập và mật khẩu.";
       errBox.hidden = false;
@@ -546,7 +547,7 @@ function wireLogin(): void {
     const btn = $("#login-submit") as HTMLButtonElement;
     const restore = setLoading(btn, true, "Đang đăng nhập…");
     try {
-      session = await api.login(username, password);
+      session = await api.login(username, password, remember);
       restore(); // Tắt trạng thái loading trước khi chuyển màn hình (tránh nút kẹt).
       showApp();
     } catch (err) {
