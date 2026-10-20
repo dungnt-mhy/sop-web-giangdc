@@ -47,6 +47,8 @@ export interface SessionInfo {
     display_name: string;
     email: string | null;
     status: string;
+    position_name: string | null;
+    org_unit_name: string | null;
   };
   roles: string[];
   permissions: string[];
@@ -98,6 +100,18 @@ export async function loadSession(ctx: Ctx): Promise<SessionInfo | null> {
   const roles = await getUserRoles(db, user.id);
   const permissions = await getPermissionsForRoles(db, roles);
 
+  // Lấy tên chức vụ và đơn vị công tác để hiện ở trang chủ.
+  let position_name: string | null = null;
+  let org_unit_name: string | null = null;
+  if (user.position_id) {
+    const p = await db.prepare(`SELECT name FROM positions WHERE id = ?`).bind(user.position_id).first<{ name: string }>();
+    position_name = p?.name ?? null;
+  }
+  if (user.org_unit_id) {
+    const ou = await db.prepare(`SELECT name FROM org_units WHERE id = ?`).bind(user.org_unit_id).first<{ name: string }>();
+    org_unit_name = ou?.name ?? null;
+  }
+
   // Trượt hạn dùng: cập nhật last_seen_at + expires_at.
   await db
     .prepare(`UPDATE user_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`)
@@ -112,6 +126,8 @@ export async function loadSession(ctx: Ctx): Promise<SessionInfo | null> {
       display_name: user.display_name,
       email: user.email,
       status: user.status,
+      position_name,
+      org_unit_name,
     },
     roles,
     permissions,
@@ -206,6 +222,18 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
   const sessionId = newId();
   const roles = await getUserRoles(db, user.id);
   const permissions = await getPermissionsForRoles(db, roles);
+
+  // Lấy tên chức vụ và đơn vị công tác.
+  let loginPositionName: string | null = null;
+  let loginOrgUnitName: string | null = null;
+  if (user.position_id) {
+    const p = await db.prepare(`SELECT name FROM positions WHERE id = ?`).bind(user.position_id).first<{ name: string }>();
+    loginPositionName = p?.name ?? null;
+  }
+  if (user.org_unit_id) {
+    const ou = await db.prepare(`SELECT name FROM org_units WHERE id = ?`).bind(user.org_unit_id).first<{ name: string }>();
+    loginOrgUnitName = ou?.name ?? null;
+  }
   await db.batch([
     db
       .prepare(`UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = ?`)
@@ -233,6 +261,8 @@ export async function handleLogin(ctx: Ctx): Promise<Response> {
       display_name: user.display_name,
       email: user.email,
       status: user.status,
+      position_name: loginPositionName,
+      org_unit_name: loginOrgUnitName,
     },
     roles,
     permissions,

@@ -8,6 +8,8 @@ export interface SessionUser {
   display_name: string;
   email: string | null;
   status: string;
+  position_name: string | null;
+  org_unit_name: string | null;
 }
 
 export interface SessionInfo {

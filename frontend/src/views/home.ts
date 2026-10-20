@@ -14,10 +14,55 @@ function can(session: SessionInfo, perm: string): boolean {
   return session.permissions.includes("*") || session.permissions.includes(perm);
 }
 
+/** Nhãn tiếng Việt cho từng quyền (khớp PERMISSION_CATALOG ở backend). */
+const PERM_LABELS: Record<string, string> = {
+  "users.manage": "Quản lý tài khoản",
+  "processes.manage": "Quản lý quy trình (tạo/sửa)",
+  "processes.review": "Thẩm định quy trình",
+  "processes.approve": "Phê duyệt quy trình",
+  "executions.view": "Xem lượt công việc",
+  "executions.perform": "Thực hiện công việc",
+  "executions.create": "Tạo lượt công việc",
+  "executions.manage": "Quản lý lượt thực hiện",
+  "exceptions.handle": "Xử lý ngoại lệ",
+  "reports.view": "Xem báo cáo",
+  "audit.view": "Xem nhật ký",
+};
+
+/** Thẻ hồ sơ cá nhân: thông tin + quyền được phép. */
+function profileCard(session: SessionInfo): string {
+  const u = session.user;
+  const isAll = session.permissions.includes("*");
+  const perms = isAll
+    ? `<strong>Toàn quyền</strong> <span class="muted small">(quản trị viên)</span>`
+    : session.permissions.length === 0
+      ? `<span class="muted">Chưa được cấp quyền nào.</span>`
+      : session.permissions
+          .slice()
+          .sort()
+          .map((p) => `<span class="pill">${esc(PERM_LABELS[p] ?? p)}</span>`)
+          .join(" ");
+  const infoRows = [
+    `<div><span class="muted">👤 Tên đăng nhập:</span> <strong>${esc(u.username)}</strong></div>`,
+    u.email ? `<div><span class="muted">✉️ Email:</span> ${esc(u.email)}</div>` : "",
+    `<div><span class="muted">💼 Chức vụ:</span> ${u.position_name ? esc(u.position_name) : `<span class="muted">Chưa gán</span>`}</div>`,
+    `<div><span class="muted">🏢 Đơn vị:</span> ${u.org_unit_name ? esc(u.org_unit_name) : `<span class="muted">Chưa gán</span>`}</div>`,
+  ].join("");
+  return `
+    <section class="card">
+      <h3>👤 Thông tin của tôi</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-bottom:12px;">${infoRows}</div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">🔑 Quyền được phép:</div>
+        <div>${perms}</div>
+      </div>
+    </section>`;
+}
+
 export async function renderHome(root: HTMLElement, ctx: HomeCtx): Promise<void> {
   const { session } = ctx;
   const name = session.user.display_name || session.user.username;
-  const cards: string[] = [];
+  const cards: string[] = [profileCard(session)];
 
   // Việc của tôi (người thực hiện / giám sát) — dữ liệu thật.
   if (can(session, "executions.perform")) {

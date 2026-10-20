@@ -23,6 +23,8 @@ export interface UserRow {
   email: string | null;
   status: string;
   position: string | null;
+  position_id: string | null;
+  org_unit_id: string | null;
   password_changed_at: string | null;
   failed_login_count: number;
   locked_until: string | null;
