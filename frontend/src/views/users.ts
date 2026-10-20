@@ -24,6 +24,10 @@ const ALL_ROLES = [
   "viewer",
 ];
 
+// Map vai trò -> quyền, và map mã quyền -> nhãn (nạp khi renderUsers chạy).
+let rolePermMap = new Map<string, string[]>();
+let permLabelMap = new Map<string, string>();
+
 export async function renderUsers(root: HTMLElement, selfId: string): Promise<void> {
   root.innerHTML = `
     <div class="page-head">
@@ -34,9 +38,9 @@ export async function renderUsers(root: HTMLElement, selfId: string): Promise<vo
     <div class="table-wrap"><table class="tbl" id="users-table">
       <thead><tr>
         <th>Tên đăng nhập</th><th>Tên hiển thị</th><th>Chức vụ</th><th>Vai trò</th>
-        <th>Trạng thái</th><th>Thao tác</th>
+        <th>Quyền</th><th>Trạng thái</th><th>Thao tác</th>
       </tr></thead>
-      <tbody><tr><td colspan="5" class="empty">Đang tải…</td></tr></tbody>
+      <tbody><tr><td colspan="7" class="empty">Đang tải…</td></tr></tbody>
     </table></div>
     <div id="user-dialog-root"></div>`;
 
@@ -46,18 +50,23 @@ export async function renderUsers(root: HTMLElement, selfId: string): Promise<vo
   let cachedItems: PublicUser[] = [];
 
   async function reload(): Promise<void> {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">Đang tải…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">Đang tải…</td></tr>`;
     try {
-      const { items } = await api.listUsers();
+      const [{ items }, { items: roles, catalog }] = await Promise.all([
+        api.listUsers(),
+        api.listRoles(),
+      ]);
       cachedItems = items;
+      rolePermMap = new Map(roles.map((r) => [r.code, r.permissions ?? []]));
+      permLabelMap = new Map(catalog.map((c) => [c.code, c.label]));
       if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty">Chưa có tài khoản nào.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="empty">Chưa có tài khoản nào.</td></tr>`;
         return;
       }
       tbody.innerHTML = items.map((u) => rowHtml(u, selfId)).join("");
       wireRows(tbody, dialogRoot, selfId, reload, cachedItems);
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="5" class="empty">Không tải được danh sách: ${esc(msg(e))}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">Không tải được danh sách: ${esc(msg(e))}</td></tr>`;
     }
   }
 
@@ -81,15 +90,32 @@ function statusLabel(u: PublicUser): string {
   return `<span class="pill green">Hoạt động</span>`;
 }
 
+function userPermissions(u: PublicUser): string[] {
+  const perms = new Set<string>();
+  for (const roleCode of u.roles ?? []) {
+    const rp = rolePermMap.get(roleCode) ?? [];
+    for (const p of rp) perms.add(p);
+  }
+  return [...perms].sort();
+}
+
+function permPills(perms: string[]): string {
+  if (perms.includes("*")) return `<strong>Toàn quyền</strong>`;
+  if (perms.length === 0) return `<span class="muted">—</span>`;
+  return perms.map((p) => `<span class="pill">${esc(permLabelMap.get(p) ?? p)}</span>`).join(" ");
+}
+
 function rowHtml(u: PublicUser, selfId: string): string {
   const isSelf = u.id === selfId;
   const locked = !!(u.locked_until && u.locked_until > new Date().toISOString());
   const posName = u.position_name ?? u.position;
+  const perms = userPermissions(u);
   return `<tr data-id="${esc(u.id)}">
     <td><strong>${esc(u.username)}</strong>${isSelf ? ' <span class="muted">(bạn)</span>' : ""}</td>
     <td>${esc(u.display_name)}${u.email ? `<div class="muted small">${esc(u.email)}</div>` : ""}</td>
     <td>${posName ? esc(posName) : `<span class="muted">—</span>`}</td>
     <td>${u.roles.map((r) => `<span class="role-badge sm">${esc(roleLabel(r))}</span>`).join(" ")}</td>
+    <td class="small">${permPills(perms)}</td>
     <td>${statusLabel(u)}</td>
     <td class="actions">
       <button class="link" data-act="edit" title="Sửa">${ICON_EDIT}<span>Sửa</span></button>
