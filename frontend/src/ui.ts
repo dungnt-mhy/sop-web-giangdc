@@ -28,6 +28,45 @@ export const EYE_OPEN_SVG =
 export const EYE_OFF_SVG =
   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="23" x2="23" y2="1"/></svg>';
 
+/**
+ * Ô nhập mật khẩu kèm nút hiện/ẩn (mắt). Dùng chung cho mọi form.
+ * Gắn sự kiện bằng wirePasswordToggles(root) sau khi render.
+ */
+export function passwordField(opts: {
+  name: string;
+  id?: string;
+  required?: boolean;
+  minlength?: number;
+  autocomplete?: string;
+  placeholder?: string;
+}): string {
+  const attrs = [
+    `type="password"`,
+    `name="${esc(opts.name)}"`,
+    opts.id ? `id="${esc(opts.id)}"` : "",
+    opts.required ? "required" : "",
+    opts.minlength ? `minlength="${opts.minlength}"` : "",
+    `autocomplete="${esc(opts.autocomplete ?? "off")}"`,
+    opts.placeholder ? `placeholder="${esc(opts.placeholder)}"` : "",
+  ].filter(Boolean).join(" ");
+  return `<span class="pw-wrap"><input ${attrs} /><button type="button" class="pw-toggle icon" data-pw-toggle aria-label="Hiện mật khẩu">${EYE_OPEN_SVG}</button></span>`;
+}
+
+/** Gắn sự kiện hiện/ẩn cho mọi ô mật khẩu trong root. */
+export function wirePasswordToggles(root: HTMLElement): void {
+  root.querySelectorAll<HTMLButtonElement>("[data-pw-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const wrap = btn.closest(".pw-wrap");
+      const input = wrap?.querySelector<HTMLInputElement>("input");
+      if (!input) return;
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      btn.innerHTML = show ? EYE_OFF_SVG : EYE_OPEN_SVG;
+      btn.setAttribute("aria-label", show ? "Ẩn mật khẩu" : "Hiện mật khẩu");
+    });
+  });
+}
+
 /** Icon cho các nút thao tác ở trang quản trị. */
 const ICON_ATTRS = 'width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
 export const ICON_EDIT =

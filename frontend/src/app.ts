@@ -3,7 +3,7 @@
 // Route guard: chưa đăng nhập → về trang giới thiệu, không tải dữ liệu nghiệp vụ.
 
 import { api, isUnauthenticated, type SessionInfo } from "./api.js";
-import { EYE_OFF_SVG, EYE_OPEN_SVG, esc, setLoading, toast } from "./ui.js";
+import { EYE_OFF_SVG, EYE_OPEN_SVG, esc, passwordField, setLoading, toast, wirePasswordToggles } from "./ui.js";
 import { renderHome } from "./views/home.js";
 import { renderExecutionDetail, renderMyWork } from "./views/executions.js";
 import { renderProcessDetail, renderProcesses } from "./views/processes.js";
@@ -477,12 +477,12 @@ function renderForceChange(): void {
         <p class="muted">Vì lý do bảo mật, bạn cần đặt mật khẩu mới trước khi tiếp tục.</p>
         <form id="force-form" novalidate>
           <label>Mật khẩu hiện tại
-            <input type="password" name="current_password" required autocomplete="current-password" /></label>
+            ${passwordField({ name: "current_password", required: true, autocomplete: "current-password" })}</label>
           <label>Mật khẩu mới
-            <input type="password" name="new_password" required minlength="8" autocomplete="new-password" />
+            ${passwordField({ name: "new_password", required: true, minlength: 8, autocomplete: "new-password" })}
             <span class="hint">Ít nhất 8 ký tự.</span></label>
           <label>Nhập lại mật khẩu mới
-            <input type="password" name="confirm_password" required autocomplete="new-password" /></label>
+            ${passwordField({ name: "confirm_password", required: true, autocomplete: "new-password" })}</label>
           <p class="form-error" id="force-error" role="alert" hidden></p>
           <button type="submit" class="btn primary block" id="force-submit">Đổi mật khẩu</button>
         </form>
@@ -490,6 +490,7 @@ function renderForceChange(): void {
     </div>`;
   const form = $("#force-form") as HTMLFormElement;
   const errBox = $("#force-error");
+  wirePasswordToggles(root);
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     errBox.hidden = true;

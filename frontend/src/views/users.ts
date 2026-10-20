@@ -8,9 +8,11 @@ import {
   ICON_LOCK,
   ICON_TRASH,
   ICON_UNLOCK,
+  passwordField,
   roleLabel,
   setLoading,
   toast,
+  wirePasswordToggles,
 } from "../ui.js";
 
 const ALL_ROLES = [
@@ -207,7 +209,7 @@ function openUserDialog(
             </select>
             <span class="hint">Quyết định phạm vi tạo lượt và chọn người phê duyệt.</span></label>
           <label>Email <input name="email" type="email" maxlength="120" value="${existing?.email ? esc(existing.email) : ""}" /></label>
-          ${isNew ? `<label>Mật khẩu tạm <input name="password" type="password" required minlength="8" autocomplete="new-password" />
+          ${isNew ? `<label>Mật khẩu tạm ${passwordField({ name: "password", required: true, minlength: 8, autocomplete: "new-password" })}
             <span class="hint">Ít nhất 8 ký tự. Người dùng bắt buộc đổi ở lần đăng nhập đầu.</span></label>` : ""}
           <fieldset><legend>Vai trò ứng dụng</legend>
             <div class="roles-grid" id="user-roles-grid">
@@ -245,6 +247,7 @@ function openUserDialog(
     if ((e.target as HTMLElement).id === "dlg-backdrop") close();
   });
   document.addEventListener("keydown", escHandler);
+  wirePasswordToggles(dialogRoot);
 
   const form = dialogRoot.querySelector<HTMLFormElement>("#user-form")!;
   const errBox = dialogRoot.querySelector<HTMLElement>("#user-form-error")!;
@@ -329,9 +332,9 @@ function openResetPasswordDialog(
         <h3>Đặt lại mật khẩu</h3>
         <p class="muted">Tài khoản: <strong>${esc(user.username)}</strong> (${esc(user.display_name)})</p>
         <form id="resetpw-form" novalidate>
-          <label>Mật khẩu mới <input name="password" type="password" required minlength="8" autocomplete="new-password" />
+          <label>Mật khẩu mới ${passwordField({ name: "password", required: true, minlength: 8, autocomplete: "new-password" })}
             <span class="hint">Ít nhất 8 ký tự. Người dùng sẽ bị đăng xuất và bắt buộc đổi ở lần đăng nhập tới.</span></label>
-          <label>Nhập lại mật khẩu mới <input name="password2" type="password" required minlength="8" autocomplete="new-password" /></label>
+          <label>Nhập lại mật khẩu mới ${passwordField({ name: "password2", required: true, minlength: 8, autocomplete: "new-password" })}</label>
           <p class="form-error" id="resetpw-error" role="alert" hidden></p>
           <div class="dialog-actions">
             <button type="button" class="btn secondary" id="dlg-cancel">Huỷ</button>
@@ -358,6 +361,7 @@ function openResetPasswordDialog(
     if ((e.target as HTMLElement).id === "dlg-backdrop") close();
   });
   document.addEventListener("keydown", escHandler);
+  wirePasswordToggles(dialogRoot);
 
   const form = dialogRoot.querySelector<HTMLFormElement>("#resetpw-form")!;
   const errBox = dialogRoot.querySelector<HTMLElement>("#resetpw-error")!;
@@ -430,6 +434,7 @@ function openDeleteConfirmDialog(
     if ((e.target as HTMLElement).id === "dlg-backdrop") close();
   });
   document.addEventListener("keydown", escHandler);
+  wirePasswordToggles(dialogRoot);
 
   const confirmBtn = dialogRoot.querySelector<HTMLButtonElement>("#dlg-confirm-delete")!;
   const errBox = dialogRoot.querySelector<HTMLElement>("#delete-error")!;
