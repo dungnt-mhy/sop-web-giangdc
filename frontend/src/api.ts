@@ -29,6 +29,8 @@ export interface PublicUser {
   position: string | null;
   position_id: string | null;
   position_name: string | null;
+  org_unit_id: string | null;
+  org_unit_name: string | null;
   roles: string[];
   permissions: string[];
   must_change_password: boolean;
@@ -393,6 +395,7 @@ export const api = {
     display_name: string;
     position?: string;
     position_id?: string;
+    org_unit_id?: string;
     email?: string;
     password: string;
     roles: string[];

@@ -201,6 +201,11 @@ function openUserDialog(
             <select name="position_id" id="user-position">
               <option value="">— Chưa chọn —</option>
             </select></label>
+          <label>Đơn vị công tác
+            <select name="org_unit_id" id="user-org-unit">
+              <option value="">— Chưa chọn —</option>
+            </select>
+            <span class="hint">Quyết định phạm vi tạo lượt và chọn người phê duyệt.</span></label>
           <label>Email <input name="email" type="email" maxlength="120" value="${existing?.email ? esc(existing.email) : ""}" /></label>
           ${isNew ? `<label>Mật khẩu tạm <input name="password" type="password" required minlength="8" autocomplete="new-password" />
             <span class="hint">Ít nhất 8 ký tự. Người dùng bắt buộc đổi ở lần đăng nhập đầu.</span></label>` : ""}
@@ -250,6 +255,13 @@ function openUserDialog(
       `<option value="${esc(p.id)}" ${existing?.position_id === p.id ? "selected" : ""}>${esc(p.name)}</option>`
     ).join("");
   }).catch(() => {});
+  // Tải danh sách đơn vị.
+  const selOrg = dialogRoot.querySelector<HTMLSelectElement>("#user-org-unit")!;
+  api.listOrgUnits().then(({ items }) => {
+    selOrg.innerHTML = `<option value="">— Chưa chọn —</option>` + items.map((u) =>
+      `<option value="${esc(u.id)}" ${existing?.org_unit_id === u.id ? "selected" : ""}>${esc(u.code)} — ${esc(u.name)}</option>`
+    ).join("");
+  }).catch(() => {});
   // Tải danh sách vai trò ứng dụng.
   const rolesGrid = dialogRoot.querySelector<HTMLElement>("#user-roles-grid")!;
   api.listRoles().then(({ items }) => {
@@ -275,6 +287,7 @@ function openUserDialog(
           username: String(fd.get("username") ?? ""),
           display_name: String(fd.get("display_name") ?? ""),
           position_id: String(fd.get("position_id") ?? "") || undefined,
+          org_unit_id: String(fd.get("org_unit_id") ?? "") || undefined,
           email: String(fd.get("email") ?? "") || undefined,
           password: String(fd.get("password") ?? ""),
           roles,
@@ -283,7 +296,8 @@ function openUserDialog(
       } else {
         await api.patchUser(existing!.id, {
           display_name: String(fd.get("display_name") ?? ""),
-          position_id: String(fd.get("position_id") ?? "") || undefined,
+          position_id: String(fd.get("position_id") ?? "") || null,
+          org_unit_id: String(fd.get("org_unit_id") ?? "") || null,
           email: String(fd.get("email") ?? "") || null,
           status: String(fd.get("status") ?? "active"),
           roles,
