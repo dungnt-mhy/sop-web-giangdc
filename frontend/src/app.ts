@@ -87,7 +87,7 @@ async function updateMenuBadges(): Promise<void> {
 function renderShell(): void {
   if (!session) return;
   const name = session.user.display_name || session.user.username;
-  type NavItem = { hash: string; label: string; perm?: string; badgeId?: string; children?: NavItem[] };
+  type NavItem = { hash: string; label: string; perm?: string; badgeId?: string; children?: NavItem[]; hideWhen?: () => boolean };
   const navItems: NavItem[] = [
     { hash: "#/home", label: "Tổng quan" },
     {
@@ -102,7 +102,7 @@ function renderShell(): void {
       ],
     },
     { hash: "#/my-work", label: "Công việc của tôi", perm: "executions.perform", badgeId: "my-work" },
-    { hash: "#/proposals", label: "💡 Đề xuất lượt", perm: "executions.perform" },
+    { hash: "#/proposals", label: "💡 Đề xuất lượt", perm: "executions.perform", hideWhen: () => can("executions.create") },
     { hash: "#/processes", label: "Quy trình" },
     { hash: "#/exceptions", label: "Ngoại lệ", perm: "exceptions.handle", badgeId: "exceptions" },
     { hash: "#/evidence", label: "Bằng chứng", perm: "executions.view" },
@@ -117,7 +117,7 @@ function renderShell(): void {
     },
     { hash: "#/audit", label: "Nhật ký", perm: "audit.view" },
   ];
-  const visibleItems = navItems.filter((i) => !i.perm || can(i.perm));
+  const visibleItems = navItems.filter((i) => (!i.perm || can(i.perm)) && !(i.hideWhen && i.hideWhen()));
   $("#sidebar-nav").innerHTML = visibleItems
     .map((i) => {
       let badge = "";
