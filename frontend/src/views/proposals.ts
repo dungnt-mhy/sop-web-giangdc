@@ -8,14 +8,13 @@ import { esc, toast } from "../ui.js";
 function openConfirmDialog(dialogRoot: HTMLElement, title: string, message: string, okLabel = "Xác nhận"): Promise<boolean> {
   return new Promise((resolve) => {
     dialogRoot.innerHTML = `
-      <div class="dialog-overlay">
-        <div class="dialog" style="max-width:400px;">
-          <h3>${esc(title)}</h3>
-          <p>${esc(message)}</p>
-          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-            <button class="btn" id="cd-cancel">Hủy</button>
-            <button class="btn primary" id="cd-ok">${esc(okLabel)}</button>
-          </div>
+      <div class="dialog-scrim"></div>
+      <div class="dialog" style="max-width:400px;">
+        <h3>${esc(title)}</h3>
+        <p>${esc(message)}</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+          <button class="btn" id="cd-cancel">Hủy</button>
+          <button class="btn primary" id="cd-ok">${esc(okLabel)}</button>
         </div>
       </div>`;
     const close = (v: boolean) => { dialogRoot.innerHTML = ""; resolve(v); };
@@ -27,14 +26,13 @@ function openConfirmDialog(dialogRoot: HTMLElement, title: string, message: stri
 function openReasonDialog(dialogRoot: HTMLElement, title: string, placeholder: string): Promise<string | null> {
   return new Promise((resolve) => {
     dialogRoot.innerHTML = `
-      <div class="dialog-overlay">
-        <div class="dialog" style="max-width:400px;">
-          <h3>${esc(title)}</h3>
-          <textarea id="rd-reason" class="input" rows="3" placeholder="${esc(placeholder)}"></textarea>
-          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-            <button class="btn" id="rd-cancel">Hủy</button>
-            <button class="btn primary" id="rd-ok">Xác nhận</button>
-          </div>
+      <div class="dialog-scrim"></div>
+      <div class="dialog" style="max-width:400px;">
+        <h3>${esc(title)}</h3>
+        <textarea id="rd-reason" class="input" rows="3" placeholder="${esc(placeholder)}"></textarea>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+          <button class="btn" id="rd-cancel">Hủy</button>
+          <button class="btn primary" id="rd-ok">Xác nhận</button>
         </div>
       </div>`;
     const close = (v: string | null) => { dialogRoot.innerHTML = ""; resolve(v); };
@@ -193,9 +191,9 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
   } catch { /* bỏ qua */ }
 
   dialogRoot.innerHTML = `
-    <div class="dialog-overlay">
-      <div class="dialog" style="max-width:520px;">
-        <h3>💡 Đề xuất lượt công việc mới</h3>
+    <div class="dialog-scrim"></div>
+    <div class="dialog" style="max-width:520px;">
+      <h3>💡 Đề xuất lượt công việc mới</h3>
         <div class="form-group">
           <label>Quy trình *</label>
           <select id="pp-process" class="input">
@@ -214,7 +212,7 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
         <div class="form-group">
           <label>Người phê duyệt *</label>
           <input id="pp-approver-filter" class="input" placeholder="🔍 Gõ để lọc danh sách…" autocomplete="off" style="margin-bottom:6px;" />
-          <select id="pp-approver" class="input" size="6" style="min-height:120px;">
+          <select id="pp-approver" class="input">
             <option value="">— Đang tải… —</option>
           </select>
           <div class="hint">Chỉ hiện người trong đơn vị bạn và cấp trên (theo cấu hình đơn vị). Tối đa 20 người.</div>
@@ -227,13 +225,12 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
           <button class="btn" id="pp-cancel">Hủy</button>
           <button class="btn primary" id="pp-submit">Gửi đề xuất</button>
         </div>
-      </div>
     </div>`;
 
   const close = () => { dialogRoot.innerHTML = ""; };
   dialogRoot.querySelector("#pp-cancel")?.addEventListener("click", close);
-  dialogRoot.querySelector(".dialog-overlay")?.addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).classList.contains("dialog-overlay")) close();
+  dialogRoot.querySelector(".dialog-scrim")?.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).classList.contains("dialog-scrim")) close();
   });
 
   // Dropdown người phê duyệt kèm tìm kiếm (tối đa 20).
