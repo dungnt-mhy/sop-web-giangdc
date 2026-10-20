@@ -196,19 +196,22 @@ function openUserDialog(
       <div class="dialog" role="dialog" aria-modal="true" aria-label="${isNew ? "Tạo tài khoản" : "Sửa tài khoản"}">
         <h3>${isNew ? "Tạo tài khoản" : "Sửa tài khoản"}</h3>
         <form id="user-form" novalidate>
-          <label>Tên đăng nhập ${isNew ? '<input name="username" required minlength="3" maxlength="32" autocomplete="off" />' : `<input value="${esc(existing!.username)}" disabled />`}
+          <label>Tên đăng nhập <span class="req">*</span> ${isNew ? '<input name="username" required minlength="3" maxlength="32" autocomplete="off" />' : `<input value="${esc(existing!.username)}" disabled />`}
             <span class="hint">3–32 ký tự: chữ thường, số, . _ -</span></label>
-          <label>Tên hiển thị <input name="display_name" required maxlength="100" value="${existing ? esc(existing.display_name) : ""}" /></label>
-          <label>Chức vụ
-            <select name="position_id" id="user-position">
-              <option value="">— Chưa chọn —</option>
+          <label>Tên hiển thị <span class="req">*</span> <input name="display_name" required maxlength="100" value="${existing ? esc(existing.display_name) : ""}" /></label>
+          <label>Chức vụ <span class="req">*</span>
+            <select name="position_id" id="user-position" required>
+              <option value="">— Chọn chức vụ —</option>
             </select></label>
-          <label>Đơn vị công tác
-            <select name="org_unit_id" id="user-org-unit">
-              <option value="">— Chưa chọn —</option>
+          <label>Đơn vị công tác <span class="req">*</span>
+            <select name="org_unit_id" id="user-org-unit" required>
+              <option value="">— Chọn đơn vị —</option>
             </select>
             <span class="hint">Quyết định phạm vi tạo lượt và chọn người phê duyệt.</span></label>
-          <label>Email <input name="email" type="email" maxlength="120" value="${existing?.email ? esc(existing.email) : ""}" /></label>
+          <label>Số điện thoại <input name="phone" type="tel" maxlength="20" autocomplete="tel" placeholder="VD: 0912345678" value="${existing?.phone ? esc(existing.phone) : ""}" />
+            <span class="hint">Không bắt buộc.</span></label>
+          <label>Email <input name="email" type="email" maxlength="120" value="${existing?.email ? esc(existing.email) : ""}" />
+            <span class="hint">Không bắt buộc.</span></label>
           ${isNew ? `<label>Mật khẩu tạm ${passwordField({ name: "password", required: true, minlength: 8, autocomplete: "new-password" })}
             <span class="hint">Ít nhất 8 ký tự. Người dùng bắt buộc đổi ở lần đăng nhập đầu.</span></label>` : ""}
           <fieldset><legend>Vai trò ứng dụng</legend>
@@ -282,6 +285,16 @@ function openUserDialog(
       errBox.hidden = false;
       return;
     }
+    if (!String(fd.get("position_id") ?? "").trim()) {
+      errBox.textContent = "Vui lòng chọn chức vụ.";
+      errBox.hidden = false;
+      return;
+    }
+    if (!String(fd.get("org_unit_id") ?? "").trim()) {
+      errBox.textContent = "Vui lòng chọn đơn vị công tác.";
+      errBox.hidden = false;
+      return;
+    }
     const submit = dialogRoot.querySelector<HTMLButtonElement>("#dlg-submit")!;
     const restore = setLoading(submit, true, "Đang lưu…");
     try {
@@ -291,6 +304,7 @@ function openUserDialog(
           display_name: String(fd.get("display_name") ?? ""),
           position_id: String(fd.get("position_id") ?? "") || undefined,
           org_unit_id: String(fd.get("org_unit_id") ?? "") || undefined,
+          phone: String(fd.get("phone") ?? "").trim() || undefined,
           email: String(fd.get("email") ?? "") || undefined,
           password: String(fd.get("password") ?? ""),
           roles,
@@ -301,6 +315,7 @@ function openUserDialog(
           display_name: String(fd.get("display_name") ?? ""),
           position_id: String(fd.get("position_id") ?? "") || null,
           org_unit_id: String(fd.get("org_unit_id") ?? "") || null,
+          phone: String(fd.get("phone") ?? "").trim() || null,
           email: String(fd.get("email") ?? "") || null,
           status: String(fd.get("status") ?? "active"),
           roles,

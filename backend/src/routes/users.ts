@@ -47,6 +47,9 @@ function publicUser(
     position: u.position,
     position_id: (u as unknown as Record<string, unknown>).position_id as string | null ?? null,
     position_name: (u as unknown as Record<string, unknown>).position_name as string | null ?? null,
+    org_unit_id: (u as unknown as Record<string, unknown>).org_unit_id as string | null ?? null,
+    org_unit_name: (u as unknown as Record<string, unknown>).org_unit_name as string | null ?? null,
+    phone: (u as unknown as Record<string, unknown>).phone as string | null ?? null,
     roles,
     permissions: permissionsForRoles(roles),
     must_change_password: mustChangePassword,
@@ -127,8 +130,9 @@ export async function handleListUsers(ctx: Ctx): Promise<Response> {
   const searchBinds = q ? [`%${q}%`, `%${q}%`] : [];
   const rows = await db
     .prepare(
-      `SELECT u.*, p.name as position_name FROM users u
+      `SELECT u.*, p.name as position_name, ou.name as org_unit_name FROM users u
        LEFT JOIN positions p ON p.id = u.position_id
+       LEFT JOIN org_units ou ON ou.id = u.org_unit_id
        WHERE (? IS NULL OR (u.created_at > (SELECT created_at FROM users WHERE id = ?)
              OR (u.created_at = (SELECT created_at FROM users WHERE id = ?) AND u.id > ?)))
        ${searchCond}
@@ -171,6 +175,8 @@ export async function handleCreateUser(ctx: Ctx): Promise<Response> {
   const password = typeof body?.password === "string" ? body.password : "";
   const position = typeof body?.position === "string" ? body.position.trim() || null : null;
   const positionId = typeof body?.position_id === "string" && body.position_id.trim() ? body.position_id.trim() : null;
+  const orgUnitId = typeof body?.org_unit_id === "string" && body.org_unit_id.trim() ? body.org_unit_id.trim() : null;
+  const phoneRaw = typeof body?.phone === "string" ? body.phone.trim() : "";
   const roles = await validateRolesInput(ctx.env.sop_demo_db, body?.roles);
 
   const username = normalizeUsername(usernameRaw);
@@ -193,6 +199,15 @@ export async function handleCreateUser(ctx: Ctx): Promise<Response> {
   if (!roles) {
     return apiError("VALIDATION_ERROR", "Vai trò không hợp lệ.", ctx.requestId);
   }
+  if (!positionId) {
+    return apiError("VALIDATION_ERROR", "Vui lòng chọn chức vụ.", ctx.requestId);
+  }
+  if (!orgUnitId) {
+    return apiError("VALIDATION_ERROR", "Vui lòng chọn đơn vị công tác.", ctx.requestId);
+  }
+  if (phoneRaw && !/^[0-9+\s().-]{7,20}$/.test(phoneRaw)) {
+    return apiError("VALIDATION_ERROR", "Số điện thoại không hợp lệ.", ctx.requestId);
+  }
 
   const db = ctx.env.sop_demo_db;
   if (await getUserByUsername(db, username)) {
@@ -208,10 +223,10 @@ export async function handleCreateUser(ctx: Ctx): Promise<Response> {
   const stmts: D1PreparedStatement[] = [
     db
       .prepare(
-        `INSERT INTO users (id, username, display_name, email, position, position_id, status, failed_login_count, created_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, 'active', 0, ?, ?)`
+        `INSERT INTO users (id, username, display_name, email, phone, position, position_id, org_unit_id, status, failed_login_count, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, ?)`
       )
-      .bind(userId, username, displayName, emailRaw || null, position, positionId, now, (s as SessionInfo).user.id),
+      .bind(userId, username, displayName, emailRaw || null, phoneRaw || null, position, positionId, orgUnitId, now, (s as SessionInfo).user.id),
     db
       .prepare(
         `INSERT INTO local_credentials (id, user_id, password_hash, password_salt, hash_algorithm, hash_params, must_change_password, created_at, created_by)
@@ -280,6 +295,15 @@ export async function handlePatchUser(ctx: Ctx, id: string): Promise<Response> {
     updates.push("email = ?");
     binds.push(v || null);
     diff.email = v || null;
+  }
+  if (body?.phone !== undefined) {
+    const v = typeof body.phone === "string" ? body.phone.trim() : "";
+    if (v && !/^[0-9+\s().-]{7,20}$/.test(v)) {
+      return apiError("VALIDATION_ERROR", "Số điện thoại không hợp lệ.", ctx.requestId);
+    }
+    updates.push("phone = ?");
+    binds.push(v || null);
+    diff.phone = v || null;
   }
   if (body?.status !== undefined) {
     const v = body.status;
