@@ -107,9 +107,22 @@ export interface Execution {
   last_redo_reason?: string | null;
 }
 
+export interface ProposalStepAssignment {
+  process_step_id: string;
+  assignee_ids: string[];
+  supervisor_ids: string[];
+  assignee_names?: string[];
+  supervisor_names?: string[];
+}
+
 export interface Proposal {
   id: string;
   process_id: string;
+  approver_ids?: string[];
+  approver_names?: string[];
+  supervisor_ids?: string[];
+  supervisor_names?: string[];
+  steps?: ProposalStepAssignment[];
   process_name?: string | null;
   title: string | null;
   reason: string;
@@ -233,6 +246,8 @@ export interface AuditEvent {
 export interface ProcessStep {
   id: string;
   version_id: string;
+  positions?: { id: string; name: string }[];
+  supervisors?: { id: string; name: string }[];
   sort_order: number;
   code: string;
   title: string;
@@ -339,7 +354,7 @@ export const api = {
     if (q) params.set("q", q);
     return req("GET", "/users?" + params.toString());
   },
-  listActiveUsers(q?: string, role?: string): Promise<{ items: { id: string; username: string; display_name: string; position: string | null; position_id: string | null; position_name: string | null }[] }> {
+  listActiveUsers(q?: string, role?: string): Promise<{ items: { id: string; username: string; display_name: string; position: string | null; position_id: string | null; position_name: string | null; org_unit_id?: string | null }[] }> {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (role) params.set("role", role);
@@ -738,14 +753,17 @@ export const api = {
   },
   createProposal(input: {
     process_id: string; title?: string; reason: string;
-    approver_id: string; expected_start_at?: string;
+    approver_id?: string; approver_ids?: string[];
+    supervisor_ids?: string[];
+    step_assignments?: { process_step_id: string; assignee_ids: string[]; supervisor_ids: string[] }[];
+    expected_start_at?: string;
   }): Promise<{ id: string }> {
     return req("POST", `/proposals`, input);
   },
-  resubmitProposal(id: string, input: { process_id?: string; title?: string; reason?: string; approver_id?: string; expected_start_at?: string }): Promise<{ id: string; status: string }> {
+  resubmitProposal(id: string, input: { process_id?: string; title?: string; reason?: string; approver_id?: string; approver_ids?: string[]; supervisor_ids?: string[]; step_assignments?: { process_step_id: string; assignee_ids: string[]; supervisor_ids: string[] }[]; expected_start_at?: string }): Promise<{ id: string; status: string }> {
     return req("POST", `/proposals/${encodeURIComponent(id)}:resubmit`, input);
   },
-  approveProposal(id: string): Promise<{ id: string; status: string; suggest: Record<string, unknown> }> {
+  approveProposal(id: string): Promise<{ id: string; status: string; execution_id?: string; execution_code?: string }> {
     return req("POST", `/proposals/${encodeURIComponent(id)}:approve`);
   },
   rejectProposal(id: string, reason: string): Promise<{ id: string; status: string }> {

@@ -389,7 +389,7 @@ async function getUnitDescendants(db: D1Database, unitId: string | null): Promis
  * - create_scope = 'SELF_AND_CHILDREN' (mặc định): đơn vị mình + cấp dưới.
  * - create_scope = 'ANY': mọi đơn vị.
  */
-async function canCreateForUnit(
+export async function canCreateForUnit(
   db: D1Database,
   creatorId: string,
   creatorPermissions: string[],
@@ -424,24 +424,45 @@ async function canCreateForUnit(
   return { allowed: false, reason: "Bạn chỉ được tạo lượt cho nhân viên đơn vị mình và cấp dưới trực thuộc." };
 }
 
-export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
-  const s = requirePermission(ctx, "executions.create");
-  if (s instanceof Response) return s;
-  const me = s as SessionInfo;
-  const db = ctx.env.sop_demo_db;
+export interface CoreStepAssignment {
+  process_step_id: string;
+  assignee_ids: string[];
+  supervisor_ids: string[];
+}
 
-  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
-  const processId = String(body?.process_id ?? "").trim();
-  if (!processId) {
-    return apiError("VALIDATION_ERROR", "Thiếu process_id.", ctx.requestId);
-  }
+export interface CreateExecutionCoreInput {
+  creatorId: string;
+  creatorDisplayName: string;
+  processId: string;
+  title: string | null;
+  assigneeId: string;
+  supervisorIds: string[];
+  approverIds: string[];
+  dueAt: string | null;
+  expectedStartAt: string; // YYYY-MM-DDTHH:mm
+  expectedEndAt: string | null;
+  stepAssignments?: CoreStepAssignment[] | null;
+  requestId: string;
+  env: unknown;
+}
+
+/**
+ * Core tạo lượt (dùng chung cho tạo trực tiếp và duyệt đề xuất):
+ * snapshot bước từ phiên bản ACTIVE, ghi phân công theo bước (nếu có),
+ * audit + thông báo. Trả { error } nếu quy trình/bản hiệu lực không hợp lệ.
+ */
+export async function createExecutionCore(
+  db: D1Database,
+  input: CreateExecutionCoreInput
+): Promise<{ id: string; code: string; totalSteps: number } | { error: string }> {
+  const { creatorId, creatorDisplayName, processId } = input;
   // EXE-001: chỉ dùng phiên bản đang hiệu lực.
   const version = await db
     .prepare(`SELECT * FROM process_versions WHERE process_id = ? AND status = 'ACTIVE' LIMIT 1`)
     .bind(processId)
     .first<{ id: string; version_number: number }>();
   if (!version) {
-    return apiError("VALIDATION_ERROR", "Quy trình chưa có phiên bản đang hiệu lực.", ctx.requestId);
+    return { error: "Quy trình chưa có phiên bản đang hiệu lực." };
   }
   // Snapshot các bước từ phiên bản.
   const steps = await db
@@ -457,7 +478,7 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
       completion_req: string | null;
     }>();
   if (steps.results.length === 0) {
-    return apiError("VALIDATION_ERROR", "Phiên bản hiệu lực chưa có bước nào.", ctx.requestId);
+    return { error: "Phiên bản hiệu lực chưa có bước nào." };
   }
 
   const now = nowIso();
@@ -476,68 +497,23 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
   const seq = String(seqNum).padStart(3, "0");
   const code = `EXE-${datePart}-${seq}`;
 
-  const title = typeof body?.title === "string" ? body.title.trim() || null : null;
-  const assigneeId = typeof body?.assignee_id === "string" && body.assignee_id.trim()
-    ? body.assignee_id.trim()
-    : me.user.id;
-  // Kiểm tra phạm vi đơn vị: người tạo chỉ được tạo cho đơn vị mình/cấp dưới.
-  const scopeCheck = await canCreateForUnit(db, me.user.id, me.permissions, assigneeId);
-  if (!scopeCheck.allowed) {
-    return apiError("FORBIDDEN", scopeCheck.reason ?? "Vượt thẩm quyền đơn vị.", ctx.requestId);
-  }
-  const dueAt = typeof body?.due_at === "string" ? body.due_at.trim() || null : null;
-  // Thời gian bắt đầu (dự kiến) — bắt buộc, định dạng YYYY-MM-DDTHH:mm.
-  const expectedStartAt = typeof body?.expected_start_at === "string" ? body.expected_start_at.trim() : "";
-  if (!expectedStartAt || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(expectedStartAt)) {
-    return apiError("VALIDATION_ERROR", "Thiếu thời gian bắt đầu (dự kiến).", ctx.requestId);
-  }
-  // Thời gian hoàn thành (dự kiến) — tùy chọn.
-  const expectedEndAt = typeof body?.expected_end_at === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(body.expected_end_at.trim())
-    ? body.expected_end_at.trim()
-    : null;
+  const expectedStartAt = input.expectedStartAt;
+  const expectedEndAt = input.expectedEndAt;
   // Giữ tương thích: suy execution_date/execution_time từ expected_start_at.
   const executionDate = expectedStartAt.slice(0, 10);
   const executionTime = expectedStartAt.slice(11, 16);
   // Tự suy ca làm việc từ giờ (không cho chọn tay nữa).
   const shift = deriveShift(executionTime);
-  // Người giám sát: chọn nhiều (mảng) hoặc 1 (chuỗi) để tương thích.
-  const supervisorIds: string[] = [];
-  const supRaw = body?.supervisor_ids ?? body?.supervisor_id;
-  const supArr = Array.isArray(supRaw) ? supRaw : (supRaw ? [supRaw] : []);
-  for (const s of supArr) {
-    if (typeof s === "string" && s.trim()) supervisorIds.push(s.trim());
-  }
-  // Người tạo: luôn là người đang đăng nhập (không cho chọn).
-  const creatorId = me.user.id;
-  // Người phê duyệt (BẮT BUỘC ít nhất 1 người — chống spam lượt, đảm bảo có người kiểm soát).
-  const approverIds: string[] = [];
-  const aprRaw = body?.approver_ids ?? body?.approver_id;
-  const aprArr = Array.isArray(aprRaw) ? aprRaw : (aprRaw ? [aprRaw] : []);
-  for (const a of aprArr) {
-    if (typeof a === "string" && a.trim()) approverIds.push(a.trim());
-  }
-  if (approverIds.length === 0) {
-    return apiError("VALIDATION_ERROR", "Vui lòng chọn ít nhất 1 người phê duyệt cho lượt công việc.", ctx.requestId);
-  }
-  const isAdmin = me.permissions.includes("*");
-  for (const aid of approverIds) {
-    const apr = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(aid).first();
-    if (!apr) return apiError("VALIDATION_ERROR", "Người phê duyệt không tồn tại.", ctx.requestId);
-    // Chặn tự chọn mình làm người phê duyệt (trừ admin) — tránh tự duyệt.
-    if (aid === creatorId && !isAdmin) {
-      return apiError("VALIDATION_ERROR", "Người phê duyệt không được là chính người tạo lượt.", ctx.requestId);
-    }
-  }
-  for (const sid of supervisorIds) {
-    const sup = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(sid).first();
-    if (!sup) return apiError("VALIDATION_ERROR", "Người giám sát không tồn tại.", ctx.requestId);
-  }
+  const supervisorIds = input.supervisorIds;
+  const approverIds = input.approverIds;
+  const assigneeId = input.assigneeId;
+  const title = input.title;
 
   const stmts: D1PreparedStatement[] = [
     db.prepare(
       `INSERT INTO executions (id, code, process_id, version_id, title, status, assignee_id, supervisor_id, creator_id, approver_id, due_at, execution_date, execution_time, shift, expected_start_at, expected_end_at, created_at, created_by)
        VALUES (?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorIds[0] ?? null, creatorId, approverIds[0] ?? null, dueAt, executionDate, executionTime, shift, expectedStartAt, expectedEndAt, now, me.user.id),
+    ).bind(execId, code, processId, version.id, title, assigneeId, supervisorIds[0] ?? null, creatorId, approverIds[0] ?? null, input.dueAt, executionDate, executionTime, shift, expectedStartAt, expectedEndAt, now, creatorId),
   ];
   // Lưu nhiều giám sát / phê duyệt.
   for (const sid of supervisorIds) {
@@ -567,6 +543,9 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
       stepSupMap.get(r.step_id)!.push(r.position_id);
     }
   }
+  // Ánh xạ bước quy trình -> bước của lượt để ghi phân công (nếu có).
+  const assignByStep = new Map<string, CoreStepAssignment>();
+  for (const a of input.stepAssignments ?? []) assignByStep.set(a.process_step_id, a);
   for (const [idx, st] of steps.results.entries()) {
     const s = st as unknown as Record<string, unknown>;
     const execStepId = newId();
@@ -597,39 +576,140 @@ export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
           .bind(execStepId, pid)
       );
     }
+    // Phân công người làm / giám sát cho bước (khi tạo từ đề xuất hoặc có chỉ định).
+    const asg = assignByStep.get(st.id);
+    if (asg) {
+      for (const uid of asg.assignee_ids) {
+        stmts.push(
+          db.prepare(`INSERT INTO execution_step_assignees (execution_step_id, user_id, assigned_at, assigned_by) VALUES (?, ?, ?, ?)`)
+            .bind(execStepId, uid, now, creatorId)
+        );
+      }
+      for (const uid of asg.supervisor_ids) {
+        stmts.push(
+          db.prepare(`INSERT INTO execution_step_supervisor_assignees (execution_step_id, user_id, assigned_at, assigned_by) VALUES (?, ?, ?, ?)`)
+            .bind(execStepId, uid, now, creatorId)
+        );
+      }
+    }
   }
   await db.batch(stmts);
   await audit(db, {
     event_type: "EXECUTION_CREATED",
-    actor_id: me.user.id,
+    actor_id: creatorId,
     object_type: "execution",
     object_id: execId,
-    request_id: ctx.requestId,
+    request_id: input.requestId,
     diff: { code, process_id: processId, version_id: version.id, steps: steps.results.length },
   });
 
-  const created = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(execId).first<ExecutionRow>();
   const pname = await db.prepare(`SELECT name FROM processes WHERE id = ?`).bind(processId).first<{ name: string }>();
   // Thông báo cho người được giao (nếu khác người tạo).
-  if (assigneeId !== me.user.id) {
+  if (assigneeId !== creatorId) {
     await createNotification(db, {
       user_id: assigneeId,
       type: "EXECUTION_ASSIGNED",
       title: `Bạn được giao lượt ${code}`,
-      message: `${me.user.display_name} đã tạo lượt công việc "${pname?.name ?? ""}" và giao cho bạn.`,
+      message: `${creatorDisplayName} đã tạo lượt công việc "${pname?.name ?? ""}" và giao cho bạn.`,
       link: `#/executions/${execId}`,
-    }, ctx.env);
+    }, input.env as never);
   }
   // Thông báo cho tất cả người phê duyệt khi lượt được tạo.
   if (approverIds.length > 0) {
-    await notifyUsers(db, approverIds.filter((x) => x !== me.user.id), {
+    await notifyUsers(db, approverIds.filter((x) => x !== creatorId), {
       type: "EXECUTION_CREATED",
       title: `Lượt mới cần phê duyệt: ${code}`,
-      message: `${me.user.display_name} vừa tạo lượt "${pname?.name ?? ""}" (${code}). Bạn được chỉ định làm người phê duyệt.`,
+      message: `${creatorDisplayName} vừa tạo lượt "${pname?.name ?? ""}" (${code}). Bạn được chỉ định làm người phê duyệt.`,
       link: `#/executions/${execId}`,
-    }, ctx.env);
+    }, input.env as never);
   }
-  return ok(toPublicExec(created!, pname?.name, { total: steps.results.length, done: 0 }), 201);
+  return { id: execId, code, totalSteps: steps.results.length };
+}
+
+
+export async function handleCreateExecution(ctx: Ctx): Promise<Response> {
+  const s = requirePermission(ctx, "executions.create");
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const processId = String(body?.process_id ?? "").trim();
+  if (!processId) {
+    return apiError("VALIDATION_ERROR", "Thiếu process_id.", ctx.requestId);
+  }
+
+  // Phân tích dữ liệu đầu vào trước khi gọi core tạo lượt.
+  const title = typeof body?.title === "string" ? body.title.trim() || null : null;
+  const assigneeId = typeof body?.assignee_id === "string" && body.assignee_id.trim()
+    ? body.assignee_id.trim()
+    : me.user.id;
+  // Kiểm tra phạm vi đơn vị: người tạo chỉ được tạo cho đơn vị mình/cấp dưới.
+  const scopeCheck = await canCreateForUnit(db, me.user.id, me.permissions, assigneeId);
+  if (!scopeCheck.allowed) {
+    return apiError("FORBIDDEN", scopeCheck.reason ?? "Vượt thẩm quyền đơn vị.", ctx.requestId);
+  }
+  const dueAt = typeof body?.due_at === "string" ? body.due_at.trim() || null : null;
+  // Thời gian bắt đầu (dự kiến) — bắt buộc, định dạng YYYY-MM-DDTHH:mm.
+  const expectedStartAt = typeof body?.expected_start_at === "string" ? body.expected_start_at.trim() : "";
+  if (!expectedStartAt || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(expectedStartAt)) {
+    return apiError("VALIDATION_ERROR", "Thiếu thời gian bắt đầu (dự kiến).", ctx.requestId);
+  }
+  // Thời gian hoàn thành (dự kiến) — tùy chọn.
+  const expectedEndAt = typeof body?.expected_end_at === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(body.expected_end_at.trim())
+    ? body.expected_end_at.trim()
+    : null;
+  // Người giám sát: chọn nhiều (mảng) hoặc 1 (chuỗi) để tương thích.
+  const supervisorIds: string[] = [];
+  const supRaw = body?.supervisor_ids ?? body?.supervisor_id;
+  const supArr = Array.isArray(supRaw) ? supRaw : (supRaw ? [supRaw] : []);
+  for (const s of supArr) {
+    if (typeof s === "string" && s.trim()) supervisorIds.push(s.trim());
+  }
+  // Người phê duyệt (BẮT BUỘC ít nhất 1 người — chống spam lượt, đảm bảo có người kiểm soát).
+  const approverIds: string[] = [];
+  const aprRaw = body?.approver_ids ?? body?.approver_id;
+  const aprArr = Array.isArray(aprRaw) ? aprRaw : (aprRaw ? [aprRaw] : []);
+  for (const a of aprArr) {
+    if (typeof a === "string" && a.trim()) approverIds.push(a.trim());
+  }
+  if (approverIds.length === 0) {
+    return apiError("VALIDATION_ERROR", "Vui lòng chọn ít nhất 1 người phê duyệt cho lượt công việc.", ctx.requestId);
+  }
+  const isAdmin = me.permissions.includes("*");
+  for (const aid of approverIds) {
+    const apr = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(aid).first();
+    if (!apr) return apiError("VALIDATION_ERROR", "Người phê duyệt không tồn tại.", ctx.requestId);
+    // Chặn tự chọn mình làm người phê duyệt (trừ admin) — tránh tự duyệt.
+    if (aid === me.user.id && !isAdmin) {
+      return apiError("VALIDATION_ERROR", "Người phê duyệt không được là chính người tạo lượt.", ctx.requestId);
+    }
+  }
+  for (const sid of supervisorIds) {
+    const sup = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(sid).first();
+    if (!sup) return apiError("VALIDATION_ERROR", "Người giám sát không tồn tại.", ctx.requestId);
+  }
+
+  const coreResult = await createExecutionCore(db, {
+    creatorId: me.user.id,
+    creatorDisplayName: me.user.display_name,
+    processId,
+    title,
+    assigneeId,
+    supervisorIds,
+    approverIds,
+    dueAt,
+    expectedStartAt,
+    expectedEndAt,
+    requestId: ctx.requestId,
+    env: ctx.env,
+  });
+  if ("error" in coreResult) {
+    return apiError("VALIDATION_ERROR", coreResult.error, ctx.requestId);
+  }
+  const created = await db.prepare(`SELECT * FROM executions WHERE id = ?`).bind(coreResult.id).first<ExecutionRow>();
+  const pname = await db.prepare(`SELECT name FROM processes WHERE id = ?`).bind(processId).first<{ name: string }>();
+  return ok(toPublicExec(created!, pname?.name, { total: coreResult.totalSteps, done: 0 }), 201);
 }
 
 // GET /api/v1/executions/{id} — chi tiết lượt kèm các bước (EXE-012).

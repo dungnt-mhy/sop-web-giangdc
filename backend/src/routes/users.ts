@@ -108,7 +108,7 @@ export async function handleListActiveUsers(ctx: Ctx): Promise<Response> {
   }
   const rows = await db.prepare(`
     SELECT DISTINCT u.id, u.username, u.display_name, u.position,
-           u.position_id, p.name as position_name
+           u.position_id, p.name as position_name, u.org_unit_id
     FROM users u
     LEFT JOIN positions p ON p.id = u.position_id
     LEFT JOIN user_roles ur ON ur.user_id = u.id
