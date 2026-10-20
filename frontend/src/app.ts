@@ -102,7 +102,7 @@ function renderShell(): void {
       ],
     },
     { hash: "#/my-work", label: "Công việc của tôi", perm: "executions.perform", badgeId: "my-work" },
-    { hash: "#/proposals", label: "💡 Đề xuất lượt", perm: "executions.perform", hideWhen: () => can("executions.create") },
+    { hash: "#/proposals", label: "💡 Đề xuất lượt", perm: "executions.perform" },
     { hash: "#/processes", label: "Quy trình" },
     { hash: "#/exceptions", label: "Ngoại lệ", perm: "exceptions.handle", badgeId: "exceptions" },
     { hash: "#/evidence", label: "Bằng chứng", perm: "executions.view" },
