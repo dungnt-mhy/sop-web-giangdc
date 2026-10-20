@@ -66,7 +66,6 @@ function proposalCard(p: Proposal, isReceived: boolean): string {
           ${p.expected_start_at ? `<div class="muted small">Bắt đầu dự kiến: ${esc(p.expected_start_at.slice(0, 16).replace("T", " "))}</div>` : ""}
           ${(p.approver_names ?? []).filter(Boolean).length ? `<div class="muted small">Người duyệt: ${esc((p.approver_names ?? []).filter(Boolean).join(", "))}</div>` : ""}
           ${(p.supervisor_names ?? []).filter(Boolean).length ? `<div class="muted small">Giám sát lượt: ${esc((p.supervisor_names ?? []).filter(Boolean).join(", "))}</div>` : ""}
-          ${(p.steps ?? []).length ? `<div class="muted small">Đã phân công ${(p.steps ?? []).length} bước</div>` : ""}
         </div>
         ${statusPill(p.status)}
       </div>
@@ -202,8 +201,8 @@ export async function renderProposals(root: HTMLElement): Promise<void> {
 }
 
 /** Dialog tạo đề xuất mới — hoặc sửa & gửi lại đề xuất bị từ chối (khi truyền existing).
- * Form gồm: quy trình (trong phạm vi), người duyệt (≤2), giám sát lượt (≤2),
- * và phân công theo từng bước: người làm (≥1) + giám sát/duyệt bước (1–2). */
+ * Form gồm: quy trình (trong phạm vi), người duyệt (≤2), giám sát lượt (≤2).
+ * Phân công người cho từng bước làm sau khi lượt được tạo (nút Phân công). */
 async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void, existing?: Proposal): Promise<void> {
   const isEdit = !!existing;
   const [processesRes, sessionRes, usersRes, orgRes] = await Promise.allSettled([
@@ -216,33 +215,6 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void, e
   const myUnitId = sessionRes.status === "fulfilled" ? (sessionRes.value.user.org_unit_id ?? null) : null;
   const allUsers = usersRes.status === "fulfilled" ? (usersRes.value.items ?? []) : [];
 
-  // Nhánh đơn vị của mình: đơn vị mình + tổ tiên + cấp dưới (để lọc người được chọn cho bước).
-  let branchUnits: Set<string> | null = null;
-  if (myUnitId && orgRes.status === "fulfilled") {
-    const units = orgRes.value.items ?? [];
-    const byId = new Map(units.map((u) => [u.id, u]));
-    branchUnits = new Set<string>([myUnitId]);
-    let cur = byId.get(myUnitId);
-    while (cur?.parent_id) { branchUnits.add(cur.parent_id); cur = byId.get(cur.parent_id); }
-    const childrenOf = new Map<string, string[]>();
-    for (const u of units) {
-      if (u.parent_id) {
-        const arr = childrenOf.get(u.parent_id) ?? [];
-        arr.push(u.id);
-        childrenOf.set(u.parent_id, arr);
-      }
-    }
-    const queue = [myUnitId];
-    while (queue.length > 0) {
-      const id = queue.shift()!;
-      for (const ch of childrenOf.get(id) ?? []) {
-        if (!branchUnits.has(ch)) { branchUnits.add(ch); queue.push(ch); }
-      }
-    }
-  }
-  const inBranch = (u: { org_unit_id?: string | null }): boolean =>
-    branchUnits === null || (!!u.org_unit_id && branchUnits.has(u.org_unit_id));
-
   // Pool người quản lý (người duyệt + giám sát) theo phạm vi đơn vị.
   let managerUsers: { id: string; display_name: string; username: string; org_unit_name?: string | null }[] = [];
   try {
@@ -254,20 +226,6 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void, e
 
   const approverSel = new Set<string>(existing?.approver_ids ?? (existing ? [existing.approver_id] : []));
   const supervisorSel = new Set<string>(existing?.supervisor_ids ?? []);
-
-  interface StepState { step: ProcessStep; assignees: Set<string>; supervisors: Set<string> }
-  let stepStates: StepState[] = [];
-
-  const eligibleFor = (step: ProcessStep, kind: "asg" | "sup"): ActiveU[] => {
-    const req = (kind === "asg" ? step.positions : step.supervisors) ?? [];
-    const reqIds = new Set(req.map((p) => p.id));
-    return allUsers.filter((u) => {
-      const a = u as ActiveU;
-      if (!inBranch(a)) return false;
-      if (reqIds.size > 0 && (!a.position_id || !reqIds.has(a.position_id))) return false;
-      return true;
-    }) as ActiveU[];
-  };
 
   dialogRoot.innerHTML = `
     <div class="dialog-scrim"></div>
@@ -302,16 +260,6 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void, e
       <div class="form-group">
         <label>Bắt đầu dự kiến</label>
         <input id="pp-start" type="datetime-local" class="input" value="${esc(existing?.expected_start_at?.slice(0, 16) ?? "")}" />
-      </div>
-      <div class="form-group">
-        <label>📋 Phân công theo bước *</label>
-        <div class="hint" style="margin-bottom:6px;">Mỗi bước phải chọn người làm và người giám sát/duyệt bước. Danh sách chỉ gồm người đúng chức vụ yêu cầu và trong phạm vi đơn vị của bạn.</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-          <select id="pp-quick-asg" class="input" style="flex:1;min-width:150px;"><option value="">👤 Người làm mặc định…</option></select>
-          <select id="pp-quick-sup" class="input" style="flex:1;min-width:150px;"><option value="">👁️ Giám sát mặc định…</option></select>
-          <button type="button" class="btn sm" id="pp-quick-apply">Áp dụng cho mọi bước</button>
-        </div>
-        <div id="pp-steps"><div class="muted small">Chọn quy trình để xem các bước.</div></div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
         <button class="btn" id="pp-cancel">Hủy</button>
@@ -349,107 +297,8 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void, e
   bindManagerList("#pp-approvers", approverSel, "người phê duyệt");
   bindManagerList("#pp-supervisors", supervisorSel, "người giám sát");
 
-  // Ô chọn nhanh: người làm mặc định từ toàn bộ nhân viên trong nhánh, giám sát mặc định từ pool quản lý.
-  const quickAsg = dialogRoot.querySelector<HTMLSelectElement>("#pp-quick-asg")!;
-  quickAsg.innerHTML = `<option value="">👤 Người làm mặc định…</option>` + allUsers
-    .filter((u) => inBranch(u as ActiveU))
-    .map((u) => `<option value="${esc(u.id)}">${esc(u.display_name)}</option>`).join("");
-  const quickSup = dialogRoot.querySelector<HTMLSelectElement>("#pp-quick-sup")!;
-  quickSup.innerHTML = `<option value="">👁️ Giám sát mặc định…</option>` + managerUsers
-    .map((u) => `<option value="${esc(u.id)}">${esc(u.display_name)}</option>`).join("");
-  dialogRoot.querySelector("#pp-quick-apply")?.addEventListener("click", () => {
-    const a = quickAsg.value;
-    const s = quickSup.value;
-    if (!a && !s) { toast("Chọn người mặc định trước khi áp dụng.", "err"); return; }
-    for (const st of stepStates) {
-      if (a && eligibleFor(st.step, "asg").some((u) => u.id === a)) st.assignees.add(a);
-      if (s && st.supervisors.size < 2 && eligibleFor(st.step, "sup").some((u) => u.id === s)) {
-        st.supervisors.add(s);
-      }
-    }
-    renderSteps();
-  });
-
-  const stepsEl = dialogRoot.querySelector<HTMLElement>("#pp-steps")!;
-  const renderSteps = () => {
-    if (stepStates.length === 0) {
-      stepsEl.innerHTML = `<div class="muted small">Chọn quy trình để xem các bước.</div>`;
-      return;
-    }
-    stepsEl.innerHTML = stepStates.map((st, i) => {
-      const asgList = eligibleFor(st.step, "asg");
-      const supList = eligibleFor(st.step, "sup");
-      const posHint = (st.step.positions ?? []).length ? `Người làm yêu cầu: ${(st.step.positions ?? []).map((p) => esc(p.name)).join(", ")}` : "Người làm: không yêu cầu chức vụ cụ thể";
-      const supHint = (st.step.supervisors ?? []).length ? `Giám sát yêu cầu: ${(st.step.supervisors ?? []).map((p) => esc(p.name)).join(", ")}` : "Giám sát: không yêu cầu chức vụ cụ thể";
-      const checkRow = (u: ActiveU, checked: boolean) =>
-        `<label class="check"><input type="checkbox" value="${esc(u.id)}" ${checked ? "checked" : ""} /> ${esc(u.display_name)}${u.position_name ? ` <span class="muted">— ${esc(u.position_name)}</span>` : ""}</label>`;
-      return `
-      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:10px;">
-        <div style="font-weight:600;">${esc(st.step.code)} — ${esc(st.step.title)}</div>
-        <div class="muted small">${posHint} · ${supHint}</div>
-        <div class="small" style="margin-top:8px;font-weight:600;">👤 Người làm *</div>
-        <div class="check-list" data-step-idx="${i}" data-kind="asg" style="max-height:110px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:6px;">
-          ${asgList.length ? asgList.map((u) => checkRow(u, st.assignees.has(u.id))).join("") : `<p class="empty small">Không có người phù hợp trong phạm vi.</p>`}
-        </div>
-        <div class="small" style="margin-top:8px;font-weight:600;">👁️ Người giám sát/duyệt bước * <span class="muted">(tối đa 2)</span></div>
-        <div class="check-list" data-step-idx="${i}" data-kind="sup" style="max-height:110px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:6px;">
-          ${supList.length ? supList.map((u) => checkRow(u, st.supervisors.has(u.id))).join("") : `<p class="empty small">Không có người phù hợp trong phạm vi.</p>`}
-        </div>
-      </div>`;
-    }).join("");
-  };
-  stepsEl.addEventListener("change", (ev) => {
-    const input = ev.target as HTMLInputElement;
-    if (input.type !== "checkbox") return;
-    const box = input.closest<HTMLElement>("[data-step-idx]");
-    if (!box) return;
-    const st = stepStates[Number(box.dataset.stepIdx)];
-    const set = box.dataset.kind === "asg" ? st.assignees : st.supervisors;
-    if (input.checked) {
-      if (box.dataset.kind === "sup" && set.size >= 2) {
-        input.checked = false;
-        toast(`Bước ${st.step.code}: chỉ được chọn tối đa 2 người giám sát.`, "err");
-        return;
-      }
-      set.add(input.value);
-    } else {
-      set.delete(input.value);
-    }
-  });
-
-  const loadStepsFor = async (processId: string) => {
-    stepStates = [];
-    renderSteps();
-    if (!processId) return;
-    try {
-      const detail = await api.getProcess(processId);
-      const versionId = detail.active_version?.id;
-      if (!versionId) { stepsEl.innerHTML = `<div class="muted small">Quy trình chưa có phiên bản đang hiệu lực.</div>`; return; }
-      const { items } = await api.listSteps(versionId);
-      stepStates = (items ?? []).map((step) => {
-        const pre = existing && existing.process_id === processId
-          ? (existing.steps ?? []).find((s) => s.process_step_id === step.id)
-          : undefined;
-        const asgEligible = new Set(eligibleFor(step, "asg").map((u) => u.id));
-        const supEligible = new Set(eligibleFor(step, "sup").map((u) => u.id));
-        return {
-          step,
-          assignees: new Set((pre?.assignee_ids ?? []).filter((id) => asgEligible.has(id))),
-          supervisors: new Set((pre?.supervisor_ids ?? []).filter((id) => supEligible.has(id))),
-        };
-      });
-      renderSteps();
-    } catch {
-      stepsEl.innerHTML = `<div class="muted small">Không tải được các bước của quy trình.</div>`;
-    }
-  };
-
   const procSel = dialogRoot.querySelector<HTMLSelectElement>("#pp-process")!;
-  procSel.addEventListener("change", () => { void loadStepsFor(procSel.value); });
-  if (existing) {
-    procSel.value = existing.process_id;
-    void loadStepsFor(existing.process_id);
-  }
+  if (existing) procSel.value = existing.process_id;
 
   dialogRoot.querySelector("#pp-submit")?.addEventListener("click", async () => {
     const processId = procSel.value;
@@ -461,22 +310,12 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void, e
     if (approverSel.size === 0) { toast("Vui lòng chọn ít nhất 1 người phê duyệt.", "err"); return; }
     if (supervisorSel.size === 0) { toast("Vui lòng chọn ít nhất 1 người giám sát lượt.", "err"); return; }
     if (!reason) { toast("Vui lòng nhập lý do đề xuất.", "err"); return; }
-    if (stepStates.length === 0) { toast("Quy trình chưa có bước để phân công.", "err"); return; }
-    for (const st of stepStates) {
-      if (st.assignees.size === 0) { toast(`Bước ${st.step.code} chưa chọn người làm.`, "err"); return; }
-      if (st.supervisors.size === 0) { toast(`Bước ${st.step.code} chưa chọn người giám sát/duyệt.`, "err"); return; }
-    }
     const payload = {
       process_id: processId,
       title: title || undefined,
       reason,
       approver_ids: [...approverSel],
       supervisor_ids: [...supervisorSel],
-      step_assignments: stepStates.map((st) => ({
-        process_step_id: st.step.id,
-        assignee_ids: [...st.assignees],
-        supervisor_ids: [...st.supervisors],
-      })),
       expected_start_at: startAt || undefined,
     };
     try {

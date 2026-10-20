@@ -127,98 +127,8 @@ async function validateProposalPayload(
     .first<{ id: string }>();
   if (!version) return { error: "Quy trình chưa có phiên bản đang hiệu lực." };
 
-  // Phân công theo bước: phải đủ mọi bước của phiên bản hiệu lực.
-  const stepsRaw = body?.step_assignments;
-  if (!Array.isArray(stepsRaw)) return { error: "Vui lòng chọn người làm và người giám sát cho từng bước." };
-  const versionSteps = await db
-    .prepare(`SELECT id, code, title FROM process_steps WHERE version_id = ? ORDER BY sort_order ASC`)
-    .bind(version.id)
-    .all<{ id: string; code: string; title: string }>();
-  const stepRows = versionSteps.results ?? [];
-  if (stepRows.length === 0) return { error: "Phiên bản hiệu lực chưa có bước nào." };
-  const stepIds = stepRows.map((s) => s.id);
-  const ph = stepIds.map(() => "?").join(",");
-  const [posRows, supPosRows] = await Promise.all([
-    db.prepare(`SELECT step_id, position_id FROM process_step_positions WHERE step_id IN (${ph})`).bind(...stepIds).all<{ step_id: string; position_id: string }>(),
-    db.prepare(`SELECT step_id, position_id FROM process_step_supervisors WHERE step_id IN (${ph})`).bind(...stepIds).all<{ step_id: string; position_id: string }>(),
-  ]);
-  const reqPos = new Map<string, Set<string>>();
-  const reqSupPos = new Map<string, Set<string>>();
-  for (const r of posRows.results ?? []) {
-    if (!reqPos.has(r.step_id)) reqPos.set(r.step_id, new Set());
-    reqPos.get(r.step_id)!.add(r.position_id);
-  }
-  for (const r of supPosRows.results ?? []) {
-    if (!reqSupPos.has(r.step_id)) reqSupPos.set(r.step_id, new Set());
-    reqSupPos.get(r.step_id)!.add(r.position_id);
-  }
-  const byStepId = new Map<string, { assignee_ids: string[]; supervisor_ids: string[] }>();
-  for (const entry of stepsRaw) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const e = entry as Record<string, unknown>;
-    const sid = typeof e.process_step_id === "string" ? e.process_step_id : "";
-    const asg = Array.isArray(e.assignee_ids) ? [...new Set(e.assignee_ids.filter((x): x is string => typeof x === "string" && x.trim().length > 0))] : [];
-    const sup = Array.isArray(e.supervisor_ids) ? [...new Set(e.supervisor_ids.filter((x): x is string => typeof x === "string" && x.trim().length > 0))] : [];
-    if (sid) byStepId.set(sid, { assignee_ids: asg, supervisor_ids: sup });
-  }
-  // Thu thập tất cả user được chọn để kiểm tra hàng loạt.
-  const allUserIds = [...new Set([
-    ...approverIds, ...supervisorIds,
-    ...[...byStepId.values()].flatMap((v) => [...v.assignee_ids, ...v.supervisor_ids]),
-  ])];
-  const userMap = new Map<string, { position_id: string | null; org_unit_id: string | null; status: string }>();
-  if (allUserIds.length > 0) {
-    const uph = allUserIds.map(() => "?").join(",");
-    const urows = await db
-      .prepare(`SELECT id, position_id, org_unit_id, status FROM users WHERE id IN (${uph})`)
-      .bind(...allUserIds)
-      .all<{ id: string; position_id: string | null; org_unit_id: string | null; status: string }>();
-    for (const u of urows.results ?? []) userMap.set(u.id, u);
-  }
-  const meRow = await db.prepare(`SELECT org_unit_id FROM users WHERE id = ?`).bind(me.user.id).first<{ org_unit_id: string | null }>();
-  const branch = await getBranchUnits(db, meRow?.org_unit_id ?? null);
-  const stepCodeById = new Map(stepRows.map((s) => [s.id, s.code]));
-
+  // Không còn phân công theo bước trong đề xuất: bước được phân công sau khi lượt tạo.
   const detailSteps: CoreStepAssignment[] = [];
-  for (const st of stepRows) {
-    const sel = byStepId.get(st.id);
-    if (!sel || sel.assignee_ids.length === 0) {
-      return { error: `Bước ${st.code} chưa chọn người làm.` };
-    }
-    if (sel.supervisor_ids.length === 0) {
-      return { error: `Bước ${st.code} chưa chọn người giám sát/duyệt.` };
-    }
-    if (sel.supervisor_ids.length > 2) {
-      return { error: `Bước ${st.code}: chỉ được chọn tối đa 2 người giám sát.` };
-    }
-    for (const uid of [...sel.assignee_ids, ...sel.supervisor_ids]) {
-      const u = userMap.get(uid);
-      if (!u || u.status !== "active") return { error: `Người được chọn ở bước ${st.code} không hợp lệ.` };
-      if (branch && u.org_unit_id && !branch.has(u.org_unit_id)) {
-        return { error: `Người được chọn ở bước ${st.code} nằm ngoài phạm vi đơn vị của bạn.` };
-      }
-    }
-    const needPos = reqPos.get(st.id);
-    if (needPos && needPos.size > 0) {
-      for (const uid of sel.assignee_ids) {
-        const u = userMap.get(uid)!;
-        if (!u.position_id || !needPos.has(u.position_id)) {
-          return { error: `Bước ${st.code}: người được chọn không đúng chức vụ yêu cầu.` };
-        }
-      }
-    }
-    const needSupPos = reqSupPos.get(st.id);
-    if (needSupPos && needSupPos.size > 0) {
-      for (const uid of sel.supervisor_ids) {
-        const u = userMap.get(uid)!;
-        if (!u.position_id || !needSupPos.has(u.position_id)) {
-          return { error: `Bước ${st.code}: người giám sát không đúng chức vụ yêu cầu.` };
-        }
-      }
-    }
-    detailSteps.push({ process_step_id: st.id, assignee_ids: sel.assignee_ids, supervisor_ids: sel.supervisor_ids });
-    void stepCodeById;
-  }
 
   return {
     approverIds,
@@ -227,7 +137,7 @@ async function validateProposalPayload(
   };
 }
 
-/** POST /api/v1/proposals — nhân viên tạo đề xuất lượt mới (kèm giám sát + phân công bước). */
+/** POST /api/v1/proposals — nhân viên tạo đề xuất lượt mới (kèm người duyệt + giám sát lượt). */
 export async function handleCreateProposal(ctx: Ctx): Promise<Response> {
   const s = ctx.requireAuth();
   if (s instanceof Response) return s;
@@ -536,7 +446,6 @@ export async function handleResubmitProposal(ctx: Ctx, proposalId: string): Prom
     reason: typeof body?.reason === "string" && body.reason.trim() ? body.reason : p.reason,
     approver_ids: body?.approver_ids ?? body?.approver_id ?? oldApprovers,
     supervisor_ids: body?.supervisor_ids ?? oldDetail.supervisor_ids,
-    step_assignments: body?.step_assignments ?? oldDetail.steps,
   };
   const v = await validateProposalPayload(db, me, processId, mergedBody);
   if (v.error) return apiError("VALIDATION_ERROR", v.error, ctx.requestId);
