@@ -213,10 +213,11 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
         </div>
         <div class="form-group">
           <label>Người phê duyệt *</label>
-          <input id="pp-approver-search" class="input" placeholder="Gõ tên để tìm…" autocomplete="off" />
-          <div id="pp-approver-results" class="user-search-results" style="display:none;"></div>
-          <input type="hidden" id="pp-approver-id" />
-          <div class="hint">Chỉ hiện người trong đơn vị bạn và cấp trên (theo cấu hình đơn vị).</div>
+          <input id="pp-approver-filter" class="input" placeholder="🔍 Gõ để lọc danh sách…" autocomplete="off" style="margin-bottom:6px;" />
+          <select id="pp-approver" class="input" size="6" style="min-height:120px;">
+            <option value="">— Đang tải… —</option>
+          </select>
+          <div class="hint">Chỉ hiện người trong đơn vị bạn và cấp trên (theo cấu hình đơn vị). Tối đa 20 người.</div>
         </div>
         <div class="form-group">
           <label>Bắt đầu dự kiến</label>
@@ -235,38 +236,28 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
     if ((e.target as HTMLElement).classList.contains("dialog-overlay")) close();
   });
 
-  // Tìm kiếm người phê duyệt.
-  const searchInput = dialogRoot.querySelector<HTMLInputElement>("#pp-approver-search")!;
-  const resultsEl = dialogRoot.querySelector<HTMLElement>("#pp-approver-results")!;
-  const hiddenId = dialogRoot.querySelector<HTMLInputElement>("#pp-approver-id")!;
-  let debounce: ReturnType<typeof setTimeout>;
-  searchInput.addEventListener("input", () => {
-    clearTimeout(debounce);
-    const q = searchInput.value.trim();
-    hiddenId.value = "";
-    if (q.length < 2) { resultsEl.style.display = "none"; return; }
-    debounce = setTimeout(async () => {
-      try {
-        const { items } = await api.listApprovers(q);
-        if (items.length === 0) {
-          resultsEl.innerHTML = `<div class="user-search-item muted">Không tìm thấy.</div>`;
-        } else {
-          resultsEl.innerHTML = items.map((u) => `
-            <div class="user-search-item" data-id="${esc(u.id)}" data-name="${esc(u.display_name)}">
-              <div><strong>${esc(u.display_name)}</strong> <span class="muted small">@${esc(u.username)}</span></div>
-              ${u.org_unit_name ? `<div class="muted small">${esc(u.org_unit_name)}</div>` : ""}
-            </div>`).join("");
-        }
-        resultsEl.style.display = "block";
-      } catch { /* bỏ qua */ }
-    }, 300);
-  });
-  resultsEl.addEventListener("click", (e) => {
-    const item = (e.target as HTMLElement).closest<HTMLElement>(".user-search-item[data-id]");
-    if (!item) return;
-    hiddenId.value = item.dataset.id!;
-    searchInput.value = item.dataset.name!;
-    resultsEl.style.display = "none";
+  // Dropdown người phê duyệt kèm tìm kiếm (tối đa 20).
+  const approverSelect = dialogRoot.querySelector<HTMLSelectElement>("#pp-approver")!;
+  const approverFilter = dialogRoot.querySelector<HTMLInputElement>("#pp-approver-filter")!;
+  const loadApprovers = async (q: string) => {
+    try {
+      const { items } = await api.listApprovers(q || undefined);
+      const list = (items ?? []).slice(0, 20);
+      if (list.length === 0) {
+        approverSelect.innerHTML = `<option value="">— Không tìm thấy —</option>`;
+      } else {
+        approverSelect.innerHTML = `<option value="">— Chọn người phê duyệt —</option>` +
+          list.map((u) => `<option value="${esc(u.id)}">${esc(u.display_name)} @${esc(u.username)}${u.org_unit_name ? ` — ${esc(u.org_unit_name)}` : ""}</option>`).join("");
+      }
+    } catch {
+      approverSelect.innerHTML = `<option value="">— Lỗi tải danh sách —</option>`;
+    }
+  };
+  await loadApprovers("");
+  let filterDebounce: ReturnType<typeof setTimeout>;
+  approverFilter.addEventListener("input", () => {
+    clearTimeout(filterDebounce);
+    filterDebounce = setTimeout(() => loadApprovers(approverFilter.value.trim()), 300);
   });
 
   // Gửi đề xuất.
@@ -274,7 +265,7 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
     const processId = dialogRoot.querySelector<HTMLSelectElement>("#pp-process")!.value;
     const title = dialogRoot.querySelector<HTMLInputElement>("#pp-title")!.value.trim();
     const reason = dialogRoot.querySelector<HTMLTextAreaElement>("#pp-reason")!.value.trim();
-    const approverId = hiddenId.value;
+    const approverId = approverSelect.value;
     const startAt = dialogRoot.querySelector<HTMLInputElement>("#pp-start")!.value;
 
     if (!processId) { toast("Vui lòng chọn quy trình.", "err"); return; }
