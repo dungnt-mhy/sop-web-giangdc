@@ -742,6 +742,9 @@ export const api = {
   }): Promise<{ id: string }> {
     return req("POST", `/proposals`, input);
   },
+  resubmitProposal(id: string, input: { process_id?: string; title?: string; reason?: string; approver_id?: string; expected_start_at?: string }): Promise<{ id: string; status: string }> {
+    return req("POST", `/proposals/${encodeURIComponent(id)}:resubmit`, input);
+  },
   approveProposal(id: string): Promise<{ id: string; status: string; suggest: Record<string, unknown> }> {
     return req("POST", `/proposals/${encodeURIComponent(id)}:approve`);
   },

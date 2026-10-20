@@ -56,6 +56,7 @@ function statusPill(status: string): string {
 
 function proposalCard(p: Proposal, isReceived: boolean): string {
   const canDecide = isReceived && p.status === "PENDING";
+  const canResubmit = !isReceived && p.status === "REJECTED";
   return `
     <div class="card" style="margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;">
@@ -80,6 +81,10 @@ function proposalCard(p: Proposal, isReceived: boolean): string {
           <button class="btn primary sm" data-proposal="approve" data-id="${esc(p.id)}">✅ Duyệt & tạo lượt</button>
           <button class="btn sm" data-proposal="reject" data-id="${esc(p.id)}">❌ Từ chối</button>
         </div>` : ""}
+      ${canResubmit ? `
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn primary sm" data-proposal="edit" data-id="${esc(p.id)}">✏️ Sửa & gửi lại</button>
+        </div>` : ""}
     </div>`;
 }
 
@@ -103,9 +108,13 @@ export async function renderProposals(root: HTMLElement): Promise<void> {
   const listEl = root.querySelector<HTMLElement>("#proposal-list")!;
   const dialogRoot = root.querySelector<HTMLElement>("#proposal-dialog-root")!;
 
+  const itemsById = new Map<string, Proposal>();
+
   async function loadList(): Promise<void> {
     try {
       const { items } = await api.listProposals(tab);
+      itemsById.clear();
+      for (const p of items) itemsById.set(p.id, p);
       if (items.length === 0) {
         listEl.innerHTML = `<div class="muted" style="text-align:center;padding:32px;">Chưa có đề xuất nào.</div>`;
         return;
@@ -161,6 +170,10 @@ export async function renderProposals(root: HTMLElement): Promise<void> {
       } catch (e) {
         toast(`Lỗi: ${(e as Error).message}`, "err");
       }
+    } else if (action === "edit") {
+      const p = itemsById.get(id);
+      if (!p) return;
+      openProposalDialog(dialogRoot, loadList, p);
     } else if (action === "reject") {
       const reason = await openReasonDialog(dialogRoot,
         "Từ chối đề xuất",
@@ -186,8 +199,9 @@ export async function renderProposals(root: HTMLElement): Promise<void> {
   await loadList();
 }
 
-/** Dialog tạo đề xuất mới. */
-async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): Promise<void> {
+/** Dialog tạo đề xuất mới — hoặc sửa & gửi lại đề xuất bị từ chối (khi truyền existing). */
+async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void, existing?: Proposal): Promise<void> {
+  const isEdit = !!existing;
   // Lấy danh sách quy trình có phiên bản hiệu lực.
   let processes: { id: string; name: string }[] = [];
   try {
@@ -198,7 +212,8 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
   dialogRoot.innerHTML = `
     <div class="dialog-scrim"></div>
     <div class="dialog" style="max-width:520px;">
-      <h3>💡 Đề xuất lượt công việc mới</h3>
+      <h3>${isEdit ? "✏️ Sửa & gửi lại đề xuất" : "💡 Đề xuất lượt công việc mới"}</h3>
+      ${isEdit && existing?.reject_reason ? `<div style="padding:8px;background:#fef2f2;border-radius:6px;margin-bottom:12px;"><div class="small" style="font-weight:600;color:#991b1b;">Lý do bị từ chối:</div><div class="small">${esc(existing.reject_reason)}</div></div>` : ""}
         <div class="form-group">
           <label>Quy trình *</label>
           <select id="pp-process" class="input">
@@ -208,11 +223,11 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
         </div>
         <div class="form-group">
           <label>Tiêu đề (tùy chọn)</label>
-          <input id="pp-title" class="input" placeholder="VD: Xuất hàng đợt sáng" />
+          <input id="pp-title" class="input" placeholder="VD: Xuất hàng đợt sáng" value="${esc(existing?.title ?? "")}" />
         </div>
         <div class="form-group">
           <label>Lý do đề xuất *</label>
-          <textarea id="pp-reason" class="input" rows="3" placeholder="Giải thích tại sao cần thực hiện lượt này…"></textarea>
+          <textarea id="pp-reason" class="input" rows="3" placeholder="Giải thích tại sao cần thực hiện lượt này…">${esc(existing?.reason ?? "")}</textarea>
         </div>
         <div class="form-group">
           <label>Người phê duyệt *</label>
@@ -224,14 +239,18 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
         </div>
         <div class="form-group">
           <label>Bắt đầu dự kiến</label>
-          <input id="pp-start" type="datetime-local" class="input" />
+          <input id="pp-start" type="datetime-local" class="input" value="${esc(existing?.expected_start_at?.slice(0, 16) ?? "")}" />
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
           <button class="btn" id="pp-cancel">Hủy</button>
-          <button class="btn primary" id="pp-submit">Gửi đề xuất</button>
+          <button class="btn primary" id="pp-submit">${isEdit ? "Gửi lại" : "Gửi đề xuất"}</button>
         </div>
     </div>`;
 
+  if (existing) {
+    const procSel = dialogRoot.querySelector<HTMLSelectElement>("#pp-process");
+    if (procSel) procSel.value = existing.process_id;
+  }
   const close = () => { dialogRoot.innerHTML = ""; };
   dialogRoot.querySelector("#pp-cancel")?.addEventListener("click", close);
   dialogRoot.querySelector(".dialog-scrim")?.addEventListener("click", (e) => {
@@ -256,6 +275,10 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
     }
   };
   await loadApprovers("");
+  if (existing) {
+    const hasOpt = Array.from(approverSelect.options).some((o) => o.value === existing.approver_id);
+    if (hasOpt) approverSelect.value = existing.approver_id;
+  }
   let filterDebounce: ReturnType<typeof setTimeout>;
   approverFilter.addEventListener("input", () => {
     clearTimeout(filterDebounce);
@@ -275,14 +298,25 @@ async function openProposalDialog(dialogRoot: HTMLElement, onDone: () => void): 
     if (!approverId) { toast("Vui lòng chọn người phê duyệt.", "err"); return; }
 
     try {
-      await api.createProposal({
-        process_id: processId,
-        title: title || undefined,
-        reason,
-        approver_id: approverId,
-        expected_start_at: startAt || undefined,
-      });
-      toast("Đã gửi đề xuất.", "ok");
+      if (isEdit && existing) {
+        await api.resubmitProposal(existing.id, {
+          process_id: processId,
+          title: title || undefined,
+          reason,
+          approver_id: approverId,
+          expected_start_at: startAt || undefined,
+        });
+        toast("Đã sửa và gửi lại đề xuất.", "ok");
+      } else {
+        await api.createProposal({
+          process_id: processId,
+          title: title || undefined,
+          reason,
+          approver_id: approverId,
+          expected_start_at: startAt || undefined,
+        });
+        toast("Đã gửi đề xuất.", "ok");
+      }
       close();
       onDone();
     } catch (e) {

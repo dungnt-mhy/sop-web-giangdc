@@ -242,3 +242,80 @@ export async function handleRejectProposal(ctx: Ctx, proposalId: string): Promis
 
   return ok({ id: proposalId, status: "REJECTED" });
 }
+
+/**
+ * POST /api/v1/proposals/:id:resubmit — người đề xuất sửa đề xuất bị từ chối và gửi duyệt lại.
+ * Nhận các trường mới (tuỳ chọn, thiếu thì giữ giá trị cũ): process_id, title, reason,
+ * approver_id, expected_start_at. Sau khi gửi lại: trạng thái về PENDING, xoá thông tin từ chối,
+ * thông báo lại cho người phê duyệt.
+ */
+export async function handleResubmitProposal(ctx: Ctx, proposalId: string): Promise<Response> {
+  const s = ctx.requireAuth();
+  if (s instanceof Response) return s;
+  const me = s as SessionInfo;
+  const db = ctx.env.sop_demo_db;
+
+  const p = await db.prepare(`SELECT * FROM execution_proposals WHERE id = ?`).bind(proposalId)
+    .first<ProposalRow>();
+  if (!p) return apiError("NOT_FOUND", "Không tìm thấy đề xuất.", ctx.requestId);
+  if (p.proposer_id !== me.user.id) {
+    return apiError("FORBIDDEN", "Chỉ người đề xuất mới sửa và gửi lại được.", ctx.requestId);
+  }
+  if (p.status !== "REJECTED") {
+    return apiError("VALIDATION_ERROR", "Chỉ đề xuất bị từ chối mới sửa và gửi lại được.", ctx.requestId);
+  }
+
+  const body = (await readJson(ctx.request)) as Record<string, unknown> | null;
+  const processId = typeof body?.process_id === "string" && body.process_id.trim() ? body.process_id.trim() : p.process_id;
+  const reason = typeof body?.reason === "string" && body.reason.trim() ? body.reason.trim() : p.reason;
+  const approverId = typeof body?.approver_id === "string" && body.approver_id.trim() ? body.approver_id.trim() : p.approver_id;
+  const title = typeof body?.title === "string" ? (body.title.trim() || null) : p.title;
+  const expectedStartAt = typeof body?.expected_start_at === "string" ? (body.expected_start_at.trim() || null) : p.expected_start_at;
+
+  if (!reason) return apiError("VALIDATION_ERROR", "Vui lòng ghi lý do đề xuất.", ctx.requestId);
+  if (approverId === me.user.id) {
+    return apiError("VALIDATION_ERROR", "Không được tự phê duyệt đề xuất của mình.", ctx.requestId);
+  }
+  const version = await db.prepare(
+    `SELECT id FROM process_versions WHERE process_id = ? AND status = 'ACTIVE' LIMIT 1`
+  ).bind(processId).first<{ id: string }>();
+  if (!version) {
+    return apiError("VALIDATION_ERROR", "Quy trình chưa có phiên bản đang hiệu lực.", ctx.requestId);
+  }
+  const approver = await db.prepare(
+    `SELECT id, display_name FROM users WHERE id = ? AND status = 'active'`
+  ).bind(approverId).first<{ id: string; display_name: string }>();
+  if (!approver) {
+    return apiError("VALIDATION_ERROR", "Người phê duyệt không hợp lệ.", ctx.requestId);
+  }
+
+  await db.prepare(
+    `UPDATE execution_proposals
+     SET process_id = ?, title = ?, reason = ?, approver_id = ?, expected_start_at = ?,
+         status = 'PENDING', reject_reason = NULL, decided_at = NULL, decided_by = NULL
+     WHERE id = ?`
+  ).bind(processId, title, reason, approverId, expectedStartAt, proposalId).run();
+
+  await audit(db, {
+    event_type: "PROPOSAL_RESUBMITTED",
+    actor_id: me.user.id,
+    object_type: "execution_proposal",
+    object_id: proposalId,
+    request_id: ctx.requestId,
+  });
+
+  const proposer = await db.prepare(`SELECT display_name FROM users WHERE id = ?`).bind(me.user.id)
+    .first<{ display_name: string }>();
+  const process = await db.prepare(`SELECT name FROM processes WHERE id = ?`).bind(processId)
+    .first<{ name: string }>();
+  await notifyUsers(
+    db, [approverId], {
+      type: "PROPOSAL_RECEIVED",
+      title: `Đề xuất lượt gửi lại từ ${proposer?.display_name ?? "nhân viên"}`,
+      message: `${proposer?.display_name ?? ""} đã sửa và gửi lại đề xuất lượt "${process?.name ?? ""}"${title ? ` — ${title}` : ""}. Lý do: ${reason}`,
+      link: `#/proposals`,
+    }, ctx.env
+  );
+
+  return ok({ id: proposalId, status: "PENDING" });
+}

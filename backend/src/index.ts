@@ -93,6 +93,7 @@ import {
   handleCreateProposal,
   handleListProposals,
   handleRejectProposal,
+  handleResubmitProposal,
 } from "./routes/proposals";
 import {
   handleCreatePosition,
@@ -410,10 +411,11 @@ async function route(ctx: Ctx, method: string, path: string): Promise<Response> 
     if (method === "GET") return handleListProposals(ctx);
     if (method === "POST") return handleCreateProposal(ctx);
   }
-  const pmProposal = /^\/proposals\/([^/:]+):(approve|reject)$/.exec(path);
+  const pmProposal = /^\/proposals\/([^/:]+):(approve|reject|resubmit)$/.exec(path);
   if (pmProposal && method === "POST") {
     if (pmProposal[2] === "approve") return handleApproveProposal(ctx, pmProposal[1]);
     if (pmProposal[2] === "reject") return handleRejectProposal(ctx, pmProposal[1]);
+    if (pmProposal[2] === "resubmit") return handleResubmitProposal(ctx, pmProposal[1]);
   }
   const em = /^\/executions\/([^/:]+)((?::(start|pause|resume|cancel|complete|report-complete|confirm-complete|reject-confirmation))?)$/.exec(path);
   if (em) {
