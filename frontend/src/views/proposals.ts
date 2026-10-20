@@ -117,13 +117,17 @@ export async function renderProposals(root: HTMLElement): Promise<void> {
   }
 
   // Chuyển tab.
+  function switchTab(newTab: "received" | "sent"): void {
+    tab = newTab;
+    root.querySelectorAll<HTMLButtonElement>(".tab").forEach((t) => {
+      t.classList.toggle("active", t.dataset.tab === newTab);
+    });
+    window.location.hash = `#/proposals?tab=${newTab}`;
+    void loadList();
+  }
   root.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      tab = btn.dataset.tab as "received" | "sent";
-      root.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-      btn.classList.add("active");
-      window.location.hash = `#/proposals?tab=${tab}`;
-      loadList();
+      switchTab(btn.dataset.tab as "received" | "sent");
     });
   });
 
@@ -173,9 +177,10 @@ export async function renderProposals(root: HTMLElement): Promise<void> {
     }
   });
 
-  // Nút đề xuất mới.
+  // Nút đề xuất mới. Sau khi gửi xong tự chuyển sang tab "Tôi đã đề xuất"
+  // để nhân viên thấy ngay đề xuất vừa gửi (không bị tưởng là chưa lưu).
   root.querySelector("#btn-new-proposal")?.addEventListener("click", () => {
-    openProposalDialog(dialogRoot, loadList);
+    openProposalDialog(dialogRoot, () => switchTab("sent"));
   });
 
   await loadList();
