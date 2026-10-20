@@ -268,12 +268,23 @@ function openUserDialog(
       `<option value="${esc(u.id)}" ${existing?.org_unit_id === u.id ? "selected" : ""}>${esc(u.code)} — ${esc(u.name)}</option>`
     ).join("");
   }).catch(() => {});
-  // Tải danh sách vai trò ứng dụng.
+  // Tải danh sách vai trò ứng dụng (kèm mô tả nghiêng dưới mỗi vai trò).
+  const ROLE_NOTES: Record<string, string> = {
+    admin: "Toàn quyền hệ thống: quản lý tài khoản, quy trình, lượt và mọi cài đặt.",
+    process_owner: "Tạo/sửa quy trình, gửi thẩm định, xử lý ngoại lệ trong phạm vi phụ trách.",
+    editor: "Tạo và sửa bản nháp quy trình, gửi đi thẩm định.",
+    reviewer: "Xem và góp ý bản nháp, xác nhận thẩm định quy trình.",
+    approver: "Phê duyệt/phát hành quy trình; xác nhận hoàn thành lượt; xử lý ngoại lệ.",
+    monitor: "Tạo lượt trực tiếp cho đơn vị mình; duyệt bước, bỏ qua bước, quản lý lượt.",
+    executor: "Chỉ thực hiện bước được giao. Không tạo lượt trực tiếp — dùng Đề xuất lượt.",
+    viewer: "Chỉ xem báo cáo, không thao tác thay đổi dữ liệu.",
+  };
   const rolesGrid = dialogRoot.querySelector<HTMLElement>("#user-roles-grid")!;
   api.listRoles().then(({ items }) => {
     rolesGrid.innerHTML = items.map((r) => `
       <label class="check"><input type="checkbox" name="role" value="${esc(r.code)}"
-        ${existing && existing.roles.includes(r.code) ? "checked" : ""} /> ${esc(r.name)}</label>`).join("");
+        ${existing && existing.roles.includes(r.code) ? "checked" : ""} /> <span>${esc(r.name)}</span></label>
+      <div class="muted small" style="font-style:italic;margin:-4px 0 8px 26px;">${esc(ROLE_NOTES[r.code] ?? r.description ?? "")}</div>`).join("");
   }).catch(() => { rolesGrid.innerHTML = `<span class="muted small">Không tải được.</span>`; });
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
